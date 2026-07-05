@@ -48,13 +48,14 @@ class BotProcess:
 
 
 class Referee:
-    def __init__(self, x_command, o_command, timeout=2.0):
+    def __init__(self, x_command, o_command, timeout=2.0, on_move=None):
         self.game = Game()
         self.players = {
             "X": BotProcess(x_command, timeout),
             "O": BotProcess(o_command, timeout),
         }
         self.moves = []
+        self.on_move = on_move
 
     def run_match(self):
         try:
@@ -101,6 +102,13 @@ class Referee:
                     )
 
                 self.moves.append((marker, move))
+
+                if self.on_move is not None:
+                    self.on_move(
+                        marker,
+                        move,
+                        [row.copy() for row in self.game.board.grid],
+                    )
 
             winner = self.game.board.winner()
 
