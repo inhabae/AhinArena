@@ -82,6 +82,70 @@ def test_referee_assigns_x_and_o_players_and_alternates_turns():
     ]
 
 
+def test_referee_calls_on_move_with_updated_board_after_each_valid_move():
+    observed_moves = []
+
+    def on_move(marker, move, board):
+        observed_moves.append((marker, move, board))
+
+    referee = Referee(
+        scripted_bot_command([[0, 0], [0, 1], [0, 2]]),
+        scripted_bot_command([[1, 0], [1, 1]]),
+        on_move=on_move,
+    )
+
+    result = referee.run_match()
+
+    assert result["winner"] == "X"
+    assert observed_moves == [
+        (
+            "X",
+            (0, 0),
+            [
+                ["X", " ", " "],
+                [" ", " ", " "],
+                [" ", " ", " "],
+            ],
+        ),
+        (
+            "O",
+            (1, 0),
+            [
+                ["X", " ", " "],
+                ["O", " ", " "],
+                [" ", " ", " "],
+            ],
+        ),
+        (
+            "X",
+            (0, 1),
+            [
+                ["X", "X", " "],
+                ["O", " ", " "],
+                [" ", " ", " "],
+            ],
+        ),
+        (
+            "O",
+            (1, 1),
+            [
+                ["X", "X", " "],
+                ["O", "O", " "],
+                [" ", " ", " "],
+            ],
+        ),
+        (
+            "X",
+            (0, 2),
+            [
+                ["X", "X", "X"],
+                ["O", "O", " "],
+                [" ", " ", " "],
+            ],
+        ),
+    ]
+
+
 def test_referee_handles_invalid_move():
     referee = Referee(
         scripted_bot_command([[3, 3]]),
