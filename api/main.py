@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 
 from api.schemas import MatchRequest
 from engine.tictactoe.runner import run_tictactoe_match
-
+from engine.registry import UnknownBotError, bot_registry
 
 
 app = FastAPI(
@@ -35,7 +35,16 @@ def create_match(request: MatchRequest):
                 detail=f"Unsupported bot: {player.bot}",
             )
 
-    result = run_tictactoe_match()
+    try:
+        p1_command = bot_registry.get_command(request.players[0].bot)
+        p2_command = bot_registry.get_command(request.players[1].bot)
+    except UnknownBotError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    result = run_tictactoe_match(
+        p1_command=p1_command,
+        p2_command=p2_command,
+    )
 
     return {
         "game": request.game,
