@@ -63,6 +63,7 @@ See `docs/roadmap.md` for more details.
 AhinArena/
 ├── backend/
 ├── engine/
+│   └── tictactoe/
 ├── frontend/
 ├── docs/
 └── .github/
@@ -72,7 +73,7 @@ AhinArena/
 
 ## Current Status
 
-This project is currently in **Milestone 0 – Project Setup**.
+This project is currently in **Milestone 1 - Local Game Engine**.
 
 The repository structure, documentation, development workflow, and CI pipeline are being established before development of the core game engine begins.
 

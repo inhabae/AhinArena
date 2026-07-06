@@ -4,7 +4,7 @@ import sys
 from engine.referee import Referee
 
 
-DEFAULT_BOT_COMMAND = [sys.executable, "-m", "engine.random_bot"]
+DEFAULT_BOT_COMMAND = [sys.executable, "-m", "engine.tictactoe.random_bot"]
 
 
 def format_board(grid):

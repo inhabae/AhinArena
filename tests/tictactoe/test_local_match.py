@@ -24,7 +24,7 @@ def test_format_board_uses_dots_for_empty_cells():
 
 def test_local_tictactoe_match_runs_to_completion():
     output = io.StringIO()
-    bot_command = [sys.executable, "-m", "engine.random_bot"]
+    bot_command = [sys.executable, "-m", "engine.tictactoe.random_bot"]
 
     result = run_local_match(
         x_command=bot_command,
