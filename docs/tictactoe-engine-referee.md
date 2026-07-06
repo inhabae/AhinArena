@@ -2,6 +2,8 @@
 
 The local Tic-Tac-Toe engine runs two bot processes, assigns one to `X` and one to `O`, and uses the referee to enforce game rules.
 
+Tic-Tac-Toe-specific engine code lives under `engine/tictactoe/`. Shared match-running infrastructure can remain directly under `engine/`.
+
 ## Referee and Bot Communication
 
 Each bot is started as a persistent subprocess. The referee sends one JSON object per turn to the active bot on `stdin`, followed by a newline. The bot must respond with one JSON object on `stdout`, also followed by a newline.

@@ -3,7 +3,7 @@ import subprocess
 import sys
 
 
-BOT_COMMAND = [sys.executable, "-m", "engine.random_bot"]
+BOT_COMMAND = [sys.executable, "-m", "engine.tictactoe.random_bot"]
 
 
 def start_bot():
