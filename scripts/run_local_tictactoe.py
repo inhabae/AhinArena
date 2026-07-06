@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from engine.referee import Referee
+from engine.tictactoe.runner import run_tictactoe_match
 
 
 DEFAULT_BOT_COMMAND = [sys.executable, "-m", "engine.tictactoe.random_bot"]
@@ -35,13 +35,12 @@ def run_local_match(x_command=None, o_command=None, timeout=2.0, output=None):
         )
         print(format_board(board), file=output)
 
-    referee = Referee(
-        x_command,
-        o_command,
+    result = run_tictactoe_match(
+        p1_command=x_command,
+        p2_command=o_command,
         timeout=timeout,
         on_move=print_move,
     )
-    result = referee.run_match()
 
     print("\nFinal result", file=output)
 
