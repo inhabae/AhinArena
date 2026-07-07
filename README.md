@@ -43,7 +43,7 @@ Backend API (FastAPI)
 - [x] Milestone 0 — Project Setup
 - [x] Milestone 1 — Local Game Engine
 - [x] Milestone 2 — Backend Service & API
-- [ ] Milestone 3 — Multi-Game Support
+- [x] Milestone 3 — Multi-Game Support
 - [ ] Milestone 4 — Persistent Match History
 - [ ] Milestone 5 — Elo Leaderboard
 - [ ] Milestone 6 — Web Interface
@@ -58,16 +58,96 @@ See `docs/roadmap.md` for more details.
 
 ---
 
+## Local Matches
+
+Run a local Tic-Tac-Toe match between the built-in random bots:
+
+```sh
+python3 scripts/run_local_tictactoe.py --timeout 1.0
+```
+
+Run a local Connect Four match between the built-in random bots:
+
+```sh
+python3 scripts/run_local_connect_four.py --timeout 1.0
+```
+
+Both local runners print each move, the board after that move, and the final match result.
+
+---
+
+## Game Protocol Docs
+
+- `docs/tictactoe-engine-referee.md` documents Tic-Tac-Toe bot/referee communication.
+- `docs/connectfour-engine-referee.md` documents Connect Four bot/referee communication.
+
+---
+
+## Match API
+
+`POST /matches` supports multiple games through the `game` field.
+
+Tic-Tac-Toe:
+
+```json
+{
+  "game": "tictactoe",
+  "players": [
+    {"id": "player-x", "bot": "random"},
+    {"id": "player-o", "bot": "random"}
+  ]
+}
+```
+
+Connect Four:
+
+```json
+{
+  "game": "connect-four",
+  "players": [
+    {"id": "player-x", "bot": "random"},
+    {"id": "player-o", "bot": "random"}
+  ]
+}
+```
+
+Responses use a consistent shape:
+
+```json
+{
+  "game": "connect-four",
+  "players": [
+    {"id": "player-x", "bot": "random"},
+    {"id": "player-o", "bot": "random"}
+  ],
+  "result": {
+    "winner": "X",
+    "reason": "win",
+    "moves": [["X", 0]],
+    "final_board": []
+  }
+}
+```
+
+Unsupported games return a `400` response with error code `unsupported_game`.
+
+---
+
 ## Repository Structure
 
 ```
 AhinArena/
-├── backend/
+├── api/
 ├── engine/
+│   ├── connectfour/
 │   └── tictactoe/
-├── frontend/
+├── scripts/
+├── tests/
+│   ├── api/
+│   ├── connectfour/
+│   └── tictactoe/
 ├── docs/
-└── .github/
+└── requirements.txt
 ```
 
 ---
