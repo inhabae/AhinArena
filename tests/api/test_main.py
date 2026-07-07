@@ -16,6 +16,16 @@ def valid_match_request():
     }
 
 
+def valid_connectfour_match_request():
+    return {
+        "game": "connect-four",
+        "players": [
+            {"id": "player-x", "bot": "random"},
+            {"id": "player-o", "bot": "random"},
+        ],
+    }
+
+
 def test_health_endpoint_returns_ok():
     response = client.get("/health")
 
@@ -51,8 +61,14 @@ def test_create_match_runs_tictactoe_match_successfully(monkeypatch):
     response = client.post("/matches", json=valid_match_request())
 
     assert response.status_code == 200
-    assert observed["p1_command"] == api_main.bot_registry.get_command("random")
-    assert observed["p2_command"] == api_main.bot_registry.get_command("random")
+    assert observed["p1_command"] == api_main.bot_registry.get_command(
+        "random",
+        "tictactoe",
+    )
+    assert observed["p2_command"] == api_main.bot_registry.get_command(
+        "random",
+        "tictactoe",
+    )
     assert response.json() == {
         "game": "tictactoe",
         "players": [
@@ -73,6 +89,77 @@ def test_create_match_runs_tictactoe_match_successfully(monkeypatch):
                 ["X", "X", "X"],
                 ["O", "O", " "],
                 [" ", " ", " "],
+            ],
+        },
+    }
+
+
+def test_create_match_runs_connectfour_match_successfully(monkeypatch):
+    observed = {}
+
+    def fake_run_connectfour_match(p1_command, p2_command):
+        observed["p1_command"] = p1_command
+        observed["p2_command"] = p2_command
+        return {
+            "winner": "X",
+            "reason": "win",
+            "moves": [
+                ("X", 0),
+                ("O", 1),
+                ("X", 0),
+                ("O", 1),
+                ("X", 0),
+                ("O", 1),
+                ("X", 0),
+            ],
+            "final_board": [
+                [" ", " ", " ", " ", " ", " ", " "],
+                [" ", " ", " ", " ", " ", " ", " "],
+                ["X", " ", " ", " ", " ", " ", " "],
+                ["X", "O", " ", " ", " ", " ", " "],
+                ["X", "O", " ", " ", " ", " ", " "],
+                ["X", "O", " ", " ", " ", " ", " "],
+            ],
+        }
+
+    monkeypatch.setattr(api_main, "run_connectfour_match", fake_run_connectfour_match)
+
+    response = client.post("/matches", json=valid_connectfour_match_request())
+
+    assert response.status_code == 200
+    assert observed["p1_command"] == api_main.bot_registry.get_command(
+        "random",
+        "connect-four",
+    )
+    assert observed["p2_command"] == api_main.bot_registry.get_command(
+        "random",
+        "connect-four",
+    )
+    assert response.json() == {
+        "game": "connect-four",
+        "players": [
+            {"id": "player-x", "bot": "random"},
+            {"id": "player-o", "bot": "random"},
+        ],
+        "result": {
+            "winner": "X",
+            "reason": "win",
+            "moves": [
+                ["X", 0],
+                ["O", 1],
+                ["X", 0],
+                ["O", 1],
+                ["X", 0],
+                ["O", 1],
+                ["X", 0],
+            ],
+            "final_board": [
+                [" ", " ", " ", " ", " ", " ", " "],
+                [" ", " ", " ", " ", " ", " ", " "],
+                ["X", " ", " ", " ", " ", " ", " "],
+                ["X", "O", " ", " ", " ", " ", " "],
+                ["X", "O", " ", " ", " ", " ", " "],
+                ["X", "O", " ", " ", " ", " ", " "],
             ],
         },
     }
@@ -171,9 +258,29 @@ def test_create_match_rejects_wrong_payload_types():
     assert body["error"]["details"]
 
 
-def test_create_match_rejects_unsupported_game():
+def test_create_match_runs_real_random_connectfour_bot_match_end_to_end():
     payload = valid_match_request()
     payload["game"] = "connect-four"
+
+    response = client.post("/matches", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    result = body["result"]
+
+    assert body["game"] == "connect-four"
+    assert body["players"] == payload["players"]
+    assert result["winner"] in {"X", "O", None}
+    assert result["reason"] in {"win", "draw"}
+    assert len(result["moves"]) >= 7
+    assert len(result["moves"]) <= 42
+    assert len(result["final_board"]) == 6
+    assert all(len(row) == 7 for row in result["final_board"])
+
+
+def test_create_match_rejects_unsupported_game():
+    payload = valid_match_request()
+    payload["game"] = "missing-game"
 
     response = client.post("/matches", json=payload)
 
@@ -181,7 +288,7 @@ def test_create_match_rejects_unsupported_game():
     assert response.json() == {
         "error": {
             "code": "unsupported_game",
-            "message": "Unsupported game: connect-four",
+            "message": "Unsupported game: missing-game",
         }
     }
 
@@ -198,7 +305,7 @@ def test_create_match_rejects_invalid_player_count():
     assert response.json() == {
         "error": {
             "code": "invalid_player_count",
-            "message": "Tic-Tac-Toe requires exactly 2 players",
+            "message": "tictactoe requires exactly 2 players",
         }
     }
 
@@ -215,7 +322,7 @@ def test_create_match_rejects_empty_players():
     assert response.json() == {
         "error": {
             "code": "invalid_player_count",
-            "message": "Tic-Tac-Toe requires exactly 2 players",
+            "message": "tictactoe requires exactly 2 players",
         }
     }
 
@@ -230,7 +337,7 @@ def test_create_match_rejects_too_many_players():
     assert response.json() == {
         "error": {
             "code": "invalid_player_count",
-            "message": "Tic-Tac-Toe requires exactly 2 players",
+            "message": "tictactoe requires exactly 2 players",
         }
     }
 
