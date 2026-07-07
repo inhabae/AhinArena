@@ -72,14 +72,6 @@ AhinArena/
 
 ---
 
-## Current Status
-
-This project is currently in **Milestone 3 — Multi-Game Support**.
-
-The repository structure, documentation, development workflow, and CI pipeline are being established before development of the core game engine begins.
-
----
-
 ## License
 
 This project is licensed under the MIT License.
