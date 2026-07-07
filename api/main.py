@@ -1,4 +1,5 @@
 from api.schemas import MatchRequest
+from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
 from engine.registry import UnknownBotError, bot_registry
 from fastapi import FastAPI, HTTPException
@@ -30,20 +31,25 @@ def health_check():
 
 @app.post("/matches")
 def create_match(request: MatchRequest):
-    if request.game != "tictactoe":
+    runners = {
+        "tictactoe": run_tictactoe_match,
+        "connect-four": run_connectfour_match,
+    }
+
+    if request.game not in runners:
         api_error(400, "unsupported_game", f"Unsupported game: {request.game}")
     
     if len(request.players) != 2:
-        api_error(400, "invalid_player_count", "Tic-Tac-Toe requires exactly 2 players")
+        api_error(400, "invalid_player_count", f"{request.game} requires exactly 2 players")
 
     try:
-        p1_command = bot_registry.get_command(request.players[0].bot)
-        p2_command = bot_registry.get_command(request.players[1].bot)
+        p1_command = bot_registry.get_command(request.players[0].bot, request.game)
+        p2_command = bot_registry.get_command(request.players[1].bot, request.game)
     except UnknownBotError as error:
         api_error(400, "unknown_bot", str(error))
 
     try:
-        result = run_tictactoe_match(
+        result = runners[request.game](
             p1_command=p1_command,
             p2_command=p2_command,
         )
