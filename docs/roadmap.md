@@ -49,7 +49,22 @@ Expose the game engine through a REST API.
 
 ---
 
-## Milestone 3 — Persistent Match History
+## Milestone 3 — Multi-Game Support
+
+**Goal**
+
+Expand the platform beyond Tic-Tac-Toe by introducing reusable game abstractions and support for multiple game engines.
+
+**Deliverables**
+
+- Game registry
+- Shared game interface
+- Multi-game match request support
+- At least one additional supported game
+
+---
+
+## Milestone 4 — Persistent Match History
 
 **Goal**
 
@@ -63,7 +78,7 @@ Store completed matches in PostgreSQL.
 
 ---
 
-## Milestone 4 — Elo Leaderboard
+## Milestone 5 — Elo Leaderboard
 
 **Goal**
 
@@ -76,7 +91,7 @@ Introduce competitive rankings.
 
 ---
 
-## Milestone 5 — Web Interface
+## Milestone 6 — Web Interface
 
 **Goal**
 
@@ -91,7 +106,7 @@ Provide a basic web application for interacting with the platform.
 
 ---
 
-## Milestone 6 — User Accounts
+## Milestone 7 — User Accounts
 
 **Goal**
 
@@ -99,7 +114,7 @@ Allow users to create accounts and manage their bots.
 
 ---
 
-## Milestone 7 — Bot Submission
+## Milestone 8 — Bot Submission
 
 **Goal**
 
@@ -107,7 +122,7 @@ Allow developers to upload custom AI agents.
 
 ---
 
-## Milestone 8 — Docker Sandboxing
+## Milestone 9 — Docker Sandboxing
 
 **Goal**
 
@@ -115,7 +130,7 @@ Execute uploaded AI agents securely inside isolated Docker containers.
 
 ---
 
-## Milestone 9 — Queue & Workers
+## Milestone 10 — Queue & Workers
 
 **Goal**
 
@@ -123,7 +138,7 @@ Support asynchronous match execution using Redis.
 
 ---
 
-## Milestone 10 — Real-Time Games
+## Milestone 11 — Real-Time Games
 
 **Goal**
 
@@ -131,7 +146,7 @@ Allow users to spectate matches live through WebSockets.
 
 ---
 
-## Milestone 11 — Production Deployment
+## Milestone 12 — Production Deployment
 
 **Goal**
 

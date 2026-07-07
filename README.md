@@ -40,18 +40,19 @@ Backend API (FastAPI)
 
 ## Roadmap
 
-- ✅ Milestone 0 — Project Setup
-- ⏳ Milestone 1 — Local Game Engine
-- ⏳ Milestone 2 — Backend Service & API
-- ⏳ Milestone 3 — Persistent Match History
-- ⏳ Milestone 4 — Elo Leaderboard
-- ⏳ Milestone 5 — Web Interface
-- ⏳ Milestone 6 — User Accounts
-- ⏳ Milestone 7 — Bot Submission
-- ⏳ Milestone 8 — Docker Sandboxing
-- ⏳ Milestone 9 — Queue & Workers
-- ⏳ Milestone 10 — Real-Time Games
-- ⏳ Milestone 11 — Production Deployment
+- [x] Milestone 0 — Project Setup
+- [x] Milestone 1 — Local Game Engine
+- [x] Milestone 2 — Backend Service & API
+- [ ] Milestone 3 — Multi-Game Support
+- [ ] Milestone 4 — Persistent Match History
+- [ ] Milestone 5 — Elo Leaderboard
+- [ ] Milestone 6 — Web Interface
+- [ ] Milestone 7 — User Accounts
+- [ ] Milestone 8 — Bot Submission
+- [ ] Milestone 9 — Docker Sandboxing
+- [ ] Milestone 10 — Queue & Workers
+- [ ] Milestone 11 — Real-Time Games
+- [ ] Milestone 12 — Production Deployment
 
 See `docs/roadmap.md` for more details.
 
