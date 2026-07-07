@@ -55,12 +55,19 @@ Expose the game engine through a REST API.
 
 Expand the platform beyond Tic-Tac-Toe by introducing reusable game abstractions and support for multiple game engines.
 
+**Status**
+
+Complete.
+
 **Deliverables**
 
 - Game registry
 - Shared game interface
 - Multi-game match request support
-- At least one additional supported game
+- Connect Four engine support
+- Connect Four local runner
+- Multi-game API routing for Tic-Tac-Toe and Connect Four
+- API validation for unsupported games
 
 ---
 
