@@ -83,6 +83,8 @@ class Board:
 
 
 class Game:
+    players = ("X", "O")
+
     def __init__(self):
         self.board = Board()
         self.current_player = "X"
@@ -96,3 +98,36 @@ class Game:
 
         self.current_player = "O" if self.current_player == "X" else "X"
         return True
+
+    def bot_state(self, marker):
+        return {
+            "marker": marker,
+            "board": self.board_state(),
+        }
+
+    def parse_move(self, response):
+        if not isinstance(response, dict):
+            return None
+
+        column = response.get("col")
+
+        if not isinstance(column, int):
+            return None
+
+        return column
+
+    def apply_move(self, move):
+        return self.make_move(move)
+
+    def is_terminal(self):
+        return self.board.is_game_over()
+
+    def winner(self):
+        return self.board.winner()
+
+    def forfeit_winner(self, player):
+        first, second = self.players
+        return second if player == first else first
+
+    def board_state(self):
+        return [row.copy() for row in self.board.grid]

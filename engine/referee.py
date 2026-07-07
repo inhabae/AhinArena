@@ -1,7 +1,7 @@
 import json
 import selectors
 import subprocess
-from engine.tictactoe import Game
+from typing import Any, Protocol
 
 
 class BotTimeoutError(RuntimeError):
@@ -47,70 +47,103 @@ class BotProcess:
             self.process.terminate()
 
 
+class GameRules(Protocol):
+    players: tuple[str, ...]
+    current_player: str
+
+    def bot_state(self, player: str) -> dict[str, Any]:
+        pass
+
+    def parse_move(self, response: Any) -> Any:
+        pass
+
+    def apply_move(self, move: Any) -> bool:
+        pass
+
+    def is_terminal(self) -> bool:
+        pass
+
+    def winner(self) -> str | None:
+        pass
+
+    def forfeit_winner(self, player: str) -> str | None:
+        pass
+
+    def board_state(self) -> Any:
+        pass
+
+
 class Referee:
-    def __init__(self, x_command, o_command, timeout=2.0, on_move=None):
-        self.game = Game()
-        self.players = {
-            "X": BotProcess(x_command, timeout),
-            "O": BotProcess(o_command, timeout),
+    def __init__(
+        self,
+        player_commands,
+        game_rules: GameRules,
+        timeout=2.0,
+        on_move=None,
+    ):
+        self.game = game_rules
+        self.player_ids = tuple(self.game.players)
+        missing_players = set(self.player_ids) - set(player_commands)
+        if missing_players:
+            raise ValueError(
+                f"Missing bot commands for players: {sorted(missing_players)}"
+            )
+
+        self.bot_processes = {
+            player: BotProcess(player_commands[player], timeout)
+            for player in self.player_ids
         }
         self.moves = []
         self.on_move = on_move
 
     def run_match(self):
         try:
-            while not self.game.board.is_game_over():
-                marker = self.game.current_player
-                bot = self.players[marker]
-
-                state = {
-                    "marker": marker,
-                    "board": self.game.board.grid,
-                }
+            while not self.game.is_terminal():
+                player = self.game.current_player
+                bot = self.bot_processes[player]
+                state = self.game.bot_state(player)
 
                 try:
                     response = bot.request_move(state)
                 except BotTimeoutError as e:
                     return self._result(
-                        winner=self._opponent(marker),
+                        winner=self.game.forfeit_winner(player),
                         reason="timeout",
                         error=str(e),
-                        marker=marker,
+                        player=player,
                     )
                 except Exception as e:
                     return self._result(
-                        winner=self._opponent(marker),
+                        winner=self.game.forfeit_winner(player),
                         reason="bot_error",
                         error=str(e),
-                        marker=marker,
+                        player=player,
                     )
 
-                move = self._parse_move(response)
+                move = self.game.parse_move(response)
 
                 if move is None:
                     return self._result(
-                        winner=self._opponent(marker),
+                        winner=self.game.forfeit_winner(player),
                         reason="invalid_move",
                     )
 
-                row, col = move
-
-                if not self.game.make_move(row, col):
+                if not self.game.apply_move(move):
                     return self._result(
-                        winner=self._opponent(marker),
+                        winner=self.game.forfeit_winner(player),
                         reason="invalid_move",
                     )
 
-                self.moves.append((marker, move))
+                self.moves.append((player, move))
 
                 if self.on_move is not None:
                     self.on_move(
-                        marker,
+                        player,
                         move,
-                        [row.copy() for row in self.game.board.grid],
+                        self.game.board_state(),
                     )
 
-            winner = self.game.board.winner()
+            winner = self.game.winner()
 
             return self._result(
                 winner=winner,
@@ -118,30 +151,15 @@ class Referee:
             )
 
         finally:
-            self.players["X"].close()
-            self.players["O"].close()
-
-    def _parse_move(self, response):
-        if not isinstance(response, dict):
-            return None
-
-        row = response.get("row")
-        col = response.get("col")
-
-        if not isinstance(row, int) or not isinstance(col, int):
-            return None
-
-        return row, col
-
-    def _opponent(self, marker):
-        return "O" if marker == "X" else "X"
+            for bot_process in self.bot_processes.values():
+                bot_process.close()
 
     def _result(self, winner, reason, **extra):
         result = {
             "winner": winner,
             "reason": reason,
             "moves": self.moves,
-            "final_board": self.game.board.grid,
+            "final_board": self.game.board_state(),
         }
 
         result.update(extra)
