@@ -1,9 +1,11 @@
 from api.schemas import MatchRequest
+from api.database import get_db
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
 from engine.registry import UnknownBotError, bot_registry
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.errors import (
@@ -30,7 +32,7 @@ def health_check():
     return {"status": "ok"}
 
 @app.post("/matches")
-def create_match(request: MatchRequest):
+def create_match(request: MatchRequest, _db: Session = Depends(get_db)):
     runners = {
         "tictactoe": run_tictactoe_match,
         "connect-four": run_connectfour_match,

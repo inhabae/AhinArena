@@ -133,6 +133,27 @@ Unsupported games return a `400` response with error code `unsupported_game`.
 
 ---
 
+## Local PostgreSQL Setup
+
+The API reads its database connection from the `DATABASE_URL` environment
+variable. For local development, create a PostgreSQL database and export a URL
+using the psycopg SQLAlchemy driver:
+
+```sh
+export DATABASE_URL="postgresql+psycopg://ahin_arena:ahin_arena@localhost:5432/ahin_arena"
+```
+
+Run database migrations with Alembic:
+
+```sh
+alembic upgrade head
+```
+
+Tests override the API database dependency and do not require a local
+PostgreSQL instance.
+
+---
+
 ## Repository Structure
 
 ```
