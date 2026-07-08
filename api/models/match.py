@@ -1,4 +1,5 @@
-from sqlalchemy import Column, DateTime, Integer, JSON, String, func
+from sqlalchemy import Column, DateTime, Integer, String, func
+from sqlalchemy.orm import relationship
 
 from api.database import Base
 
@@ -16,7 +17,12 @@ class Match(Base):
     winner = Column(String, nullable=True)
     result_reason = Column(String, nullable=False)
 
-    move_history = Column(JSON, nullable=False)
-
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     completed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    moves = relationship(
+        "Move",
+        back_populates="match",
+        cascade="all, delete-orphan",
+        order_by="Move.move_number",
+    )

@@ -1,6 +1,6 @@
 from api.schemas import MatchRequest
 from api.database import get_db
-from api.models import Match
+from api.models import Match, Move
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
 from engine.registry import UnknownBotError, bot_registry
@@ -65,7 +65,10 @@ def create_match(request: MatchRequest, db: Session = Depends(get_db)):
         bot_two_id=request.players[1].bot,
         winner=result["winner"],
         result_reason=result["reason"],
-        move_history=result["moves"],
+        moves=[
+            Move(move_number=index, player=player, move=move)
+            for index, (player, move) in enumerate(result["moves"], start=1)
+        ],
     )
     db.add(match)
     db.commit()
