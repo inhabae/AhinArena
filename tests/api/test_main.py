@@ -11,9 +11,22 @@ client = TestClient(api_main.app)
 class DummySession:
     def __init__(self):
         self.closed = False
+        self.added = []
+        self.commits = 0
+        self.refreshed = []
 
     def close(self):
         self.closed = True
+
+    def add(self, record):
+        self.added.append(record)
+
+    def commit(self):
+        self.commits += 1
+        self.added[-1].id = 123
+
+    def refresh(self, record):
+        self.refreshed.append(record)
 
 
 @pytest.fixture(autouse=True)
@@ -102,6 +115,7 @@ def test_create_match_runs_tictactoe_match_successfully(monkeypatch):
         "tictactoe",
     )
     assert response.json() == {
+        "match_id": 123,
         "game": "tictactoe",
         "players": [
             {"id": "player-x", "bot": "random"},
@@ -124,6 +138,44 @@ def test_create_match_runs_tictactoe_match_successfully(monkeypatch):
             ],
         },
     }
+
+
+def test_create_match_persists_completed_match(override_database_dependency, monkeypatch):
+    def fake_run_tictactoe_match(p1_command, p2_command):
+        return {
+            "winner": "O",
+            "reason": "win",
+            "moves": [
+                ("X", (0, 0)),
+                ("O", (1, 0)),
+            ],
+            "final_board": [
+                ["X", " ", " "],
+                ["O", " ", " "],
+                [" ", " ", " "],
+            ],
+        }
+
+    monkeypatch.setattr(api_main, "run_tictactoe_match", fake_run_tictactoe_match)
+
+    response = client.post("/matches", json=valid_match_request())
+
+    assert response.status_code == 200
+    assert response.json()["match_id"] == 123
+    assert override_database_dependency.commits == 1
+    assert len(override_database_dependency.added) == 1
+    assert override_database_dependency.refreshed == override_database_dependency.added
+
+    match = override_database_dependency.added[0]
+    assert match.game_id == "tictactoe"
+    assert match.bot_one_id == "random"
+    assert match.bot_two_id == "random"
+    assert match.winner == "O"
+    assert match.result_reason == "win"
+    assert match.move_history == [
+        ("X", (0, 0)),
+        ("O", (1, 0)),
+    ]
 
 
 def test_create_match_runs_connectfour_match_successfully(monkeypatch):
@@ -168,6 +220,7 @@ def test_create_match_runs_connectfour_match_successfully(monkeypatch):
         "connect-four",
     )
     assert response.json() == {
+        "match_id": 123,
         "game": "connect-four",
         "players": [
             {"id": "player-x", "bot": "random"},
@@ -205,6 +258,7 @@ def test_create_match_runs_real_random_bot_match_end_to_end():
     result = body["result"]
 
     assert body["game"] == "tictactoe"
+    assert body["match_id"] == 123
     assert body["players"] == valid_match_request()["players"]
     assert result["winner"] in {"X", "O", None}
     assert result["reason"] in {"win", "draw"}
@@ -301,6 +355,7 @@ def test_create_match_runs_real_random_connectfour_bot_match_end_to_end():
     result = body["result"]
 
     assert body["game"] == "connect-four"
+    assert body["match_id"] == 123
     assert body["players"] == payload["players"]
     assert result["winner"] in {"X", "O", None}
     assert result["reason"] in {"win", "draw"}
@@ -310,13 +365,15 @@ def test_create_match_runs_real_random_connectfour_bot_match_end_to_end():
     assert all(len(row) == 7 for row in result["final_board"])
 
 
-def test_create_match_rejects_unsupported_game():
+def test_create_match_rejects_unsupported_game(override_database_dependency):
     payload = valid_match_request()
     payload["game"] = "missing-game"
 
     response = client.post("/matches", json=payload)
 
     assert response.status_code == 400
+    assert override_database_dependency.added == []
+    assert override_database_dependency.commits == 0
     assert response.json() == {
         "error": {
             "code": "unsupported_game",
@@ -325,7 +382,7 @@ def test_create_match_rejects_unsupported_game():
     }
 
 
-def test_create_match_rejects_invalid_player_count():
+def test_create_match_rejects_invalid_player_count(override_database_dependency):
     payload = {
         "game": "tictactoe",
         "players": [{"id": "solo", "bot": "random"}],
@@ -334,6 +391,8 @@ def test_create_match_rejects_invalid_player_count():
     response = client.post("/matches", json=payload)
 
     assert response.status_code == 400
+    assert override_database_dependency.added == []
+    assert override_database_dependency.commits == 0
     assert response.json() == {
         "error": {
             "code": "invalid_player_count",
@@ -374,7 +433,10 @@ def test_create_match_rejects_too_many_players():
     }
 
 
-def test_create_match_returns_error_when_match_execution_fails(monkeypatch):
+def test_create_match_returns_error_when_match_execution_fails(
+    override_database_dependency,
+    monkeypatch,
+):
     def failing_run_tictactoe_match(p1_command, p2_command):
         raise RuntimeError("runner failed")
 
@@ -383,6 +445,8 @@ def test_create_match_returns_error_when_match_execution_fails(monkeypatch):
     response = client.post("/matches", json=valid_match_request())
 
     assert response.status_code == 500
+    assert override_database_dependency.added == []
+    assert override_database_dependency.commits == 0
     assert response.json() == {
         "error": {
             "code": "match_execution_failed",

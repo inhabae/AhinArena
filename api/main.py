@@ -1,5 +1,6 @@
 from api.schemas import MatchRequest
 from api.database import get_db
+from api.models import Match
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
 from engine.registry import UnknownBotError, bot_registry
@@ -32,7 +33,7 @@ def health_check():
     return {"status": "ok"}
 
 @app.post("/matches")
-def create_match(request: MatchRequest, _db: Session = Depends(get_db)):
+def create_match(request: MatchRequest, db: Session = Depends(get_db)):
     runners = {
         "tictactoe": run_tictactoe_match,
         "connect-four": run_connectfour_match,
@@ -58,7 +59,20 @@ def create_match(request: MatchRequest, _db: Session = Depends(get_db)):
     except Exception as error:
         api_error(500, "match_execution_failed", str(error))
 
+    match = Match(
+        game_id=request.game,
+        bot_one_id=request.players[0].bot,
+        bot_two_id=request.players[1].bot,
+        winner=result["winner"],
+        result_reason=result["reason"],
+        move_history=result["moves"],
+    )
+    db.add(match)
+    db.commit()
+    db.refresh(match)
+
     return {
+        "match_id": match.id,
         "game": request.game,
         "players": request.players,
         "result": result,
