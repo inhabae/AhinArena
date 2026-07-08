@@ -36,6 +36,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_index(op.f('ix_moves_match_id'), table_name='moves')
+    op.execute(sa.text('DROP INDEX IF EXISTS ix_moves_match_id'))
     op.drop_index(op.f('ix_moves_id'), table_name='moves')
     op.drop_table('moves')
