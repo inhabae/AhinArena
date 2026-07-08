@@ -1,9 +1,34 @@
+import pytest
 from fastapi.testclient import TestClient
 
+from api.database import get_db
 import api.main as api_main
 
 
 client = TestClient(api_main.app)
+
+
+class DummySession:
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture(autouse=True)
+def override_database_dependency():
+    session = DummySession()
+
+    def fake_get_db():
+        try:
+            yield session
+        finally:
+            session.close()
+
+    api_main.app.dependency_overrides[get_db] = fake_get_db
+    yield session
+    api_main.app.dependency_overrides.clear()
 
 
 def valid_match_request():
@@ -31,6 +56,13 @@ def test_health_endpoint_returns_ok():
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_create_match_uses_overridden_database_session(override_database_dependency):
+    response = client.post("/matches", json=valid_match_request())
+
+    assert response.status_code == 200
+    assert override_database_dependency.closed is True
 
 
 def test_create_match_runs_tictactoe_match_successfully(monkeypatch):

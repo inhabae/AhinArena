@@ -1,3 +1,6 @@
 fastapi
 httpx
 pytest
+sqlalchemy
+psycopg[binary]
+alembic
