@@ -172,13 +172,19 @@ def test_create_match_persists_completed_match(override_database_dependency, mon
     assert match.bot_two_id == "random"
     assert match.winner == "O"
     assert match.result_reason == "win"
-    assert match.move_history == [
-        ("X", (0, 0)),
-        ("O", (1, 0)),
+    assert [
+        (move.move_number, move.player, move.move)
+        for move in match.moves
+    ] == [
+        (1, "X", (0, 0)),
+        (2, "O", (1, 0)),
     ]
 
 
-def test_create_match_runs_connectfour_match_successfully(monkeypatch):
+def test_create_match_runs_connectfour_match_successfully(
+    override_database_dependency,
+    monkeypatch,
+):
     observed = {}
 
     def fake_run_connectfour_match(p1_command, p2_command):
@@ -248,6 +254,31 @@ def test_create_match_runs_connectfour_match_successfully(monkeypatch):
             ],
         },
     }
+    match = override_database_dependency.added[0]
+    assert [
+        (move.move_number, move.player, move.move)
+        for move in match.moves
+    ] == [
+        (1, "X", 0),
+        (2, "O", 1),
+        (3, "X", 0),
+        (4, "O", 1),
+        (5, "X", 0),
+        (6, "O", 1),
+        (7, "X", 0),
+    ]
+    assert [
+        (move.player, move.move)
+        for move in match.moves
+    ] == [
+        ("X", 0),
+        ("O", 1),
+        ("X", 0),
+        ("O", 1),
+        ("X", 0),
+        ("O", 1),
+        ("X", 0),
+    ]
 
 
 def test_create_match_runs_real_random_bot_match_end_to_end():
