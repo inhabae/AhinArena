@@ -4,9 +4,9 @@ from api.models import Match, Move
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
 from engine.registry import UnknownBotError, bot_registry
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.errors import (
@@ -16,6 +16,30 @@ from api.errors import (
     validation_exception_handler,
 )
 
+def serialize_match_summary(match: Match):
+    return {
+        "match_id": match.id,
+        "game": match.game_id,
+        "bot_one_id": match.bot_one_id,
+        "bot_two_id": match.bot_two_id,
+        "winner": match.winner,
+        "result_reason": match.result_reason,
+        "created_at": match.created_at,
+        "completed_at": match.completed_at,
+    }
+
+def serialize_match_detail(match: Match):
+    return {
+        **serialize_match_summary(match),
+        "moves": [
+            {
+                "move_number": move.move_number,
+                "player": move.player,
+                "move": move.move,
+            }
+            for move in match.moves
+        ],
+    }
 
 app = FastAPI(
     title="AhinArena API",
@@ -80,3 +104,40 @@ def create_match(request: MatchRequest, db: Session = Depends(get_db)):
         "players": request.players,
         "result": result,
     }
+
+@app.get("/matches")
+def list_matches(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    total = db.query(Match).count()
+
+    matches = (
+        db.query(Match)
+        .order_by(Match.completed_at.desc(), Match.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "items": [serialize_match_summary(match) for match in matches],
+        "limit": limit,
+        "offset": offset,
+        "total": total,
+    }
+
+@app.get("/matches/{match_id}")
+def get_match(match_id: int, db: Session = Depends(get_db)):
+    match = (
+        db.query(Match)
+        .options(selectinload(Match.moves))
+        .filter(Match.id == match_id)
+        .first()
+    )
+
+    if match is None:
+        api_error(404, "match_not_found", f"Match not found: {match_id}")
+
+    return serialize_match_detail(match)

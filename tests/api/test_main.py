@@ -1,7 +1,13 @@
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from api.database import get_db
+from api.database import Base, get_db
+from api.models import Match, Move
 import api.main as api_main
 
 
@@ -64,11 +70,167 @@ def valid_connectfour_match_request():
     }
 
 
+@pytest.fixture
+def sqlite_database_dependency():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    testing_session = sessionmaker(bind=engine)
+    session = testing_session()
+
+    def fake_get_db():
+        try:
+            yield session
+        finally:
+            pass
+
+    api_main.app.dependency_overrides[get_db] = fake_get_db
+    yield session
+    session.close()
+    api_main.app.dependency_overrides.clear()
+
+
+def make_persisted_match(
+    *,
+    game_id="tictactoe",
+    bot_one_id="random-x",
+    bot_two_id="random-o",
+    winner="X",
+    result_reason="win",
+    created_at=None,
+    completed_at=None,
+    moves=None,
+):
+    return Match(
+        game_id=game_id,
+        bot_one_id=bot_one_id,
+        bot_two_id=bot_two_id,
+        winner=winner,
+        result_reason=result_reason,
+        created_at=created_at or datetime(2026, 1, 1, tzinfo=timezone.utc),
+        completed_at=completed_at or datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
+        moves=moves or [],
+    )
+
+
 def test_health_endpoint_returns_ok():
     response = client.get("/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_list_matches_returns_empty_history(sqlite_database_dependency):
+    response = client.get("/matches")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [],
+        "limit": 20,
+        "offset": 0,
+        "total": 0,
+    }
+
+
+def test_list_matches_returns_recent_matches_first(sqlite_database_dependency):
+    older = make_persisted_match(
+        completed_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
+    )
+    newer = make_persisted_match(
+        game_id="connect-four",
+        winner=None,
+        result_reason="draw",
+        completed_at=datetime(2026, 1, 2, 0, 0, 1, tzinfo=timezone.utc),
+    )
+    sqlite_database_dependency.add_all([older, newer])
+    sqlite_database_dependency.commit()
+
+    response = client.get("/matches")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    assert [item["match_id"] for item in body["items"]] == [newer.id, older.id]
+    assert body["items"][0]["game"] == "connect-four"
+    assert body["items"][1]["game"] == "tictactoe"
+
+
+def test_list_matches_paginates_results(sqlite_database_dependency):
+    oldest = make_persisted_match(
+        completed_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
+    )
+    middle = make_persisted_match(
+        completed_at=datetime(2026, 1, 2, 0, 0, 1, tzinfo=timezone.utc),
+    )
+    newest = make_persisted_match(
+        completed_at=datetime(2026, 1, 3, 0, 0, 1, tzinfo=timezone.utc),
+    )
+    sqlite_database_dependency.add_all([oldest, middle, newest])
+    sqlite_database_dependency.commit()
+
+    response = client.get("/matches?limit=1&offset=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["limit"] == 1
+    assert body["offset"] == 1
+    assert body["total"] == 3
+    assert [item["match_id"] for item in body["items"]] == [middle.id]
+
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=101", "offset=-1"])
+def test_list_matches_validates_pagination_parameters(query):
+    response = client.get(f"/matches?{query}")
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "validation_error"
+    assert body["error"]["message"] == "Request body is invalid."
+    assert body["error"]["details"]
+
+
+def test_get_match_returns_metadata_result_summary_and_moves(sqlite_database_dependency):
+    match = make_persisted_match(
+        moves=[
+            Move(move_number=2, player="O", move=[1, 0]),
+            Move(move_number=1, player="X", move=[0, 0]),
+        ],
+    )
+    sqlite_database_dependency.add(match)
+    sqlite_database_dependency.commit()
+    sqlite_database_dependency.refresh(match)
+
+    response = client.get(f"/matches/{match.id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["match_id"] == match.id
+    assert body["game"] == "tictactoe"
+    assert body["bot_one_id"] == "random-x"
+    assert body["bot_two_id"] == "random-o"
+    assert body["winner"] == "X"
+    assert body["result_reason"] == "win"
+    assert body["created_at"]
+    assert body["completed_at"]
+    assert body["moves"] == [
+        {"move_number": 1, "player": "X", "move": [0, 0]},
+        {"move_number": 2, "player": "O", "move": [1, 0]},
+    ]
+
+
+def test_get_match_returns_404_for_unknown_match_id(sqlite_database_dependency):
+    response = client.get("/matches/999")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "match_not_found",
+            "message": "Match not found: 999",
+        }
+    }
 
 
 def test_create_match_uses_overridden_database_session(override_database_dependency):
