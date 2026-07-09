@@ -42,11 +42,11 @@ def test_local_connect_four_match_runs_to_completion():
 
     assert result["reason"] in {"win", "draw"}
     assert result["winner"] in {"X", "O", None}
-    assert len(result["moves"]) >= 7
-    assert len(result["moves"]) <= 42
+    assert "moves" not in result
     assert "Starting local Connect Four match: X bot vs O bot" in text
     assert "Move 1:" in text
-    assert f"Move {len(result['moves'])}:" in text
+    assert text.count("Move ") >= 7
+    assert text.count("Move ") <= 42
     assert " | " in text
     assert "0   1   2   3   4   5   6" in text
     assert "Final result" in text

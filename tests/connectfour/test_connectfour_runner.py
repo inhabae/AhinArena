@@ -25,33 +25,31 @@ def test_connectfour_runner_uses_default_random_bot_command():
 
 
 def test_connectfour_runner_returns_referee_result_shape_for_x_win():
+    observed_moves = []
+
+    def on_move(player, move, board):
+        observed_moves.append((player, move))
+
     result = run_connectfour_match(
         p1_command=scripted_column_bot_command([0, 0, 0, 0]),
         p2_command=scripted_column_bot_command([1, 1, 1]),
         timeout=1.0,
+        on_move=on_move,
     )
 
     assert result == {
         "winner": "X",
         "reason": "win",
-        "moves": [
-            ("X", 0),
-            ("O", 1),
-            ("X", 0),
-            ("O", 1),
-            ("X", 0),
-            ("O", 1),
-            ("X", 0),
-        ],
-        "final_board": [
-            [" ", " ", " ", " ", " ", " ", " "],
-            [" ", " ", " ", " ", " ", " ", " "],
-            ["X", " ", " ", " ", " ", " ", " "],
-            ["X", "O", " ", " ", " ", " ", " "],
-            ["X", "O", " ", " ", " ", " ", " "],
-            ["X", "O", " ", " ", " ", " ", " "],
-        ],
     }
+    assert observed_moves == [
+        ("X", 0),
+        ("O", 1),
+        ("X", 0),
+        ("O", 1),
+        ("X", 0),
+        ("O", 1),
+        ("X", 0),
+    ]
 
 
 def test_connectfour_runner_calls_on_move_with_updated_board():
@@ -82,15 +80,27 @@ def test_connectfour_runner_calls_on_move_with_updated_board():
     )
     assert observed[-1][0] == "X"
     assert observed[-1][1] == 0
-    assert observed[-1][2] == result["final_board"]
+    assert observed[-1][2] == [
+        [" ", " ", " ", " ", " ", " ", " "],
+        [" ", " ", " ", " ", " ", " ", " "],
+        ["X", " ", " ", " ", " ", " ", " "],
+        ["X", "O", " ", " ", " ", " ", " "],
+        ["X", "O", " ", " ", " ", " ", " "],
+        ["X", "O", " ", " ", " ", " ", " "],
+    ]
 
 
 def test_connectfour_runner_executes_default_random_bots_successfully():
-    result = run_connectfour_match(timeout=1.0)
+    observed_moves = []
+
+    def on_move(player, move, board):
+        observed_moves.append((player, move))
+
+    result = run_connectfour_match(timeout=1.0, on_move=on_move)
 
     assert result["winner"] in {"X", "O", None}
     assert result["reason"] in {"win", "draw"}
-    assert len(result["moves"]) >= 7
-    assert len(result["moves"]) <= 42
-    assert len(result["final_board"]) == 6
-    assert all(len(row) == 7 for row in result["final_board"])
+    assert len(observed_moves) >= 7
+    assert len(observed_moves) <= 42
+    assert "moves" not in result
+    assert "final_board" not in result

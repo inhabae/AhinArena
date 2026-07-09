@@ -37,11 +37,11 @@ def test_local_tictactoe_match_runs_to_completion():
 
     assert result["reason"] in {"win", "draw"}
     assert result["winner"] in {"X", "O", None}
-    assert len(result["moves"]) >= 5
-    assert len(result["moves"]) <= 9
+    assert "moves" not in result
     assert "Starting local Tic-Tac-Toe match: X bot vs O bot" in text
     assert "Move 1:" in text
-    assert f"Move {len(result['moves'])}:" in text
+    assert text.count("Move ") >= 5
+    assert text.count("Move ") <= 9
     assert " | " in text
     assert "---------" in text
     assert "Final result" in text

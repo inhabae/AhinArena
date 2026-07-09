@@ -54,8 +54,8 @@ def valid_match_request():
     return {
         "game": "tictactoe",
         "players": [
-            {"id": "player-x", "bot": "random"},
-            {"id": "player-o", "bot": "random"},
+            {"bot": "random"},
+            {"bot": "random"},
         ],
     }
 
@@ -64,8 +64,8 @@ def valid_connectfour_match_request():
     return {
         "game": "connect-four",
         "players": [
-            {"id": "player-x", "bot": "random"},
-            {"id": "player-o", "bot": "random"},
+            {"bot": "random"},
+            {"bot": "random"},
         ],
     }
 
@@ -236,38 +236,35 @@ def test_get_match_returns_404_for_unknown_match_id(sqlite_database_dependency):
 def test_create_match_uses_overridden_database_session(override_database_dependency):
     response = client.post("/matches", json=valid_match_request())
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert override_database_dependency.closed is True
 
 
 def test_create_match_runs_tictactoe_match_successfully(monkeypatch):
     observed = {}
 
-    def fake_run_tictactoe_match(p1_command, p2_command):
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
         observed["p1_command"] = p1_command
         observed["p2_command"] = p2_command
+        for player, move in [
+            ("X", (0, 0)),
+            ("O", (1, 0)),
+            ("X", (0, 1)),
+            ("O", (1, 1)),
+            ("X", (0, 2)),
+        ]:
+            on_move(player, move, [])
         return {
             "winner": "X",
             "reason": "win",
-            "moves": [
-                ("X", (0, 0)),
-                ("O", (1, 0)),
-                ("X", (0, 1)),
-                ("O", (1, 1)),
-                ("X", (0, 2)),
-            ],
-            "final_board": [
-                ["X", "X", "X"],
-                ["O", "O", " "],
-                [" ", " ", " "],
-            ],
         }
 
     monkeypatch.setattr(api_main, "run_tictactoe_match", fake_run_tictactoe_match)
 
     response = client.post("/matches", json=valid_match_request())
 
-    assert response.status_code == 200
+    assert response.status_code == 201
+    assert response.headers["location"] == "/matches/123"
     assert observed["p1_command"] == api_main.bot_registry.get_command(
         "random",
         "tictactoe",
@@ -279,50 +276,25 @@ def test_create_match_runs_tictactoe_match_successfully(monkeypatch):
     assert response.json() == {
         "match_id": 123,
         "game": "tictactoe",
-        "players": [
-            {"id": "player-x", "bot": "random"},
-            {"id": "player-o", "bot": "random"},
-        ],
-        "result": {
-            "winner": "X",
-            "reason": "win",
-            "moves": [
-                ["X", [0, 0]],
-                ["O", [1, 0]],
-                ["X", [0, 1]],
-                ["O", [1, 1]],
-                ["X", [0, 2]],
-            ],
-            "final_board": [
-                ["X", "X", "X"],
-                ["O", "O", " "],
-                [" ", " ", " "],
-            ],
-        },
+        "winner": "X",
+        "result_reason": "win",
     }
 
 
 def test_create_match_persists_completed_match(override_database_dependency, monkeypatch):
-    def fake_run_tictactoe_match(p1_command, p2_command):
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+        on_move("X", (0, 0), [])
+        on_move("O", (1, 0), [])
         return {
             "winner": "O",
             "reason": "win",
-            "moves": [
-                ("X", (0, 0)),
-                ("O", (1, 0)),
-            ],
-            "final_board": [
-                ["X", " ", " "],
-                ["O", " ", " "],
-                [" ", " ", " "],
-            ],
         }
 
     monkeypatch.setattr(api_main, "run_tictactoe_match", fake_run_tictactoe_match)
 
     response = client.post("/matches", json=valid_match_request())
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json()["match_id"] == 123
     assert override_database_dependency.commits == 1
     assert len(override_database_dependency.added) == 1
@@ -349,36 +321,30 @@ def test_create_match_runs_connectfour_match_successfully(
 ):
     observed = {}
 
-    def fake_run_connectfour_match(p1_command, p2_command):
+    def fake_run_connectfour_match(p1_command, p2_command, on_move):
         observed["p1_command"] = p1_command
         observed["p2_command"] = p2_command
+        for player, move in [
+            ("X", 0),
+            ("O", 1),
+            ("X", 0),
+            ("O", 1),
+            ("X", 0),
+            ("O", 1),
+            ("X", 0),
+        ]:
+            on_move(player, move, [])
         return {
             "winner": "X",
             "reason": "win",
-            "moves": [
-                ("X", 0),
-                ("O", 1),
-                ("X", 0),
-                ("O", 1),
-                ("X", 0),
-                ("O", 1),
-                ("X", 0),
-            ],
-            "final_board": [
-                [" ", " ", " ", " ", " ", " ", " "],
-                [" ", " ", " ", " ", " ", " ", " "],
-                ["X", " ", " ", " ", " ", " ", " "],
-                ["X", "O", " ", " ", " ", " ", " "],
-                ["X", "O", " ", " ", " ", " ", " "],
-                ["X", "O", " ", " ", " ", " ", " "],
-            ],
         }
 
     monkeypatch.setattr(api_main, "run_connectfour_match", fake_run_connectfour_match)
 
     response = client.post("/matches", json=valid_connectfour_match_request())
 
-    assert response.status_code == 200
+    assert response.status_code == 201
+    assert response.headers["location"] == "/matches/123"
     assert observed["p1_command"] == api_main.bot_registry.get_command(
         "random",
         "connect-four",
@@ -390,31 +356,8 @@ def test_create_match_runs_connectfour_match_successfully(
     assert response.json() == {
         "match_id": 123,
         "game": "connect-four",
-        "players": [
-            {"id": "player-x", "bot": "random"},
-            {"id": "player-o", "bot": "random"},
-        ],
-        "result": {
-            "winner": "X",
-            "reason": "win",
-            "moves": [
-                ["X", 0],
-                ["O", 1],
-                ["X", 0],
-                ["O", 1],
-                ["X", 0],
-                ["O", 1],
-                ["X", 0],
-            ],
-            "final_board": [
-                [" ", " ", " ", " ", " ", " ", " "],
-                [" ", " ", " ", " ", " ", " ", " "],
-                ["X", " ", " ", " ", " ", " ", " "],
-                ["X", "O", " ", " ", " ", " ", " "],
-                ["X", "O", " ", " ", " ", " ", " "],
-                ["X", "O", " ", " ", " ", " ", " "],
-            ],
-        },
+        "winner": "X",
+        "result_reason": "win",
     }
     match = override_database_dependency.added[0]
     assert [
@@ -446,19 +389,15 @@ def test_create_match_runs_connectfour_match_successfully(
 def test_create_match_runs_real_random_bot_match_end_to_end():
     response = client.post("/matches", json=valid_match_request())
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     body = response.json()
-    result = body["result"]
 
     assert body["game"] == "tictactoe"
     assert body["match_id"] == 123
-    assert body["players"] == valid_match_request()["players"]
-    assert result["winner"] in {"X", "O", None}
-    assert result["reason"] in {"win", "draw"}
-    assert len(result["moves"]) >= 5
-    assert len(result["moves"]) <= 9
-    assert len(result["final_board"]) == 3
-    assert all(len(row) == 3 for row in result["final_board"])
+    assert body["winner"] in {"X", "O", None}
+    assert body["result_reason"] in {"win", "draw"}
+    assert "players" not in body
+    assert "result" not in body
 
 
 def test_create_match_rejects_unknown_bot():
@@ -496,7 +435,7 @@ def test_create_match_rejects_missing_required_fields():
         "/matches",
         json={
             "game": "tictactoe",
-            "players": [{"id": "player-x"}],
+            "players": [{}],
         },
     )
 
@@ -543,19 +482,15 @@ def test_create_match_runs_real_random_connectfour_bot_match_end_to_end():
 
     response = client.post("/matches", json=payload)
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     body = response.json()
-    result = body["result"]
 
     assert body["game"] == "connect-four"
     assert body["match_id"] == 123
-    assert body["players"] == payload["players"]
-    assert result["winner"] in {"X", "O", None}
-    assert result["reason"] in {"win", "draw"}
-    assert len(result["moves"]) >= 7
-    assert len(result["moves"]) <= 42
-    assert len(result["final_board"]) == 6
-    assert all(len(row) == 7 for row in result["final_board"])
+    assert body["winner"] in {"X", "O", None}
+    assert body["result_reason"] in {"win", "draw"}
+    assert "players" not in body
+    assert "result" not in body
 
 
 def test_create_match_rejects_unsupported_game(override_database_dependency):
@@ -578,7 +513,7 @@ def test_create_match_rejects_unsupported_game(override_database_dependency):
 def test_create_match_rejects_invalid_player_count(override_database_dependency):
     payload = {
         "game": "tictactoe",
-        "players": [{"id": "solo", "bot": "random"}],
+        "players": [{"bot": "random"}],
     }
 
     response = client.post("/matches", json=payload)
@@ -613,7 +548,7 @@ def test_create_match_rejects_empty_players():
 
 def test_create_match_rejects_too_many_players():
     payload = valid_match_request()
-    payload["players"].append({"id": "player-extra", "bot": "random"})
+    payload["players"].append({"bot": "random"})
 
     response = client.post("/matches", json=payload)
 
@@ -630,7 +565,7 @@ def test_create_match_returns_error_when_match_execution_fails(
     override_database_dependency,
     monkeypatch,
 ):
-    def failing_run_tictactoe_match(p1_command, p2_command):
+    def failing_run_tictactoe_match(p1_command, p2_command, on_move):
         raise RuntimeError("runner failed")
 
     monkeypatch.setattr(api_main, "run_tictactoe_match", failing_run_tictactoe_match)
