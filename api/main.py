@@ -1,7 +1,7 @@
 from api.database import get_db
 from api.models import Bot, Match, Move
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
-from api.schemas import MatchRequest
+from api.schemas import MatchRequest, LeaderboardEntry
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
 from engine.registry import UnknownBotError, bot_registry
@@ -265,3 +265,32 @@ def get_match(match_id: int, db: Session = Depends(get_db)):
         api_error(404, "match_not_found", f"Match not found: {match_id}")
 
     return serialize_match_detail(match)
+
+@app.get("/leaderboard", response_model=list[LeaderboardEntry])
+def get_leaderboard(
+    game_id: str,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    bots = (
+        db.query(Bot)
+        .filter(Bot.game_id == game_id)
+        .order_by(Bot.rating.desc(), Bot.id.asc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "bot_id": bot.id,
+            "name": bot.name,
+            "rating": bot.rating,
+            "games_played": bot.games_played,
+            "wins": bot.wins,
+            "losses": bot.losses,
+            "draws": bot.draws,
+        }
+        for bot in bots
+    ]
