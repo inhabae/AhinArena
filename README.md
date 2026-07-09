@@ -120,7 +120,7 @@ compact result summary:
 {
   "match_id": 42,
   "game": "tictactoe",
-  "winner": "X",
+  "winner_bot_id": 1,
   "result_reason": "win"
 }
 ```
@@ -139,9 +139,9 @@ GET /matches?limit=20&offset=0
     {
       "match_id": 42,
       "game": "connect-four",
-      "bot_one_id": "random",
-      "bot_two_id": "random",
-      "winner": "X",
+      "bot_one_id": 1,
+      "bot_two_id": 2,
+      "winner_bot_id": 1,
       "result_reason": "win",
       "created_at": "2026-07-09T17:00:00Z",
       "completed_at": "2026-07-09T17:00:02Z"
@@ -163,9 +163,9 @@ GET /matches/42
 {
   "match_id": 42,
   "game": "connect-four",
-  "bot_one_id": "random",
-  "bot_two_id": "random",
-  "winner": "X",
+  "bot_one_id": 1,
+  "bot_two_id": 2,
+  "winner_bot_id": 1,
   "result_reason": "win",
   "created_at": "2026-07-09T17:00:00Z",
   "completed_at": "2026-07-09T17:00:02Z",

@@ -10,6 +10,7 @@ from sqlalchemy import (
 )
 
 from api.database import Base
+from api.ratings import DEFAULT_ELO_RATING
 
 
 class Bot(Base):
@@ -23,7 +24,12 @@ class Bot(Base):
 
     created_by = Column(String, nullable=False)
 
-    rating = Column(Integer, nullable=False, default=1200, server_default="1200")
+    rating = Column(
+        Integer,
+        nullable=False,
+        default=DEFAULT_ELO_RATING,
+        server_default=str(DEFAULT_ELO_RATING),
+    )
     games_played = Column(Integer, nullable=False, default=0, server_default="0")
     wins = Column(Integer, nullable=False, default=0, server_default="0")
     losses = Column(Integer, nullable=False, default=0, server_default="0")
