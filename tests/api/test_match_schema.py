@@ -44,15 +44,56 @@ remove_move_history_from_matches = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(remove_move_history_from_matches)
 
+spec = importlib.util.spec_from_file_location(
+    "add_match_rating_snapshots",
+    Path(__file__).parents[2]
+    / "alembic"
+    / "versions"
+    / "c9a16f2d8b4e_add_match_rating_snapshots.py",
+)
+add_match_rating_snapshots = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(add_match_rating_snapshots)
+
+spec = importlib.util.spec_from_file_location(
+    "replace_winner_with_winner_bot_id",
+    Path(__file__).parents[2]
+    / "alembic"
+    / "versions"
+    / "f4a8b6c2d9e1_replace_winner_with_winner_bot_id.py",
+)
+replace_winner_with_winner_bot_id = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(replace_winner_with_winner_bot_id)
+
 EXPECTED_MATCH_COLUMNS = {
     "id",
     "game_id",
     "bot_one_id",
     "bot_two_id",
-    "winner",
+    "bot_one_rating_before",
+    "bot_two_rating_before",
+    "bot_one_rating_after",
+    "bot_two_rating_after",
+    "bot_one_rating_delta",
+    "bot_two_rating_delta",
+    "winner_bot_id",
     "result_reason",
     "created_at",
     "completed_at",
+}
+
+EXPECTED_MATCH_COLUMNS_BEFORE_WINNER_BOT_ID = (
+    EXPECTED_MATCH_COLUMNS - {"winner_bot_id"}
+) | {"winner"}
+
+EXPECTED_MATCH_COLUMNS_BEFORE_RATINGS = EXPECTED_MATCH_COLUMNS_BEFORE_WINNER_BOT_ID - {
+    "bot_one_rating_before",
+    "bot_two_rating_before",
+    "bot_one_rating_after",
+    "bot_two_rating_after",
+    "bot_one_rating_delta",
+    "bot_two_rating_delta",
 }
 
 EXPECTED_MOVE_COLUMNS = {
@@ -155,8 +196,15 @@ def test_match_model_declares_expected_columns():
     assert Match.__table__.c.game_id.nullable is False
     assert Match.__table__.c.bot_one_id.nullable is False
     assert Match.__table__.c.bot_two_id.nullable is False
+    assert Match.__table__.c.bot_one_rating_before.nullable is False
+    assert Match.__table__.c.bot_two_rating_before.nullable is False
+    assert Match.__table__.c.bot_one_rating_after.nullable is False
+    assert Match.__table__.c.bot_two_rating_after.nullable is False
+    assert Match.__table__.c.bot_one_rating_delta.nullable is False
+    assert Match.__table__.c.bot_two_rating_delta.nullable is False
     assert isinstance(Match.__table__.c.bot_one_id.type, sa.Integer)
     assert isinstance(Match.__table__.c.bot_two_id.type, sa.Integer)
+    assert isinstance(Match.__table__.c.winner_bot_id.type, sa.Integer)
     assert {
         foreign_key.target_fullname
         for foreign_key in Match.__table__.c.bot_one_id.foreign_keys
@@ -165,7 +213,11 @@ def test_match_model_declares_expected_columns():
         foreign_key.target_fullname
         for foreign_key in Match.__table__.c.bot_two_id.foreign_keys
     } == {"bots.id"}
-    assert Match.__table__.c.winner.nullable is True
+    assert {
+        foreign_key.target_fullname
+        for foreign_key in Match.__table__.c.winner_bot_id.foreign_keys
+    } == {"bots.id"}
+    assert Match.__table__.c.winner_bot_id.nullable is True
     assert Match.__table__.c.result_reason.nullable is False
 
 
@@ -190,7 +242,7 @@ def test_create_matches_migration_creates_expected_schema(monkeypatch):
         inspector = sa.inspect(connection)
         columns = {column["name"]: column for column in inspector.get_columns("matches")}
 
-        assert set(columns) == EXPECTED_MATCH_COLUMNS | {"move_history"}
+        assert set(columns) == EXPECTED_MATCH_COLUMNS_BEFORE_RATINGS | {"move_history"}
         assert columns["game_id"]["nullable"] is False
         assert columns["bot_one_id"]["nullable"] is False
         assert columns["bot_two_id"]["nullable"] is False
@@ -224,7 +276,7 @@ def test_move_migrations_create_expected_schema(monkeypatch):
         foreign_keys = inspector.get_foreign_keys("moves")
         unique_constraints = inspector.get_unique_constraints("moves")
 
-        assert match_columns == EXPECTED_MATCH_COLUMNS
+        assert match_columns == EXPECTED_MATCH_COLUMNS_BEFORE_RATINGS
         assert set(move_columns) == EXPECTED_MOVE_COLUMNS
         assert move_columns["match_id"]["nullable"] is False
         assert move_columns["move_number"]["nullable"] is False
@@ -237,3 +289,110 @@ def test_move_migrations_create_expected_schema(monkeypatch):
             constraint["column_names"] == ["match_id", "move_number"]
             for constraint in unique_constraints
         )
+
+
+def test_rating_snapshot_migration_adds_match_rating_columns(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        operations = Operations(context)
+        monkeypatch.setattr(create_matches_table, "op", operations)
+        monkeypatch.setattr(add_moves_table, "op", operations)
+        monkeypatch.setattr(remove_move_history_from_matches, "op", operations)
+        monkeypatch.setattr(add_match_rating_snapshots, "op", operations)
+
+        create_matches_table.upgrade()
+        add_moves_table.upgrade()
+        remove_move_history_from_matches.upgrade()
+        add_match_rating_snapshots.upgrade()
+
+        inspector = sa.inspect(connection)
+        columns = {
+            column["name"]: column for column in inspector.get_columns("matches")
+        }
+
+        assert set(columns) == EXPECTED_MATCH_COLUMNS_BEFORE_WINNER_BOT_ID
+        assert columns["bot_one_rating_before"]["nullable"] is False
+        assert columns["bot_two_rating_before"]["nullable"] is False
+        assert columns["bot_one_rating_after"]["nullable"] is False
+        assert columns["bot_two_rating_after"]["nullable"] is False
+        assert columns["bot_one_rating_delta"]["nullable"] is False
+        assert columns["bot_two_rating_delta"]["nullable"] is False
+
+
+def test_winner_bot_migration_replaces_winner_marker_with_bot_id(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        operations = Operations(context)
+        monkeypatch.setattr(create_matches_table, "op", operations)
+        monkeypatch.setattr(add_moves_table, "op", operations)
+        monkeypatch.setattr(remove_move_history_from_matches, "op", operations)
+        monkeypatch.setattr(add_match_rating_snapshots, "op", operations)
+        monkeypatch.setattr(replace_winner_with_winner_bot_id, "op", operations)
+
+        Bot.__table__.create(connection)
+        create_matches_table.upgrade()
+        add_moves_table.upgrade()
+        remove_move_history_from_matches.upgrade()
+        add_match_rating_snapshots.upgrade()
+
+        connection.execute(
+            sa.text(
+                """
+                INSERT INTO bots (id, name, game_id, created_by)
+                VALUES
+                    (10, 'alpha', 'connect-four', 'test'),
+                    (20, 'beta', 'connect-four', 'test')
+                """
+            )
+        )
+
+        connection.execute(
+            sa.text(
+                """
+                INSERT INTO matches (
+                    game_id,
+                    bot_one_id,
+                    bot_two_id,
+                    bot_one_rating_before,
+                    bot_two_rating_before,
+                    bot_one_rating_after,
+                    bot_two_rating_after,
+                    bot_one_rating_delta,
+                    bot_two_rating_delta,
+                    winner,
+                    result_reason
+                )
+                VALUES (
+                    'connect-four',
+                    10,
+                    20,
+                    1200,
+                    1200,
+                    1216,
+                    1184,
+                    16,
+                    -16,
+                    'X',
+                    'win'
+                )
+                """
+            )
+        )
+
+        replace_winner_with_winner_bot_id.upgrade()
+
+        inspector = sa.inspect(connection)
+        columns = {
+            column["name"]: column for column in inspector.get_columns("matches")
+        }
+        row = connection.execute(
+            sa.text("SELECT winner_bot_id FROM matches")
+        ).one()
+
+        assert set(columns) == EXPECTED_MATCH_COLUMNS
+        assert columns["winner_bot_id"]["nullable"] is True
+        assert row.winner_bot_id == 10

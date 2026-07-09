@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api.database import Base, get_db
-from api.models import Match, Move
+from api.models import Bot, Match, Move
 import api.main as api_main
 
 
@@ -70,6 +70,13 @@ def valid_connectfour_match_request():
     }
 
 
+def seed_bot(session, *, name="random", game_id="tictactoe", created_by="system"):
+    bot = Bot(name=name, game_id=game_id, created_by=created_by)
+    session.add(bot)
+    session.commit()
+    return bot
+
+
 @pytest.fixture
 def sqlite_database_dependency():
     engine = create_engine(
@@ -96,19 +103,31 @@ def sqlite_database_dependency():
 def make_persisted_match(
     *,
     game_id="tictactoe",
-    bot_one_id="random-x",
-    bot_two_id="random-o",
-    winner="X",
+    bot_one_id=1,
+    bot_two_id=2,
+    winner_bot_id=1,
     result_reason="win",
     created_at=None,
     completed_at=None,
     moves=None,
+    bot_one_rating_before=1200,
+    bot_two_rating_before=1200,
+    bot_one_rating_after=1216,
+    bot_two_rating_after=1184,
+    bot_one_rating_delta=16,
+    bot_two_rating_delta=-16,
 ):
     return Match(
         game_id=game_id,
         bot_one_id=bot_one_id,
         bot_two_id=bot_two_id,
-        winner=winner,
+        bot_one_rating_before=bot_one_rating_before,
+        bot_two_rating_before=bot_two_rating_before,
+        bot_one_rating_after=bot_one_rating_after,
+        bot_two_rating_after=bot_two_rating_after,
+        bot_one_rating_delta=bot_one_rating_delta,
+        bot_two_rating_delta=bot_two_rating_delta,
+        winner_bot_id=winner_bot_id,
         result_reason=result_reason,
         created_at=created_at or datetime(2026, 1, 1, tzinfo=timezone.utc),
         completed_at=completed_at or datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
@@ -141,7 +160,7 @@ def test_list_matches_returns_recent_matches_first(sqlite_database_dependency):
     )
     newer = make_persisted_match(
         game_id="connect-four",
-        winner=None,
+        winner_bot_id=None,
         result_reason="draw",
         completed_at=datetime(2026, 1, 2, 0, 0, 1, tzinfo=timezone.utc),
     )
@@ -209,9 +228,15 @@ def test_get_match_returns_metadata_result_summary_and_moves(sqlite_database_dep
     body = response.json()
     assert body["match_id"] == match.id
     assert body["game"] == "tictactoe"
-    assert body["bot_one_id"] == "random-x"
-    assert body["bot_two_id"] == "random-o"
-    assert body["winner"] == "X"
+    assert body["bot_one_id"] == 1
+    assert body["bot_two_id"] == 2
+    assert body["bot_one_rating_before"] == 1200
+    assert body["bot_two_rating_before"] == 1200
+    assert body["bot_one_rating_after"] == 1216
+    assert body["bot_two_rating_after"] == 1184
+    assert body["bot_one_rating_delta"] == 16
+    assert body["bot_two_rating_delta"] == -16
+    assert body["winner_bot_id"] == 1
     assert body["result_reason"] == "win"
     assert body["created_at"]
     assert body["completed_at"]
@@ -233,14 +258,20 @@ def test_get_match_returns_404_for_unknown_match_id(sqlite_database_dependency):
     }
 
 
-def test_create_match_uses_overridden_database_session(override_database_dependency):
+def test_create_match_uses_overridden_database_session(sqlite_database_dependency):
+    seed_bot(sqlite_database_dependency)
+
     response = client.post("/matches", json=valid_match_request())
 
     assert response.status_code == 201
-    assert override_database_dependency.closed is True
+    assert sqlite_database_dependency.query(Match).count() == 1
 
 
-def test_create_match_runs_tictactoe_match_successfully(monkeypatch):
+def test_create_match_runs_tictactoe_match_successfully(
+    sqlite_database_dependency,
+    monkeypatch,
+):
+    seed_bot(sqlite_database_dependency)
     observed = {}
 
     def fake_run_tictactoe_match(p1_command, p2_command, on_move):
@@ -264,7 +295,8 @@ def test_create_match_runs_tictactoe_match_successfully(monkeypatch):
     response = client.post("/matches", json=valid_match_request())
 
     assert response.status_code == 201
-    assert response.headers["location"] == "/matches/123"
+    match = sqlite_database_dependency.query(Match).one()
+    assert response.headers["location"] == f"/matches/{match.id}"
     assert observed["p1_command"] == api_main.bot_registry.get_command(
         "random",
         "tictactoe",
@@ -274,14 +306,16 @@ def test_create_match_runs_tictactoe_match_successfully(monkeypatch):
         "tictactoe",
     )
     assert response.json() == {
-        "match_id": 123,
+        "match_id": match.id,
         "game": "tictactoe",
-        "winner": "X",
+        "winner_bot_id": match.winner_bot_id,
         "result_reason": "win",
     }
 
 
-def test_create_match_persists_completed_match(override_database_dependency, monkeypatch):
+def test_create_match_persists_completed_match(sqlite_database_dependency, monkeypatch):
+    seed_bot(sqlite_database_dependency)
+
     def fake_run_tictactoe_match(p1_command, p2_command, on_move):
         on_move("X", (0, 0), [])
         on_move("O", (1, 0), [])
@@ -295,30 +329,168 @@ def test_create_match_persists_completed_match(override_database_dependency, mon
     response = client.post("/matches", json=valid_match_request())
 
     assert response.status_code == 201
-    assert response.json()["match_id"] == 123
-    assert override_database_dependency.commits == 1
-    assert len(override_database_dependency.added) == 1
-    assert override_database_dependency.refreshed == override_database_dependency.added
+    match = sqlite_database_dependency.query(Match).one()
+    assert response.json()["match_id"] == match.id
 
-    match = override_database_dependency.added[0]
     assert match.game_id == "tictactoe"
-    assert match.bot_one_id == "random"
-    assert match.bot_two_id == "random"
-    assert match.winner == "O"
+    assert match.bot_one_id == match.bot_two_id
+    assert match.bot_one_rating_before == 1200
+    assert match.bot_two_rating_before == 1200
+    assert match.bot_one_rating_after == 1184
+    assert match.bot_two_rating_after == 1216
+    assert match.bot_one_rating_delta == -16
+    assert match.bot_two_rating_delta == 16
+    assert match.winner_bot_id == match.bot_two_id
     assert match.result_reason == "win"
     assert [
         (move.move_number, move.player, move.move)
         for move in match.moves
     ] == [
-        (1, "X", (0, 0)),
-        (2, "O", (1, 0)),
+        (1, "X", [0, 0]),
+        (2, "O", [1, 0]),
     ]
+    bot = sqlite_database_dependency.query(Bot).one()
+    assert bot.rating == 1200
+    assert bot.games_played == 2
+    assert bot.wins == 1
+    assert bot.losses == 1
+    assert bot.draws == 0
+
+
+def test_create_match_updates_distinct_bot_ratings_and_records(
+    sqlite_database_dependency,
+    monkeypatch,
+):
+    bot_one = Bot(
+        name="alpha",
+        game_id="tictactoe",
+        created_by="test",
+        rating=1400,
+        games_played=3,
+        wins=2,
+        losses=1,
+        draws=0,
+    )
+    bot_two = Bot(
+        name="beta",
+        game_id="tictactoe",
+        created_by="test",
+        rating=1200,
+        games_played=4,
+        wins=1,
+        losses=2,
+        draws=1,
+    )
+    sqlite_database_dependency.add_all([bot_one, bot_two])
+    sqlite_database_dependency.commit()
+
+    class TestBotRegistry:
+        def get_command(self, bot_name, game_id):
+            return ["run", bot_name, game_id]
+
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+        return {
+            "winner": "O",
+            "reason": "win",
+        }
+
+    monkeypatch.setattr(api_main, "bot_registry", TestBotRegistry())
+    monkeypatch.setattr(api_main, "run_tictactoe_match", fake_run_tictactoe_match)
+
+    response = client.post(
+        "/matches",
+        json={
+            "game": "tictactoe",
+            "players": [
+                {"bot": "alpha"},
+                {"bot": "beta"},
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    match = sqlite_database_dependency.query(Match).one()
+    sqlite_database_dependency.refresh(bot_one)
+    sqlite_database_dependency.refresh(bot_two)
+
+    assert match.bot_one_id == bot_one.id
+    assert match.bot_two_id == bot_two.id
+    assert match.bot_one_rating_before == 1400
+    assert match.bot_two_rating_before == 1200
+    assert match.bot_one_rating_after == 1376
+    assert match.bot_two_rating_after == 1224
+    assert match.bot_one_rating_delta == -24
+    assert match.bot_two_rating_delta == 24
+    assert match.winner_bot_id == bot_two.id
+
+    assert bot_one.rating == 1376
+    assert bot_one.games_played == 4
+    assert bot_one.wins == 2
+    assert bot_one.losses == 2
+    assert bot_one.draws == 0
+    assert bot_two.rating == 1224
+    assert bot_two.games_played == 5
+    assert bot_two.wins == 2
+    assert bot_two.losses == 2
+    assert bot_two.draws == 1
+
+
+def test_create_match_updates_ratings_and_records_for_draw(
+    sqlite_database_dependency,
+    monkeypatch,
+):
+    bot_one = Bot(name="draw-alpha", game_id="tictactoe", created_by="test")
+    bot_two = Bot(name="draw-beta", game_id="tictactoe", created_by="test")
+    sqlite_database_dependency.add_all([bot_one, bot_two])
+    sqlite_database_dependency.commit()
+
+    class TestBotRegistry:
+        def get_command(self, bot_name, game_id):
+            return ["run", bot_name, game_id]
+
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+        return {
+            "winner": None,
+            "reason": "draw",
+        }
+
+    monkeypatch.setattr(api_main, "bot_registry", TestBotRegistry())
+    monkeypatch.setattr(api_main, "run_tictactoe_match", fake_run_tictactoe_match)
+
+    response = client.post(
+        "/matches",
+        json={
+            "game": "tictactoe",
+            "players": [
+                {"bot": "draw-alpha"},
+                {"bot": "draw-beta"},
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    match = sqlite_database_dependency.query(Match).one()
+    sqlite_database_dependency.refresh(bot_one)
+    sqlite_database_dependency.refresh(bot_two)
+
+    assert match.bot_one_rating_after == 1200
+    assert match.bot_two_rating_after == 1200
+    assert match.bot_one_rating_delta == 0
+    assert match.bot_two_rating_delta == 0
+    assert match.winner_bot_id is None
+    assert bot_one.rating == 1200
+    assert bot_two.rating == 1200
+    assert bot_one.games_played == 1
+    assert bot_two.games_played == 1
+    assert bot_one.draws == 1
+    assert bot_two.draws == 1
 
 
 def test_create_match_runs_connectfour_match_successfully(
-    override_database_dependency,
+    sqlite_database_dependency,
     monkeypatch,
 ):
+    seed_bot(sqlite_database_dependency, game_id="connect-four")
     observed = {}
 
     def fake_run_connectfour_match(p1_command, p2_command, on_move):
@@ -344,7 +516,8 @@ def test_create_match_runs_connectfour_match_successfully(
     response = client.post("/matches", json=valid_connectfour_match_request())
 
     assert response.status_code == 201
-    assert response.headers["location"] == "/matches/123"
+    match = sqlite_database_dependency.query(Match).one()
+    assert response.headers["location"] == f"/matches/{match.id}"
     assert observed["p1_command"] == api_main.bot_registry.get_command(
         "random",
         "connect-four",
@@ -354,12 +527,11 @@ def test_create_match_runs_connectfour_match_successfully(
         "connect-four",
     )
     assert response.json() == {
-        "match_id": 123,
+        "match_id": match.id,
         "game": "connect-four",
-        "winner": "X",
+        "winner_bot_id": match.winner_bot_id,
         "result_reason": "win",
     }
-    match = override_database_dependency.added[0]
     assert [
         (move.move_number, move.player, move.move)
         for move in match.moves
@@ -386,46 +558,79 @@ def test_create_match_runs_connectfour_match_successfully(
     ]
 
 
-def test_create_match_runs_real_random_bot_match_end_to_end():
+def test_create_match_runs_real_random_bot_match_end_to_end(sqlite_database_dependency):
+    seed_bot(sqlite_database_dependency)
+
     response = client.post("/matches", json=valid_match_request())
 
     assert response.status_code == 201
     body = response.json()
+    match = sqlite_database_dependency.query(Match).one()
 
     assert body["game"] == "tictactoe"
-    assert body["match_id"] == 123
-    assert body["winner"] in {"X", "O", None}
+    assert body["match_id"] == match.id
+    assert body["winner_bot_id"] in {match.bot_one_id, match.bot_two_id, None}
     assert body["result_reason"] in {"win", "draw"}
     assert "players" not in body
     assert "result" not in body
+    assert match.bot_one_rating_before == 1200
+    assert match.bot_two_rating_before == 1200
 
 
-def test_create_match_rejects_unknown_bot():
+def test_create_match_rejects_bot_missing_from_database(sqlite_database_dependency):
+    seed_bot(sqlite_database_dependency)
     payload = valid_match_request()
     payload["players"][1]["bot"] = "missing-bot"
 
     response = client.post("/matches", json=payload)
 
-    assert response.status_code == 400
+    assert response.status_code == 404
     assert response.json() == {
         "error": {
-            "code": "unknown_bot",
-            "message": "Unknown bot: missing-bot",
+            "code": "bot_not_found",
+            "message": "Bot not found: missing-bot",
         }
     }
 
 
-def test_create_match_rejects_unknown_first_player_bot():
+def test_create_match_rejects_first_player_missing_from_database(
+    sqlite_database_dependency,
+):
     payload = valid_match_request()
     payload["players"][0]["bot"] = "missing-first-bot"
 
     response = client.post("/matches", json=payload)
 
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "bot_not_found",
+            "message": "Bot not found: missing-first-bot",
+        }
+    }
+
+
+def test_create_match_rejects_database_bot_without_registry_command(
+    sqlite_database_dependency,
+):
+    seed_bot(sqlite_database_dependency, name="database-only")
+
+    response = client.post(
+        "/matches",
+        json={
+            "game": "tictactoe",
+            "players": [
+                {"bot": "database-only"},
+                {"bot": "database-only"},
+            ],
+        },
+    )
+
     assert response.status_code == 400
     assert response.json() == {
         "error": {
             "code": "unknown_bot",
-            "message": "Unknown bot: missing-first-bot",
+            "message": "Unknown bot: database-only",
         }
     }
 
@@ -476,7 +681,11 @@ def test_create_match_rejects_wrong_payload_types():
     assert body["error"]["details"]
 
 
-def test_create_match_runs_real_random_connectfour_bot_match_end_to_end():
+def test_create_match_runs_real_random_connectfour_bot_match_end_to_end(
+    sqlite_database_dependency,
+):
+    seed_bot(sqlite_database_dependency, game_id="connect-four")
+
     payload = valid_match_request()
     payload["game"] = "connect-four"
 
@@ -484,13 +693,16 @@ def test_create_match_runs_real_random_connectfour_bot_match_end_to_end():
 
     assert response.status_code == 201
     body = response.json()
+    match = sqlite_database_dependency.query(Match).one()
 
     assert body["game"] == "connect-four"
-    assert body["match_id"] == 123
-    assert body["winner"] in {"X", "O", None}
+    assert body["match_id"] == match.id
+    assert body["winner_bot_id"] in {match.bot_one_id, match.bot_two_id, None}
     assert body["result_reason"] in {"win", "draw"}
     assert "players" not in body
     assert "result" not in body
+    assert match.bot_one_rating_before == 1200
+    assert match.bot_two_rating_before == 1200
 
 
 def test_create_match_rejects_unsupported_game(override_database_dependency):
@@ -562,9 +774,11 @@ def test_create_match_rejects_too_many_players():
 
 
 def test_create_match_returns_error_when_match_execution_fails(
-    override_database_dependency,
+    sqlite_database_dependency,
     monkeypatch,
 ):
+    seed_bot(sqlite_database_dependency)
+
     def failing_run_tictactoe_match(p1_command, p2_command, on_move):
         raise RuntimeError("runner failed")
 
@@ -573,8 +787,7 @@ def test_create_match_returns_error_when_match_execution_fails(
     response = client.post("/matches", json=valid_match_request())
 
     assert response.status_code == 500
-    assert override_database_dependency.added == []
-    assert override_database_dependency.commits == 0
+    assert sqlite_database_dependency.query(Match).count() == 0
     assert response.json() == {
         "error": {
             "code": "match_execution_failed",

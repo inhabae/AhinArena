@@ -14,7 +14,14 @@ class Match(Base):
     bot_one_id = Column(Integer, ForeignKey("bots.id"), nullable=False)
     bot_two_id = Column(Integer, ForeignKey("bots.id"), nullable=False)
 
-    winner = Column(String, nullable=True)
+    bot_one_rating_before = Column(Integer, nullable=False)
+    bot_two_rating_before = Column(Integer, nullable=False)
+    bot_one_rating_after = Column(Integer, nullable=False)
+    bot_two_rating_after = Column(Integer, nullable=False)
+    bot_one_rating_delta = Column(Integer, nullable=False)
+    bot_two_rating_delta = Column(Integer, nullable=False)
+
+    winner_bot_id = Column(Integer, ForeignKey("bots.id"), nullable=True)
     result_reason = Column(String, nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -22,6 +29,7 @@ class Match(Base):
 
     bot_one = relationship("Bot", foreign_keys=[bot_one_id])
     bot_two = relationship("Bot", foreign_keys=[bot_two_id])
+    winner_bot = relationship("Bot", foreign_keys=[winner_bot_id])
 
     moves = relationship(
         "Move",
