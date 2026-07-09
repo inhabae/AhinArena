@@ -12,70 +12,15 @@ from api.models import Bot, Match, Move
 
 
 spec = importlib.util.spec_from_file_location(
-    "create_matches_table",
+    "baseline_schema",
     Path(__file__).parents[2]
     / "alembic"
     / "versions"
-    / "0002_create_matches_table.py",
+    / "b4e57400891e_baseline_schema.py",
 )
-create_matches_table = importlib.util.module_from_spec(spec)
+baseline_schema = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
-spec.loader.exec_module(create_matches_table)
-
-spec = importlib.util.spec_from_file_location(
-    "add_moves_table",
-    Path(__file__).parents[2]
-    / "alembic"
-    / "versions"
-    / "84de88aa274e_add_moves_table.py",
-)
-add_moves_table = importlib.util.module_from_spec(spec)
-assert spec.loader is not None
-spec.loader.exec_module(add_moves_table)
-
-spec = importlib.util.spec_from_file_location(
-    "remove_move_history_from_matches",
-    Path(__file__).parents[2]
-    / "alembic"
-    / "versions"
-    / "a50c745e19b1_remove_move_history_from_matches.py",
-)
-remove_move_history_from_matches = importlib.util.module_from_spec(spec)
-assert spec.loader is not None
-spec.loader.exec_module(remove_move_history_from_matches)
-
-spec = importlib.util.spec_from_file_location(
-    "add_match_rating_snapshots",
-    Path(__file__).parents[2]
-    / "alembic"
-    / "versions"
-    / "c9a16f2d8b4e_add_match_rating_snapshots.py",
-)
-add_match_rating_snapshots = importlib.util.module_from_spec(spec)
-assert spec.loader is not None
-spec.loader.exec_module(add_match_rating_snapshots)
-
-spec = importlib.util.spec_from_file_location(
-    "replace_winner_with_winner_bot_id",
-    Path(__file__).parents[2]
-    / "alembic"
-    / "versions"
-    / "f4a8b6c2d9e1_replace_winner_with_winner_bot_id.py",
-)
-replace_winner_with_winner_bot_id = importlib.util.module_from_spec(spec)
-assert spec.loader is not None
-spec.loader.exec_module(replace_winner_with_winner_bot_id)
-
-spec = importlib.util.spec_from_file_location(
-    "rename_move_player_to_bot_id",
-    Path(__file__).parents[2]
-    / "alembic"
-    / "versions"
-    / "5d41a81f3c2b_rename_move_player_to_bot_id.py",
-)
-rename_move_player_to_bot_id = importlib.util.module_from_spec(spec)
-assert spec.loader is not None
-spec.loader.exec_module(rename_move_player_to_bot_id)
+spec.loader.exec_module(baseline_schema)
 
 EXPECTED_MATCH_COLUMNS = {
     "id",
@@ -94,19 +39,6 @@ EXPECTED_MATCH_COLUMNS = {
     "completed_at",
 }
 
-EXPECTED_MATCH_COLUMNS_BEFORE_WINNER_BOT_ID = (
-    EXPECTED_MATCH_COLUMNS - {"winner_bot_id"}
-) | {"winner"}
-
-EXPECTED_MATCH_COLUMNS_BEFORE_RATINGS = EXPECTED_MATCH_COLUMNS_BEFORE_WINNER_BOT_ID - {
-    "bot_one_rating_before",
-    "bot_two_rating_before",
-    "bot_one_rating_after",
-    "bot_two_rating_after",
-    "bot_one_rating_delta",
-    "bot_two_rating_delta",
-}
-
 EXPECTED_MOVE_COLUMNS = {
     "id",
     "match_id",
@@ -114,8 +46,6 @@ EXPECTED_MOVE_COLUMNS = {
     "bot_id",
     "move",
 }
-
-EXPECTED_MOVE_COLUMNS_BEFORE_BOT_ID = (EXPECTED_MOVE_COLUMNS - {"bot_id"}) | {"player"}
 
 EXPECTED_BOT_COLUMNS = {
     "id",
@@ -138,6 +68,11 @@ def column_default_value(column):
 
 def server_default_value(column):
     return str(column.server_default.arg) if column.server_default is not None else None
+
+
+def reflected_default_value(column):
+    default = column["default"]
+    return default.strip("'") if default is not None else None
 
 
 def test_bot_model_declares_expected_columns_defaults_and_constraints():
@@ -247,207 +182,96 @@ def test_move_model_declares_expected_columns():
     assert Move.__table__.c.move.nullable is False
 
 
-def test_create_matches_migration_creates_expected_schema(monkeypatch):
+def test_baseline_migration_creates_expected_schema(monkeypatch):
     engine = sa.create_engine("sqlite:///:memory:")
 
     with engine.begin() as connection:
         context = MigrationContext.configure(connection)
         operations = Operations(context)
-        monkeypatch.setattr(create_matches_table, "op", operations)
+        monkeypatch.setattr(baseline_schema, "op", operations)
 
-        create_matches_table.upgrade()
-
-        inspector = sa.inspect(connection)
-        columns = {column["name"]: column for column in inspector.get_columns("matches")}
-
-        assert set(columns) == EXPECTED_MATCH_COLUMNS_BEFORE_RATINGS | {"move_history"}
-        assert columns["game_id"]["nullable"] is False
-        assert columns["bot_one_id"]["nullable"] is False
-        assert columns["bot_two_id"]["nullable"] is False
-        assert columns["winner"]["nullable"] is True
-        assert columns["result_reason"]["nullable"] is False
-        assert columns["move_history"]["nullable"] is False
-        assert inspector.get_pk_constraint("matches")["constrained_columns"] == ["id"]
-
-
-def test_move_migrations_create_expected_schema(monkeypatch):
-    engine = sa.create_engine("sqlite:///:memory:")
-
-    with engine.begin() as connection:
-        context = MigrationContext.configure(connection)
-        operations = Operations(context)
-        monkeypatch.setattr(create_matches_table, "op", operations)
-        monkeypatch.setattr(add_moves_table, "op", operations)
-        monkeypatch.setattr(remove_move_history_from_matches, "op", operations)
-
-        create_matches_table.upgrade()
-        add_moves_table.upgrade()
-        remove_move_history_from_matches.upgrade()
+        baseline_schema.upgrade()
 
         inspector = sa.inspect(connection)
+        bot_columns = {column["name"]: column for column in inspector.get_columns("bots")}
         match_columns = {
-            column["name"] for column in inspector.get_columns("matches")
+            column["name"]: column for column in inspector.get_columns("matches")
         }
         move_columns = {
             column["name"]: column for column in inspector.get_columns("moves")
         }
-        foreign_keys = inspector.get_foreign_keys("moves")
-        unique_constraints = inspector.get_unique_constraints("moves")
+        move_foreign_keys = inspector.get_foreign_keys("moves")
+        move_unique_constraints = inspector.get_unique_constraints("moves")
+        match_foreign_keys = inspector.get_foreign_keys("matches")
+        bot_unique_constraints = inspector.get_unique_constraints("bots")
 
-        assert match_columns == EXPECTED_MATCH_COLUMNS_BEFORE_RATINGS
-        assert set(move_columns) == EXPECTED_MOVE_COLUMNS_BEFORE_BOT_ID
+        assert set(bot_columns) == EXPECTED_BOT_COLUMNS
+        assert set(match_columns) == EXPECTED_MATCH_COLUMNS
+        assert set(move_columns) == EXPECTED_MOVE_COLUMNS
+
+        assert reflected_default_value(bot_columns["rating"]) == "1200"
+        assert reflected_default_value(bot_columns["games_played"]) == "0"
+        assert reflected_default_value(bot_columns["wins"]) == "0"
+        assert reflected_default_value(bot_columns["losses"]) == "0"
+        assert reflected_default_value(bot_columns["draws"]) == "0"
+        assert any(
+            constraint["column_names"] == ["game_id", "name"]
+            for constraint in bot_unique_constraints
+        )
+
+        assert match_columns["game_id"]["nullable"] is False
+        assert match_columns["bot_one_id"]["nullable"] is False
+        assert match_columns["bot_two_id"]["nullable"] is False
+        assert match_columns["winner_bot_id"]["nullable"] is True
+        assert match_columns["result_reason"]["nullable"] is False
+        assert inspector.get_pk_constraint("matches")["constrained_columns"] == ["id"]
+        assert any(
+            foreign_key["constrained_columns"] == ["bot_one_id"]
+            and foreign_key["referred_table"] == "bots"
+            for foreign_key in match_foreign_keys
+        )
+        assert any(
+            foreign_key["constrained_columns"] == ["bot_two_id"]
+            and foreign_key["referred_table"] == "bots"
+            for foreign_key in match_foreign_keys
+        )
+        assert any(
+            foreign_key["constrained_columns"] == ["winner_bot_id"]
+            and foreign_key["referred_table"] == "bots"
+            for foreign_key in match_foreign_keys
+        )
+
         assert move_columns["match_id"]["nullable"] is False
         assert move_columns["move_number"]["nullable"] is False
-        assert move_columns["player"]["nullable"] is False
+        assert move_columns["bot_id"]["nullable"] is False
         assert move_columns["move"]["nullable"] is False
         assert inspector.get_pk_constraint("moves")["constrained_columns"] == ["id"]
-        assert foreign_keys[0]["constrained_columns"] == ["match_id"]
-        assert foreign_keys[0]["referred_table"] == "matches"
         assert any(
-            constraint["column_names"] == ["match_id", "move_number"]
-            for constraint in unique_constraints
+            foreign_key["constrained_columns"] == ["match_id"]
+            and foreign_key["referred_table"] == "matches"
+            for foreign_key in move_foreign_keys
         )
-
-
-def test_rating_snapshot_migration_adds_match_rating_columns(monkeypatch):
-    engine = sa.create_engine("sqlite:///:memory:")
-
-    with engine.begin() as connection:
-        context = MigrationContext.configure(connection)
-        operations = Operations(context)
-        monkeypatch.setattr(create_matches_table, "op", operations)
-        monkeypatch.setattr(add_moves_table, "op", operations)
-        monkeypatch.setattr(remove_move_history_from_matches, "op", operations)
-        monkeypatch.setattr(add_match_rating_snapshots, "op", operations)
-
-        create_matches_table.upgrade()
-        add_moves_table.upgrade()
-        remove_move_history_from_matches.upgrade()
-        add_match_rating_snapshots.upgrade()
-
-        inspector = sa.inspect(connection)
-        columns = {
-            column["name"]: column for column in inspector.get_columns("matches")
-        }
-
-        assert set(columns) == EXPECTED_MATCH_COLUMNS_BEFORE_WINNER_BOT_ID
-        assert columns["bot_one_rating_before"]["nullable"] is False
-        assert columns["bot_two_rating_before"]["nullable"] is False
-        assert columns["bot_one_rating_after"]["nullable"] is False
-        assert columns["bot_two_rating_after"]["nullable"] is False
-        assert columns["bot_one_rating_delta"]["nullable"] is False
-        assert columns["bot_two_rating_delta"]["nullable"] is False
-
-
-def test_winner_bot_migration_replaces_winner_marker_with_bot_id(monkeypatch):
-    engine = sa.create_engine("sqlite:///:memory:")
-
-    with engine.begin() as connection:
-        context = MigrationContext.configure(connection)
-        operations = Operations(context)
-        monkeypatch.setattr(create_matches_table, "op", operations)
-        monkeypatch.setattr(add_moves_table, "op", operations)
-        monkeypatch.setattr(remove_move_history_from_matches, "op", operations)
-        monkeypatch.setattr(add_match_rating_snapshots, "op", operations)
-        monkeypatch.setattr(replace_winner_with_winner_bot_id, "op", operations)
-
-        Bot.__table__.create(connection)
-        create_matches_table.upgrade()
-        add_moves_table.upgrade()
-        remove_move_history_from_matches.upgrade()
-        add_match_rating_snapshots.upgrade()
-
-        connection.execute(
-            sa.text(
-                """
-                INSERT INTO bots (id, name, game_id, created_by)
-                VALUES
-                    (10, 'alpha', 'connect-four', 'test'),
-                    (20, 'beta', 'connect-four', 'test')
-                """
-            )
-        )
-
-        connection.execute(
-            sa.text(
-                """
-                INSERT INTO matches (
-                    game_id,
-                    bot_one_id,
-                    bot_two_id,
-                    bot_one_rating_before,
-                    bot_two_rating_before,
-                    bot_one_rating_after,
-                    bot_two_rating_after,
-                    bot_one_rating_delta,
-                    bot_two_rating_delta,
-                    winner,
-                    result_reason
-                )
-                VALUES (
-                    'connect-four',
-                    10,
-                    20,
-                    1200,
-                    1200,
-                    1216,
-                    1184,
-                    16,
-                    -16,
-                    'X',
-                    'win'
-                )
-                """
-            )
-        )
-
-        replace_winner_with_winner_bot_id.upgrade()
-
-        inspector = sa.inspect(connection)
-        columns = {
-            column["name"]: column for column in inspector.get_columns("matches")
-        }
-        row = connection.execute(
-            sa.text("SELECT winner_bot_id FROM matches")
-        ).one()
-
-        assert set(columns) == EXPECTED_MATCH_COLUMNS
-        assert columns["winner_bot_id"]["nullable"] is True
-        assert row.winner_bot_id == 10
-
-
-def test_move_bot_id_migration_replaces_player_marker_with_bot_id_column(monkeypatch):
-    engine = sa.create_engine("sqlite:///:memory:")
-
-    with engine.begin() as connection:
-        context = MigrationContext.configure(connection)
-        operations = Operations(context)
-        monkeypatch.setattr(create_matches_table, "op", operations)
-        monkeypatch.setattr(add_moves_table, "op", operations)
-        monkeypatch.setattr(remove_move_history_from_matches, "op", operations)
-        monkeypatch.setattr(add_match_rating_snapshots, "op", operations)
-        monkeypatch.setattr(replace_winner_with_winner_bot_id, "op", operations)
-        monkeypatch.setattr(rename_move_player_to_bot_id, "op", operations)
-
-        Bot.__table__.create(connection)
-        create_matches_table.upgrade()
-        add_moves_table.upgrade()
-        remove_move_history_from_matches.upgrade()
-        add_match_rating_snapshots.upgrade()
-        replace_winner_with_winner_bot_id.upgrade()
-
-        rename_move_player_to_bot_id.upgrade()
-
-        inspector = sa.inspect(connection)
-        columns = {
-            column["name"]: column for column in inspector.get_columns("moves")
-        }
-        foreign_keys = inspector.get_foreign_keys("moves")
-
-        assert set(columns) == EXPECTED_MOVE_COLUMNS
-        assert columns["bot_id"]["nullable"] is False
         assert any(
             foreign_key["constrained_columns"] == ["bot_id"]
             and foreign_key["referred_table"] == "bots"
-            for foreign_key in foreign_keys
+            for foreign_key in move_foreign_keys
         )
+        assert any(
+            constraint["column_names"] == ["match_id", "move_number"]
+            for constraint in move_unique_constraints
+        )
+
+
+def test_baseline_migration_downgrade_drops_schema(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        operations = Operations(context)
+        monkeypatch.setattr(baseline_schema, "op", operations)
+
+        baseline_schema.upgrade()
+        baseline_schema.downgrade()
+
+        inspector = sa.inspect(connection)
+        assert inspector.get_table_names() == []
