@@ -211,6 +211,119 @@ def test_list_matches_validates_pagination_parameters(query):
     assert body["error"]["details"]
 
 
+def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
+    low = Bot(
+        name="low",
+        game_id="tictactoe",
+        created_by="test",
+        rating=1100,
+        games_played=3,
+        wins=1,
+        losses=2,
+        draws=0,
+    )
+    high = Bot(
+        name="high",
+        game_id="tictactoe",
+        created_by="test",
+        rating=1500,
+        games_played=4,
+        wins=3,
+        losses=1,
+        draws=0,
+    )
+    no_games = Bot(name="new", game_id="tictactoe", created_by="test")
+    other_game = Bot(
+        name="connect-four-high",
+        game_id="connect-four",
+        created_by="test",
+        rating=1800,
+    )
+    sqlite_database_dependency.add_all([low, high, no_games, other_game])
+    sqlite_database_dependency.commit()
+
+    response = client.get("/leaderboard?game_id=tictactoe")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "bot_id": high.id,
+            "name": "high",
+            "rating": 1500,
+            "games_played": 4,
+            "wins": 3,
+            "losses": 1,
+            "draws": 0,
+        },
+        {
+            "bot_id": no_games.id,
+            "name": "new",
+            "rating": 1200,
+            "games_played": 0,
+            "wins": 0,
+            "losses": 0,
+            "draws": 0,
+        },
+        {
+            "bot_id": low.id,
+            "name": "low",
+            "rating": 1100,
+            "games_played": 3,
+            "wins": 1,
+            "losses": 2,
+            "draws": 0,
+        },
+    ]
+
+
+def test_leaderboard_uses_stable_tie_breaker(sqlite_database_dependency):
+    second = Bot(name="second", game_id="tictactoe", created_by="test", rating=1300)
+    first = Bot(name="first", game_id="tictactoe", created_by="test", rating=1300)
+    sqlite_database_dependency.add_all([second, first])
+    sqlite_database_dependency.commit()
+
+    response = client.get("/leaderboard?game_id=tictactoe")
+
+    assert response.status_code == 200
+    assert [bot["bot_id"] for bot in response.json()] == [second.id, first.id]
+
+
+def test_leaderboard_paginates_results(sqlite_database_dependency):
+    bots = [
+        Bot(name="first", game_id="tictactoe", created_by="test", rating=1500),
+        Bot(name="second", game_id="tictactoe", created_by="test", rating=1400),
+        Bot(name="third", game_id="tictactoe", created_by="test", rating=1300),
+    ]
+    sqlite_database_dependency.add_all(bots)
+    sqlite_database_dependency.commit()
+
+    response = client.get("/leaderboard?game_id=tictactoe&limit=1&offset=1")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "bot_id": bots[1].id,
+            "name": "second",
+            "rating": 1400,
+            "games_played": 0,
+            "wins": 0,
+            "losses": 0,
+            "draws": 0,
+        }
+    ]
+
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=501", "offset=-1"])
+def test_leaderboard_validates_pagination_parameters(query):
+    response = client.get(f"/leaderboard?game_id=tictactoe&{query}")
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "validation_error"
+    assert body["error"]["message"] == "Request body is invalid."
+    assert body["error"]["details"]
+
+
 def test_get_match_returns_metadata_result_summary_and_moves(sqlite_database_dependency):
     match = make_persisted_match(
         moves=[
