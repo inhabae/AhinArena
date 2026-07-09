@@ -45,7 +45,7 @@ Backend API (FastAPI)
 - [x] Milestone 2 — Backend Service & API
 - [x] Milestone 3 — Multi-Game Support
 - [x] Milestone 4 — Persistent Match History
-- [ ] Milestone 5 — Elo Leaderboard
+- [x] Milestone 5 — Elo Leaderboard
 - [ ] Milestone 6 — Web Interface
 - [ ] Milestone 7 — User Accounts
 - [ ] Milestone 8 — Bot Submission
@@ -127,6 +127,63 @@ compact result summary:
 
 Unsupported games return a `400` response with error code `unsupported_game`.
 
+### Ratings and leaderboard
+
+Bots start with an Elo rating of `1200`. Completed matches update both bot
+ratings with the standard Elo expected-score formula and a K-factor of `32`:
+wins score `1.0`, losses score `0.0`, and draws score `0.5`. The new ratings are
+rounded to integers.
+
+The current bot record is stored on `bots`:
+
+- `rating`
+- `games_played`
+- `wins`
+- `losses`
+- `draws`
+
+Each persisted match stores the rating snapshot used for that result:
+
+- `bot_one_rating_before`, `bot_two_rating_before`
+- `bot_one_rating_after`, `bot_two_rating_after`
+- `bot_one_rating_delta`, `bot_two_rating_delta`
+
+Fetch a game's leaderboard:
+
+```http
+GET /leaderboard?game_id=tictactoe&limit=50&offset=0
+```
+
+`game_id` is required. `limit` defaults to `50` and accepts `1` through `500`.
+`offset` defaults to `0`. Results are ordered by `rating` descending, with
+`bot_id` ascending as the tie-breaker.
+
+```json
+[
+  {
+    "bot_id": 1,
+    "name": "random",
+    "rating": 1216,
+    "games_played": 4,
+    "wins": 2,
+    "losses": 1,
+    "draws": 1
+  },
+  {
+    "bot_id": 2,
+    "name": "baseline",
+    "rating": 1184,
+    "games_played": 4,
+    "wins": 1,
+    "losses": 2,
+    "draws": 1
+  }
+]
+```
+
+Rating snapshots also appear in match history responses so contributors can
+audit how a match changed each bot's rating.
+
 List persisted matches:
 
 ```http
@@ -141,6 +198,12 @@ GET /matches?limit=20&offset=0
       "game": "connect-four",
       "bot_one_id": 1,
       "bot_two_id": 2,
+      "bot_one_rating_before": 1200,
+      "bot_two_rating_before": 1200,
+      "bot_one_rating_after": 1216,
+      "bot_two_rating_after": 1184,
+      "bot_one_rating_delta": 16,
+      "bot_two_rating_delta": -16,
       "winner_bot_id": 1,
       "result_reason": "win",
       "created_at": "2026-07-09T17:00:00Z",
@@ -165,6 +228,12 @@ GET /matches/42
   "game": "connect-four",
   "bot_one_id": 1,
   "bot_two_id": 2,
+  "bot_one_rating_before": 1200,
+  "bot_two_rating_before": 1200,
+  "bot_one_rating_after": 1216,
+  "bot_two_rating_after": 1184,
+  "bot_one_rating_delta": 16,
+  "bot_two_rating_delta": -16,
   "winner_bot_id": 1,
   "result_reason": "win",
   "created_at": "2026-07-09T17:00:00Z",

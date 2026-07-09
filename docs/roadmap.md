@@ -92,8 +92,12 @@ Introduce competitive rankings.
 
 **Deliverables**
 
-- Elo rating system
-- Leaderboard API
+- Elo rating system with `1200` default ratings and K-factor `32`
+- Bot rating and record persistence
+- Match rating snapshots for before/after ratings and deltas
+- Leaderboard API through `GET /leaderboard`
+- Leaderboard filtering by game with limit/offset pagination
+- Rating and leaderboard documentation in the README
 
 ---
 
