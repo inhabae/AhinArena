@@ -93,7 +93,6 @@ class Referee:
             player: BotProcess(player_commands[player], timeout)
             for player in self.player_ids
         }
-        self.moves = []
         self.on_move = on_move
 
     def run_match(self):
@@ -134,8 +133,6 @@ class Referee:
                         reason="invalid_move",
                     )
 
-                self.moves.append((player, move))
-
                 if self.on_move is not None:
                     self.on_move(
                         player,
@@ -158,8 +155,6 @@ class Referee:
         result = {
             "winner": winner,
             "reason": reason,
-            "moves": self.moves,
-            "final_board": self.game.board_state(),
         }
 
         result.update(extra)

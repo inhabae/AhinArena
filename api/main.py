@@ -4,7 +4,7 @@ from api.models import Match, Move
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
 from engine.registry import UnknownBotError, bot_registry
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -56,8 +56,12 @@ app.add_exception_handler(Exception, unexpected_exception_handler)
 def health_check():
     return {"status": "ok"}
 
-@app.post("/matches")
-def create_match(request: MatchRequest, db: Session = Depends(get_db)):
+@app.post("/matches", status_code=status.HTTP_201_CREATED)
+def create_match(
+    request: MatchRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     runners = {
         "tictactoe": run_tictactoe_match,
         "connect-four": run_connectfour_match,
@@ -76,9 +80,15 @@ def create_match(request: MatchRequest, db: Session = Depends(get_db)):
         api_error(400, "unknown_bot", str(error))
 
     try:
+        moves = []
+
+        def record_move(player, move, board):
+            moves.append((player, move))
+
         result = runners[request.game](
             p1_command=p1_command,
             p2_command=p2_command,
+            on_move=record_move,
         )
     except Exception as error:
         api_error(500, "match_execution_failed", str(error))
@@ -91,18 +101,20 @@ def create_match(request: MatchRequest, db: Session = Depends(get_db)):
         result_reason=result["reason"],
         moves=[
             Move(move_number=index, player=player, move=move)
-            for index, (player, move) in enumerate(result["moves"], start=1)
+            for index, (player, move) in enumerate(moves, start=1)
         ],
     )
     db.add(match)
     db.commit()
     db.refresh(match)
 
+    response.headers["Location"] = f"/matches/{match.id}"
+
     return {
         "match_id": match.id,
-        "game": request.game,
-        "players": request.players,
-        "result": result,
+        "game": match.game_id,
+        "winner": match.winner,
+        "result_reason": match.result_reason,
     }
 
 @app.get("/matches")

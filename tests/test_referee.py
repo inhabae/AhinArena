@@ -43,44 +43,54 @@ def sleeping_bot_command():
 
 
 def test_referee_runs_match_and_reports_x_win():
+    observed_moves = []
+
+    def on_move(player, move, board):
+        observed_moves.append((player, move))
+
     referee = Referee(
         {
             "X": scripted_bot_command([[0, 0], [0, 1], [0, 2]]),
             "O": scripted_bot_command([[1, 0], [1, 1]]),
         },
         TicTacToeGame(),
+        on_move=on_move,
     )
 
     result = referee.run_match()
 
     assert result["winner"] == "X"
     assert result["reason"] == "win"
-    assert result["moves"] == [
+    assert observed_moves == [
         ("X", (0, 0)),
         ("O", (1, 0)),
         ("X", (0, 1)),
         ("O", (1, 1)),
         ("X", (0, 2)),
     ]
-    assert result["final_board"] == [
-        ["X", "X", "X"],
-        ["O", "O", " "],
-        [" ", " ", " "],
-    ]
+    assert "moves" not in result
+    assert "final_board" not in result
 
 
 def test_referee_assigns_x_and_o_players_and_alternates_turns():
+    observed_moves = []
+
+    def on_move(player, move, board):
+        observed_moves.append((player, move))
+
     referee = Referee(
         {
             "X": scripted_bot_command([[0, 0], [1, 1], [2, 2]]),
             "O": scripted_bot_command([[0, 1], [0, 2]]),
         },
         TicTacToeGame(),
+        on_move=on_move,
     )
 
     result = referee.run_match()
 
-    assert [player for player, move in result["moves"]] == [
+    assert result["winner"] == "X"
+    assert [player for player, move in observed_moves] == [
         "X",
         "O",
         "X",
@@ -282,23 +292,30 @@ class ColumnRaceGame:
 
 
 def test_referee_runs_match_with_supplied_game_rules():
+    observed_moves = []
+
+    def on_move(player, move, board):
+        observed_moves.append((player, move))
+
     referee = Referee(
         {
             "red": column_bot_command([0]),
             "blue": column_bot_command([1]),
         },
         ColumnRaceGame(),
+        on_move=on_move,
     )
 
     result = referee.run_match()
 
     assert result["winner"] == "blue"
     assert result["reason"] == "win"
-    assert result["moves"] == [
+    assert observed_moves == [
         ("red", 0),
         ("blue", 1),
     ]
-    assert result["final_board"] == ["red", "blue"]
+    assert "moves" not in result
+    assert "final_board" not in result
 
 
 def test_referee_uses_supplied_game_rules_to_reject_invalid_moves():
@@ -314,4 +331,4 @@ def test_referee_uses_supplied_game_rules_to_reject_invalid_moves():
 
     assert result["winner"] == "blue"
     assert result["reason"] == "invalid_move"
-    assert result["moves"] == []
+    assert "moves" not in result
