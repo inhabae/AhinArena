@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, JSON, String, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from api.database import Base
@@ -16,8 +16,9 @@ class Move(Base):
 
     move_number = Column(Integer, nullable=False)
 
-    player = Column(String, nullable=False)
+    bot_id = Column(Integer, ForeignKey("bots.id"), nullable=False)
 
     move = Column(JSON, nullable=False)
 
     match = relationship("Match", back_populates="moves")
+    bot = relationship("Bot")

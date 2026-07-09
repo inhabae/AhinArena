@@ -41,7 +41,7 @@ def serialize_match_detail(match: Match):
         "moves": [
             {
                 "move_number": move.move_number,
-                "player": move.player,
+                "bot_id": move.bot_id,
                 "move": move.move,
             }
             for move in match.moves
@@ -61,86 +61,28 @@ def resolve_bot(db: Session, *, game_id: str, bot_name: str) -> Bot:
     return bot
 
 
-PLAYER_ONE_MARKER = "X"
-PLAYER_TWO_MARKER = "O"
-
-
-def score_for_player_one(winner: str | None, player_one_marker: str) -> float:
-    if winner == player_one_marker:
+def score_for_bot_one(
+    winner_bot_id: int | None,
+    bot_one_id: int,
+    bot_two_id: int,
+) -> float:
+    if winner_bot_id == bot_one_id:
         return 1.0
 
-    if winner is None:
+    if winner_bot_id is None:
         return 0.5
 
+    if winner_bot_id != bot_two_id:
+        api_error(500, "unknown_winner_bot", f"Unknown winner bot: {winner_bot_id}")
+
     return 0.0
-
-
-def winner_bot_id_from_player_map(
-    *,
-    winner: str | None,
-    player_to_bot: dict[str, Bot],
-) -> int | None:
-    if winner is None:
-        return None
-
-    winner_bot = player_to_bot.get(winner)
-    if winner_bot is None:
-        api_error(500, "unknown_winner_player", f"Unknown winner player: {winner}")
-
-    return winner_bot.id
-
-
-def winner_bot_from_player_map(
-    *,
-    winner: str | None,
-    player_to_bot: dict[str, Bot],
-) -> Bot | None:
-    if winner is None:
-        return None
-
-    winner_bot = player_to_bot.get(winner)
-    if winner_bot is None:
-        api_error(500, "unknown_winner_player", f"Unknown winner player: {winner}")
-
-    return winner_bot
-
-
-def loser_bot_from_player_map(
-    *,
-    winner: str | None,
-    player_to_bot: dict[str, Bot],
-) -> Bot | None:
-    if winner is None:
-        return None
-
-    winner_bot = winner_bot_from_player_map(
-        winner=winner,
-        player_to_bot=player_to_bot,
-    )
-    return next(bot for bot in player_to_bot.values() if bot.id != winner_bot.id)
-
-
-def build_player_to_bot_map(*, bot_one: Bot, bot_two: Bot) -> dict[str, Bot]:
-    return {
-        PLAYER_ONE_MARKER: bot_one,
-        PLAYER_TWO_MARKER: bot_two,
-    }
-
-
-def player_one_marker_from_map(player_to_bot: dict[str, Bot], bot_one: Bot) -> str:
-    for player_marker, bot in player_to_bot.items():
-        if bot.id == bot_one.id:
-            return player_marker
-
-    api_error(500, "bot_not_mapped", f"Bot is not mapped to a player: {bot_one.id}")
 
 
 def apply_match_record_updates(
     *,
     bot_one: Bot,
     bot_two: Bot,
-    winner: str | None,
-    player_to_bot: dict[str, Bot],
+    winner_bot_id: int | None,
     bot_one_rating_after: int,
     bot_two_rating_after: int,
 ) -> None:
@@ -149,10 +91,9 @@ def apply_match_record_updates(
             bot_two_rating_after - bot_two.rating
         )
         bot_one.games_played += 2
-        if winner is None:
+        if winner_bot_id is None:
             bot_one.draws += 2
         else:
-            winner_bot_from_player_map(winner=winner, player_to_bot=player_to_bot)
             bot_one.wins += 1
             bot_one.losses += 1
         return
@@ -162,15 +103,17 @@ def apply_match_record_updates(
     bot_one.games_played += 1
     bot_two.games_played += 1
 
-    winner_bot = winner_bot_from_player_map(winner=winner, player_to_bot=player_to_bot)
-    loser_bot = loser_bot_from_player_map(winner=winner, player_to_bot=player_to_bot)
-
-    if winner_bot is None:
+    if winner_bot_id is None:
         bot_one.draws += 1
         bot_two.draws += 1
+    elif winner_bot_id == bot_one.id:
+        bot_one.wins += 1
+        bot_two.losses += 1
+    elif winner_bot_id == bot_two.id:
+        bot_two.wins += 1
+        bot_one.losses += 1
     else:
-        winner_bot.wins += 1
-        loser_bot.losses += 1
+        api_error(500, "unknown_winner_bot", f"Unknown winner bot: {winner_bot_id}")
 
 
 app = FastAPI(
@@ -207,7 +150,6 @@ def create_match(
 
     bot_one = resolve_bot(db, game_id=request.game, bot_name=request.players[0].bot)
     bot_two = resolve_bot(db, game_id=request.game, bot_name=request.players[1].bot)
-    player_to_bot = build_player_to_bot_map(bot_one=bot_one, bot_two=bot_two)
 
     try:
         p1_command = bot_registry.get_command(bot_one.name, request.game)
@@ -219,7 +161,8 @@ def create_match(
         moves = []
 
         def record_move(player, move, board):
-            moves.append((player, move))
+            bot_id = bot_one.id if player == "p1" else bot_two.id
+            moves.append((bot_id, move))
 
         result = runners[request.game](
             p1_command=p1_command,
@@ -231,12 +174,18 @@ def create_match(
 
     bot_one_rating_before = bot_one.rating
     bot_two_rating_before = bot_two.rating
+    winner_bot_id = (
+        None if result["winner"] is None
+        else bot_one.id if result["winner"] == "p1"
+        else bot_two.id
+    )
     rating_change = calculate_elo_rating_change(
         bot_one_rating=bot_one_rating_before,
         bot_two_rating=bot_two_rating_before,
-        bot_one_score=score_for_player_one(
-            result["winner"],
-            player_one_marker_from_map(player_to_bot, bot_one),
+        bot_one_score=score_for_bot_one(
+            winner_bot_id,
+            bot_one.id,
+            bot_two.id,
         ),
         k_factor=DEFAULT_ELO_K_FACTOR,
     )
@@ -253,21 +202,17 @@ def create_match(
         bot_two_rating_after=rating_change.bot_two_rating,
         bot_one_rating_delta=bot_one_rating_delta,
         bot_two_rating_delta=bot_two_rating_delta,
-        winner_bot_id=winner_bot_id_from_player_map(
-            winner=result["winner"],
-            player_to_bot=player_to_bot,
-        ),
+        winner_bot_id=winner_bot_id,
         result_reason=result["reason"],
         moves=[
-            Move(move_number=index, player=player, move=move)
-            for index, (player, move) in enumerate(moves, start=1)
+            Move(move_number=index, bot_id=bot_id, move=move)
+            for index, (bot_id, move) in enumerate(moves, start=1)
         ],
     )
     apply_match_record_updates(
         bot_one=bot_one,
         bot_two=bot_two,
-        winner=result["winner"],
-        player_to_bot=player_to_bot,
+        winner_bot_id=winner_bot_id,
         bot_one_rating_after=rating_change.bot_one_rating,
         bot_two_rating_after=rating_change.bot_two_rating,
     )
