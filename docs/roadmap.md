@@ -55,10 +55,6 @@ Expose the game engine through a REST API.
 
 Expand the platform beyond Tic-Tac-Toe by introducing reusable game abstractions and support for multiple game engines.
 
-**Status**
-
-Complete.
-
 **Deliverables**
 
 - Game registry
@@ -79,9 +75,12 @@ Store completed matches in PostgreSQL.
 
 **Deliverables**
 
-- Database schema
-- Match persistence
-- Move history
+- PostgreSQL-backed database schema
+- Alembic migrations for matches and moves
+- Match persistence from `POST /matches`
+- Match history listing through `GET /matches`
+- Match detail lookup with ordered move history through `GET /matches/{match_id}`
+- Persisted match IDs returned from match creation
 
 ---
 

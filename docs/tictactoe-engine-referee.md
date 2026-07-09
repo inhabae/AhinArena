@@ -61,5 +61,3 @@ The result includes:
 
 - `winner`: `"X"`, `"O"`, or `null` for a draw.
 - `reason`: `"win"`, `"draw"`, `"invalid_move"`, `"bot_error"`, or `"timeout"`.
-- `moves`: accepted moves as `(marker, (row, col))` pairs.
-- `final_board`: the final 3x3 board.

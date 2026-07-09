@@ -65,8 +65,6 @@ The result includes:
 
 - `winner`: `"X"`, `"O"`, or `null` for a draw.
 - `reason`: `"win"`, `"draw"`, `"invalid_move"`, `"bot_error"`, or `"timeout"`.
-- `moves`: accepted moves as `(marker, column)` pairs.
-- `final_board`: the final 6x7 board.
 
 ## Local Runner
 
