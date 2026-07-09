@@ -239,9 +239,9 @@ GET /matches/42
   "created_at": "2026-07-09T17:00:00Z",
   "completed_at": "2026-07-09T17:00:02Z",
   "moves": [
-    {"move_number": 1, "player": "X", "move": 0},
-    {"move_number": 2, "player": "O", "move": 1},
-    {"move_number": 3, "player": "X", "move": 0}
+    {"move_number": 1, "bot_id": 1, "move": 0},
+    {"move_number": 2, "bot_id": 2, "move": 1},
+    {"move_number": 3, "bot_id": 1, "move": 0}
   ]
 }
 ```
