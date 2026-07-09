@@ -41,7 +41,7 @@ def test_local_connect_four_match_runs_to_completion():
     text = output.getvalue()
 
     assert result["reason"] in {"win", "draw"}
-    assert result["winner"] in {"X", "O", None}
+    assert result["winner"] in {"p1", "p2", None}
     assert "moves" not in result
     assert "Starting local Connect Four match: X bot vs O bot" in text
     assert "Move 1:" in text

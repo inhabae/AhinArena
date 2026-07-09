@@ -38,17 +38,17 @@ def test_connectfour_runner_returns_referee_result_shape_for_x_win():
     )
 
     assert result == {
-        "winner": "X",
+        "winner": "p1",
         "reason": "win",
     }
     assert observed_moves == [
-        ("X", 0),
-        ("O", 1),
-        ("X", 0),
-        ("O", 1),
-        ("X", 0),
-        ("O", 1),
-        ("X", 0),
+        ("p1", 0),
+        ("p2", 1),
+        ("p1", 0),
+        ("p2", 1),
+        ("p1", 0),
+        ("p2", 1),
+        ("p1", 0),
     ]
 
 
@@ -65,9 +65,9 @@ def test_connectfour_runner_calls_on_move_with_updated_board():
         on_move=on_move,
     )
 
-    assert result["winner"] == "X"
+    assert result["winner"] == "p1"
     assert observed[0] == (
-        "X",
+        "p1",
         0,
         [
             [" ", " ", " ", " ", " ", " ", " "],
@@ -78,7 +78,7 @@ def test_connectfour_runner_calls_on_move_with_updated_board():
             ["X", " ", " ", " ", " ", " ", " "],
         ],
     )
-    assert observed[-1][0] == "X"
+    assert observed[-1][0] == "p1"
     assert observed[-1][1] == 0
     assert observed[-1][2] == [
         [" ", " ", " ", " ", " ", " ", " "],
@@ -98,7 +98,7 @@ def test_connectfour_runner_executes_default_random_bots_successfully():
 
     result = run_connectfour_match(timeout=1.0, on_move=on_move)
 
-    assert result["winner"] in {"X", "O", None}
+    assert result["winner"] in {"p1", "p2", None}
     assert result["reason"] in {"win", "draw"}
     assert len(observed_moves) >= 7
     assert len(observed_moves) <= 42

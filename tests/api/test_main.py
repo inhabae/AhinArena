@@ -214,8 +214,8 @@ def test_list_matches_validates_pagination_parameters(query):
 def test_get_match_returns_metadata_result_summary_and_moves(sqlite_database_dependency):
     match = make_persisted_match(
         moves=[
-            Move(move_number=2, player="O", move=[1, 0]),
-            Move(move_number=1, player="X", move=[0, 0]),
+            Move(move_number=2, bot_id=2, move=[1, 0]),
+            Move(move_number=1, bot_id=1, move=[0, 0]),
         ],
     )
     sqlite_database_dependency.add(match)
@@ -241,8 +241,8 @@ def test_get_match_returns_metadata_result_summary_and_moves(sqlite_database_dep
     assert body["created_at"]
     assert body["completed_at"]
     assert body["moves"] == [
-        {"move_number": 1, "player": "X", "move": [0, 0]},
-        {"move_number": 2, "player": "O", "move": [1, 0]},
+        {"move_number": 1, "bot_id": 1, "move": [0, 0]},
+        {"move_number": 2, "bot_id": 2, "move": [1, 0]},
     ]
 
 
@@ -278,15 +278,15 @@ def test_create_match_runs_tictactoe_match_successfully(
         observed["p1_command"] = p1_command
         observed["p2_command"] = p2_command
         for player, move in [
-            ("X", (0, 0)),
-            ("O", (1, 0)),
-            ("X", (0, 1)),
-            ("O", (1, 1)),
-            ("X", (0, 2)),
+            ("p1", (0, 0)),
+            ("p2", (1, 0)),
+            ("p1", (0, 1)),
+            ("p2", (1, 1)),
+            ("p1", (0, 2)),
         ]:
             on_move(player, move, [])
         return {
-            "winner": "X",
+            "winner": "p1",
             "reason": "win",
         }
 
@@ -317,10 +317,10 @@ def test_create_match_persists_completed_match(sqlite_database_dependency, monke
     seed_bot(sqlite_database_dependency)
 
     def fake_run_tictactoe_match(p1_command, p2_command, on_move):
-        on_move("X", (0, 0), [])
-        on_move("O", (1, 0), [])
+        on_move("p1", (0, 0), [])
+        on_move("p2", (1, 0), [])
         return {
-            "winner": "O",
+            "winner": "p2",
             "reason": "win",
         }
 
@@ -336,18 +336,18 @@ def test_create_match_persists_completed_match(sqlite_database_dependency, monke
     assert match.bot_one_id == match.bot_two_id
     assert match.bot_one_rating_before == 1200
     assert match.bot_two_rating_before == 1200
-    assert match.bot_one_rating_after == 1184
-    assert match.bot_two_rating_after == 1216
-    assert match.bot_one_rating_delta == -16
-    assert match.bot_two_rating_delta == 16
+    assert match.bot_one_rating_after == 1216
+    assert match.bot_two_rating_after == 1184
+    assert match.bot_one_rating_delta == 16
+    assert match.bot_two_rating_delta == -16
     assert match.winner_bot_id == match.bot_two_id
     assert match.result_reason == "win"
     assert [
-        (move.move_number, move.player, move.move)
+        (move.move_number, move.bot_id, move.move)
         for move in match.moves
     ] == [
-        (1, "X", [0, 0]),
-        (2, "O", [1, 0]),
+        (1, match.bot_one_id, [0, 0]),
+        (2, match.bot_two_id, [1, 0]),
     ]
     bot = sqlite_database_dependency.query(Bot).one()
     assert bot.rating == 1200
@@ -390,7 +390,7 @@ def test_create_match_updates_distinct_bot_ratings_and_records(
 
     def fake_run_tictactoe_match(p1_command, p2_command, on_move):
         return {
-            "winner": "O",
+            "winner": "p2",
             "reason": "win",
         }
 
@@ -497,17 +497,17 @@ def test_create_match_runs_connectfour_match_successfully(
         observed["p1_command"] = p1_command
         observed["p2_command"] = p2_command
         for player, move in [
-            ("X", 0),
-            ("O", 1),
-            ("X", 0),
-            ("O", 1),
-            ("X", 0),
-            ("O", 1),
-            ("X", 0),
+            ("p1", 0),
+            ("p2", 1),
+            ("p1", 0),
+            ("p2", 1),
+            ("p1", 0),
+            ("p2", 1),
+            ("p1", 0),
         ]:
             on_move(player, move, [])
         return {
-            "winner": "X",
+            "winner": "p1",
             "reason": "win",
         }
 
@@ -533,28 +533,28 @@ def test_create_match_runs_connectfour_match_successfully(
         "result_reason": "win",
     }
     assert [
-        (move.move_number, move.player, move.move)
+        (move.move_number, move.bot_id, move.move)
         for move in match.moves
     ] == [
-        (1, "X", 0),
-        (2, "O", 1),
-        (3, "X", 0),
-        (4, "O", 1),
-        (5, "X", 0),
-        (6, "O", 1),
-        (7, "X", 0),
+        (1, match.bot_one_id, 0),
+        (2, match.bot_two_id, 1),
+        (3, match.bot_one_id, 0),
+        (4, match.bot_two_id, 1),
+        (5, match.bot_one_id, 0),
+        (6, match.bot_two_id, 1),
+        (7, match.bot_one_id, 0),
     ]
     assert [
-        (move.player, move.move)
+        (move.bot_id, move.move)
         for move in match.moves
     ] == [
-        ("X", 0),
-        ("O", 1),
-        ("X", 0),
-        ("O", 1),
-        ("X", 0),
-        ("O", 1),
-        ("X", 0),
+        (match.bot_one_id, 0),
+        (match.bot_two_id, 1),
+        (match.bot_one_id, 0),
+        (match.bot_two_id, 1),
+        (match.bot_one_id, 0),
+        (match.bot_two_id, 1),
+        (match.bot_one_id, 0),
     ]
 
 
