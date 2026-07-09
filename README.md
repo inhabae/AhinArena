@@ -44,7 +44,7 @@ Backend API (FastAPI)
 - [x] Milestone 1 — Local Game Engine
 - [x] Milestone 2 — Backend Service & API
 - [x] Milestone 3 — Multi-Game Support
-- [ ] Milestone 4 — Persistent Match History
+- [x] Milestone 4 — Persistent Match History
 - [ ] Milestone 5 — Elo Leaderboard
 - [ ] Milestone 6 — Web Interface
 - [ ] Milestone 7 — User Accounts
@@ -85,7 +85,9 @@ Both local runners print each move, the board after that move, and the final mat
 
 ## Match API
 
-`POST /matches` supports multiple games through the `game` field.
+`POST /matches` runs a match, persists the completed match and move history to
+PostgreSQL, and returns a compact `201 Created` response with the persisted
+`match_id`. PostgreSQL is required for API persistence.
 
 Tic-Tac-Toe:
 
@@ -93,8 +95,8 @@ Tic-Tac-Toe:
 {
   "game": "tictactoe",
   "players": [
-    {"id": "player-x", "bot": "random"},
-    {"id": "player-o", "bot": "random"}
+    {"bot": "random"},
+    {"bot": "random"}
   ]
 }
 ```
@@ -105,39 +107,92 @@ Connect Four:
 {
   "game": "connect-four",
   "players": [
-    {"id": "player-x", "bot": "random"},
-    {"id": "player-o", "bot": "random"}
+    {"bot": "random"},
+    {"bot": "random"}
   ]
 }
 ```
 
-Responses use a consistent shape:
+Successful responses include a `Location: /matches/{match_id}` header and a
+compact result summary:
 
 ```json
 {
-  "game": "connect-four",
-  "players": [
-    {"id": "player-x", "bot": "random"},
-    {"id": "player-o", "bot": "random"}
-  ],
-  "result": {
-    "winner": "X",
-    "reason": "win",
-    "moves": [["X", 0]],
-    "final_board": []
-  }
+  "match_id": 42,
+  "game": "tictactoe",
+  "winner": "X",
+  "result_reason": "win"
 }
 ```
 
 Unsupported games return a `400` response with error code `unsupported_game`.
 
+List persisted matches:
+
+```http
+GET /matches?limit=20&offset=0
+```
+
+```json
+{
+  "items": [
+    {
+      "match_id": 42,
+      "game": "connect-four",
+      "bot_one_id": "random",
+      "bot_two_id": "random",
+      "winner": "X",
+      "result_reason": "win",
+      "created_at": "2026-07-09T17:00:00Z",
+      "completed_at": "2026-07-09T17:00:02Z"
+    }
+  ],
+  "limit": 20,
+  "offset": 0,
+  "total": 1
+}
+```
+
+Look up one persisted match with ordered move history:
+
+```http
+GET /matches/42
+```
+
+```json
+{
+  "match_id": 42,
+  "game": "connect-four",
+  "bot_one_id": "random",
+  "bot_two_id": "random",
+  "winner": "X",
+  "result_reason": "win",
+  "created_at": "2026-07-09T17:00:00Z",
+  "completed_at": "2026-07-09T17:00:02Z",
+  "moves": [
+    {"move_number": 1, "player": "X", "move": 0},
+    {"move_number": 2, "player": "O", "move": 1},
+    {"move_number": 3, "player": "X", "move": 0}
+  ]
+}
+```
+
+Unknown match IDs return a `404` response with error code `match_not_found`.
+
 ---
 
 ## Local PostgreSQL Setup
 
+Persistent match history requires PostgreSQL. Install and start PostgreSQL
+locally, then create an application user and database:
+
+```sh
+createuser ahin_arena --pwprompt
+createdb ahin_arena --owner ahin_arena
+```
+
 The API reads its database connection from the `DATABASE_URL` environment
-variable. For local development, create a PostgreSQL database and export a URL
-using the psycopg SQLAlchemy driver:
+variable. Export a URL using the psycopg SQLAlchemy driver:
 
 ```sh
 export DATABASE_URL="postgresql+psycopg://ahin_arena:ahin_arena@localhost:5432/ahin_arena"
