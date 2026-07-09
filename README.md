@@ -45,7 +45,7 @@ Backend API (FastAPI)
 - [x] Milestone 2 — Backend Service & API
 - [x] Milestone 3 — Multi-Game Support
 - [x] Milestone 4 — Persistent Match History
-- [ ] Milestone 5 — Elo Leaderboard
+- [x] Milestone 5 — Elo Leaderboard
 - [ ] Milestone 6 — Web Interface
 - [ ] Milestone 7 — User Accounts
 - [ ] Milestone 8 — Bot Submission
