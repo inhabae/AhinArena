@@ -1,7 +1,6 @@
 from api.database import get_db
 from api.models import Bot, Match, Move
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
-from api.schemas import MatchRequest, LeaderboardEntry
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
 from engine.registry import UnknownBotError, bot_registry
@@ -17,36 +16,48 @@ from api.errors import (
     validation_exception_handler,
 )
 
-def serialize_match_summary(match: Match):
-    return {
-        "match_id": match.id,
-        "game": match.game_id,
-        "bot_one_id": match.bot_one_id,
-        "bot_two_id": match.bot_two_id,
-        "bot_one_rating_before": match.bot_one_rating_before,
-        "bot_two_rating_before": match.bot_two_rating_before,
-        "bot_one_rating_after": match.bot_one_rating_after,
-        "bot_two_rating_after": match.bot_two_rating_after,
-        "bot_one_rating_delta": match.bot_one_rating_delta,
-        "bot_two_rating_delta": match.bot_two_rating_delta,
-        "winner_bot_id": match.winner_bot_id,
-        "result_reason": match.result_reason,
-        "created_at": match.created_at,
-        "completed_at": match.completed_at,
-    }
+from api.schemas import (
+    MatchCreateResponse,
+    MatchRequest,
+    MatchSummary,
+    MatchDetail,
+    MatchListResponse,
+    MoveEntry,
+    LeaderboardEntry,
+)
 
-def serialize_match_detail(match: Match):
-    return {
-        **serialize_match_summary(match),
-        "moves": [
-            {
-                "move_number": move.move_number,
-                "bot_id": move.bot_id,
-                "move": move.move,
-            }
+
+def serialize_match_summary(match: Match) -> MatchSummary:
+    return MatchSummary(
+        match_id=match.id,
+        game=match.game_id,
+        bot_one_id=match.bot_one_id,
+        bot_two_id=match.bot_two_id,
+        bot_one_rating_before=match.bot_one_rating_before,
+        bot_two_rating_before=match.bot_two_rating_before,
+        bot_one_rating_after=match.bot_one_rating_after,
+        bot_two_rating_after=match.bot_two_rating_after,
+        bot_one_rating_delta=match.bot_one_rating_delta,
+        bot_two_rating_delta=match.bot_two_rating_delta,
+        winner_bot_id=match.winner_bot_id,
+        result_reason=match.result_reason,
+        created_at=match.created_at,
+        completed_at=match.completed_at,
+    )
+
+def serialize_match_detail(match: Match) -> MatchDetail:
+    summary = serialize_match_summary(match)
+    return MatchDetail(
+        **summary.model_dump(),
+        moves=[
+            MoveEntry(
+                move_number=move.move_number,
+                bot_id=move.bot_id,
+                move=move.move,
+            )
             for move in match.moves
         ],
-    }
+    )
 
 def resolve_bot(db: Session, *, game_id: str, bot_name: str) -> Bot:
     bot = (
@@ -131,7 +142,11 @@ app.add_exception_handler(Exception, unexpected_exception_handler)
 def health_check():
     return {"status": "ok"}
 
-@app.post("/matches", status_code=status.HTTP_201_CREATED)
+@app.post(
+    "/matches",
+    status_code=status.HTTP_201_CREATED,
+    response_model=MatchCreateResponse,
+)
 def create_match(
     request: MatchRequest,
     response: Response,
@@ -222,14 +237,14 @@ def create_match(
 
     response.headers["Location"] = f"/matches/{match.id}"
 
-    return {
-        "match_id": match.id,
-        "game": match.game_id,
-        "winner_bot_id": match.winner_bot_id,
-        "result_reason": match.result_reason,
-    }
+    return MatchCreateResponse(
+        match_id=match.id,
+        game=match.game_id,
+        winner_bot_id=match.winner_bot_id,
+        result_reason=match.result_reason,
+    )
 
-@app.get("/matches")
+@app.get("/matches", response_model=MatchListResponse)
 def list_matches(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -245,14 +260,14 @@ def list_matches(
         .all()
     )
 
-    return {
-        "items": [serialize_match_summary(match) for match in matches],
-        "limit": limit,
-        "offset": offset,
-        "total": total,
-    }
+    return MatchListResponse(
+        items=[serialize_match_summary(match) for match in matches],
+        limit=limit,
+        offset=offset,
+        total=total,
+    )
 
-@app.get("/matches/{match_id}")
+@app.get("/matches/{match_id}", response_model=MatchDetail)
 def get_match(match_id: int, db: Session = Depends(get_db)):
     match = (
         db.query(Match)
