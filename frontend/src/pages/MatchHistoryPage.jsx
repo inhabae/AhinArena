@@ -1,3 +1,7 @@
 export default function MatchHistoryPage() {
-  return <h1>Match History</h1>;
+  return (
+    <main>
+      <h1>Match History</h1>
+    </main>
+  );
 }
