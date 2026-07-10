@@ -142,6 +142,43 @@ def test_health_endpoint_returns_ok():
     assert response.json() == {"status": "ok"}
 
 
+def test_cors_allowed_origins_default_to_local_react_dev_servers(monkeypatch):
+    monkeypatch.delenv("CORS_ALLOWED_ORIGINS", raising=False)
+
+    assert api_main.get_cors_allowed_origins() == [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
+
+def test_cors_allowed_origins_are_configurable(monkeypatch):
+    monkeypatch.setenv(
+        "CORS_ALLOWED_ORIGINS",
+        "https://arena.example.com, http://localhost:4173, ",
+    )
+
+    assert api_main.get_cors_allowed_origins() == [
+        "https://arena.example.com",
+        "http://localhost:4173",
+    ]
+
+
+def test_cors_preflight_allows_local_frontend_origin(sqlite_database_dependency):
+    response = client.options(
+        "/matches",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "GET" in response.headers["access-control-allow-methods"]
+
+
 def test_list_matches_returns_empty_history(sqlite_database_dependency):
     response = client.get("/matches")
 
@@ -980,7 +1017,7 @@ def test_create_match_rejects_too_many_players():
         }
     }
 
-
+a
 def test_create_match_returns_error_when_match_execution_fails(
     sqlite_database_dependency,
     monkeypatch,
