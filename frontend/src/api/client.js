@@ -27,7 +27,7 @@ async function parseJsonResponse(response) {
 }
 
 function buildUrl(path, params = {}) {
-  const url = new URL(path, window.location.origin);
+  const url = new URL(`/api${path}`, window.location.origin);
 
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") {

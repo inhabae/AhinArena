@@ -6,11 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/health': 'http://127.0.0.1:8000',
-      '/matches': 'http://127.0.0.1:8000',
-      '/leaderboard': 'http://127.0.0.1:8000',
-      '/bots': 'http://127.0.0.1:8000',
-      '/api-error-test': 'http://127.0.0.1:8000',
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
     },
   },
 })
