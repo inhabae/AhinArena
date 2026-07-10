@@ -28,11 +28,19 @@ from api.schemas import (
 
 
 def serialize_match_summary(match: Match) -> MatchSummary:
+    winner_bot_name = None
+    if match.winner_bot_id == match.bot_one_id:
+        winner_bot_name = match.bot_one.name
+    elif match.winner_bot_id == match.bot_two_id:
+        winner_bot_name = match.bot_two.name
+
     return MatchSummary(
         match_id=match.id,
         game=match.game_id,
         bot_one_id=match.bot_one_id,
         bot_two_id=match.bot_two_id,
+        bot_one_name=match.bot_one.name,
+        bot_two_name=match.bot_two.name,
         bot_one_rating_before=match.bot_one_rating_before,
         bot_two_rating_before=match.bot_two_rating_before,
         bot_one_rating_after=match.bot_one_rating_after,
@@ -40,6 +48,7 @@ def serialize_match_summary(match: Match) -> MatchSummary:
         bot_one_rating_delta=match.bot_one_rating_delta,
         bot_two_rating_delta=match.bot_two_rating_delta,
         winner_bot_id=match.winner_bot_id,
+        winner_bot_name=winner_bot_name,
         result_reason=match.result_reason,
         created_at=match.created_at,
         completed_at=match.completed_at,
@@ -254,6 +263,7 @@ def list_matches(
 
     matches = (
         db.query(Match)
+        .options(selectinload(Match.bot_one), selectinload(Match.bot_two))
         .order_by(Match.completed_at.desc(), Match.id.desc())
         .offset(offset)
         .limit(limit)
@@ -271,7 +281,11 @@ def list_matches(
 def get_match(match_id: int, db: Session = Depends(get_db)):
     match = (
         db.query(Match)
-        .options(selectinload(Match.moves))
+        .options(
+            selectinload(Match.bot_one),
+            selectinload(Match.bot_two),
+            selectinload(Match.moves),
+        )
         .filter(Match.id == match_id)
         .first()
     )

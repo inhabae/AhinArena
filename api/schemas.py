@@ -20,6 +20,8 @@ class MatchSummary(BaseModel):
     game: str
     bot_one_id: int
     bot_two_id: int
+    bot_one_name: str
+    bot_two_name: str
     bot_one_rating_before: int
     bot_two_rating_before: int
     bot_one_rating_after: int
@@ -27,6 +29,7 @@ class MatchSummary(BaseModel):
     bot_one_rating_delta: int
     bot_two_rating_delta: int
     winner_bot_id: int | None
+    winner_bot_name: str | None
     result_reason: str
     created_at: datetime
     completed_at: datetime

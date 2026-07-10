@@ -155,11 +155,18 @@ def test_list_matches_returns_empty_history(sqlite_database_dependency):
 
 
 def test_list_matches_returns_recent_matches_first(sqlite_database_dependency):
+    bot_one = seed_bot(sqlite_database_dependency, name="alpha")
+    bot_two = seed_bot(sqlite_database_dependency, name="beta")
     older = make_persisted_match(
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        winner_bot_id=bot_one.id,
         completed_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
     )
     newer = make_persisted_match(
         game_id="connect-four",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
         winner_bot_id=None,
         result_reason="draw",
         completed_at=datetime(2026, 1, 2, 0, 0, 1, tzinfo=timezone.utc),
@@ -174,17 +181,34 @@ def test_list_matches_returns_recent_matches_first(sqlite_database_dependency):
     assert body["total"] == 2
     assert [item["match_id"] for item in body["items"]] == [newer.id, older.id]
     assert body["items"][0]["game"] == "connect-four"
+    assert body["items"][0]["bot_one_name"] == "alpha"
+    assert body["items"][0]["bot_two_name"] == "beta"
+    assert body["items"][0]["winner_bot_name"] is None
     assert body["items"][1]["game"] == "tictactoe"
+    assert body["items"][1]["bot_one_name"] == "alpha"
+    assert body["items"][1]["bot_two_name"] == "beta"
+    assert body["items"][1]["winner_bot_name"] == "alpha"
 
 
 def test_list_matches_paginates_results(sqlite_database_dependency):
+    bot_one = seed_bot(sqlite_database_dependency, name="alpha")
+    bot_two = seed_bot(sqlite_database_dependency, name="beta")
     oldest = make_persisted_match(
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        winner_bot_id=bot_one.id,
         completed_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
     )
     middle = make_persisted_match(
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        winner_bot_id=bot_one.id,
         completed_at=datetime(2026, 1, 2, 0, 0, 1, tzinfo=timezone.utc),
     )
     newest = make_persisted_match(
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        winner_bot_id=bot_one.id,
         completed_at=datetime(2026, 1, 3, 0, 0, 1, tzinfo=timezone.utc),
     )
     sqlite_database_dependency.add_all([oldest, middle, newest])
@@ -198,6 +222,9 @@ def test_list_matches_paginates_results(sqlite_database_dependency):
     assert body["offset"] == 1
     assert body["total"] == 3
     assert [item["match_id"] for item in body["items"]] == [middle.id]
+    assert body["items"][0]["bot_one_name"] == "alpha"
+    assert body["items"][0]["bot_two_name"] == "beta"
+    assert body["items"][0]["winner_bot_name"] == "alpha"
 
 
 @pytest.mark.parametrize("query", ["limit=0", "limit=101", "offset=-1"])
@@ -325,10 +352,15 @@ def test_leaderboard_validates_pagination_parameters(query):
 
 
 def test_get_match_returns_metadata_result_summary_and_moves(sqlite_database_dependency):
+    bot_one = seed_bot(sqlite_database_dependency, name="alpha")
+    bot_two = seed_bot(sqlite_database_dependency, name="beta")
     match = make_persisted_match(
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        winner_bot_id=bot_one.id,
         moves=[
-            Move(move_number=2, bot_id=2, move=[1, 0]),
-            Move(move_number=1, bot_id=1, move=[0, 0]),
+            Move(move_number=2, bot_id=bot_two.id, move=[1, 0]),
+            Move(move_number=1, bot_id=bot_one.id, move=[0, 0]),
         ],
     )
     sqlite_database_dependency.add(match)
@@ -341,21 +373,24 @@ def test_get_match_returns_metadata_result_summary_and_moves(sqlite_database_dep
     body = response.json()
     assert body["match_id"] == match.id
     assert body["game"] == "tictactoe"
-    assert body["bot_one_id"] == 1
-    assert body["bot_two_id"] == 2
+    assert body["bot_one_id"] == bot_one.id
+    assert body["bot_two_id"] == bot_two.id
+    assert body["bot_one_name"] == "alpha"
+    assert body["bot_two_name"] == "beta"
     assert body["bot_one_rating_before"] == 1200
     assert body["bot_two_rating_before"] == 1200
     assert body["bot_one_rating_after"] == 1216
     assert body["bot_two_rating_after"] == 1184
     assert body["bot_one_rating_delta"] == 16
     assert body["bot_two_rating_delta"] == -16
-    assert body["winner_bot_id"] == 1
+    assert body["winner_bot_id"] == bot_one.id
+    assert body["winner_bot_name"] == "alpha"
     assert body["result_reason"] == "win"
     assert body["created_at"]
     assert body["completed_at"]
     assert body["moves"] == [
-        {"move_number": 1, "bot_id": 1, "move": [0, 0]},
-        {"move_number": 2, "bot_id": 2, "move": [1, 0]},
+        {"move_number": 1, "bot_id": bot_one.id, "move": [0, 0]},
+        {"move_number": 2, "bot_id": bot_two.id, "move": [1, 0]},
     ]
 
 
