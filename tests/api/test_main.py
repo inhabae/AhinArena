@@ -1017,7 +1017,7 @@ def test_create_match_rejects_too_many_players():
         }
     }
 
-a
+
 def test_create_match_returns_error_when_match_execution_fails(
     sqlite_database_dependency,
     monkeypatch,
