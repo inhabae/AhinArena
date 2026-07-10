@@ -351,6 +351,66 @@ def test_leaderboard_validates_pagination_parameters(query):
     assert body["error"]["details"]
 
 
+def test_list_bots_returns_bots_for_game_ordered_by_name(sqlite_database_dependency):
+    beta = Bot(name="beta", game_id="tictactoe", created_by="test")
+    alpha = Bot(name="alpha", game_id="tictactoe", created_by="test")
+    other_game = Bot(name="alpha", game_id="connect-four", created_by="test")
+    sqlite_database_dependency.add_all([beta, alpha, other_game])
+    sqlite_database_dependency.commit()
+
+    response = client.get("/bots?game_id=tictactoe")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"bot_id": alpha.id, "name": "alpha"},
+        {"bot_id": beta.id, "name": "beta"},
+    ]
+
+
+def test_list_bots_returns_empty_list_for_unknown_game(sqlite_database_dependency):
+    seed_bot(sqlite_database_dependency, name="random", game_id="tictactoe")
+
+    response = client.get("/bots?game_id=unknown")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_bots_returns_empty_list_for_empty_game_id(sqlite_database_dependency):
+    seed_bot(sqlite_database_dependency, name="random", game_id="tictactoe")
+
+    response = client.get("/bots?game_id=")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_bots_paginates_results(sqlite_database_dependency):
+    bots = [
+        Bot(name="alpha", game_id="tictactoe", created_by="test"),
+        Bot(name="beta", game_id="tictactoe", created_by="test"),
+        Bot(name="gamma", game_id="tictactoe", created_by="test"),
+    ]
+    sqlite_database_dependency.add_all(bots)
+    sqlite_database_dependency.commit()
+
+    response = client.get("/bots?game_id=tictactoe&limit=1&offset=1")
+
+    assert response.status_code == 200
+    assert response.json() == [{"bot_id": bots[1].id, "name": "beta"}]
+
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=501", "offset=-1"])
+def test_list_bots_validates_pagination_parameters(query):
+    response = client.get(f"/bots?game_id=tictactoe&{query}")
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "validation_error"
+    assert body["error"]["message"] == "Request body is invalid."
+    assert body["error"]["details"]
+
+
 def test_get_match_returns_metadata_result_summary_and_moves(sqlite_database_dependency):
     bot_one = seed_bot(sqlite_database_dependency, name="alpha")
     bot_two = seed_bot(sqlite_database_dependency, name="beta")
