@@ -257,6 +257,15 @@ th {
   padding: 24px;
 }
 
+.history-panel {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
 .section-heading {
   align-items: center;
   display: flex;
@@ -387,6 +396,69 @@ select:disabled {
   font-size: 13px;
 }
 
+.table-scroll {
+  margin: 0 -14px;
+  overflow-x: auto;
+}
+
+.match-history-table {
+  min-width: 780px;
+}
+
+.match-history-table th:first-child,
+.match-history-table td:first-child {
+  padding-left: 14px;
+}
+
+.match-history-table th:last-child,
+.match-history-table td:last-child {
+  padding-right: 14px;
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover {
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+}
+
+.clickable-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.players-cell,
+.rating-delta {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.players-cell span[aria-hidden="true"],
+.rating-delta span + span {
+  color: var(--text-muted);
+}
+
+.winner-name {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.pagination-controls {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.pagination-controls span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 code {
   background: var(--surface-subtle);
   border: 0.5px solid var(--border);
@@ -433,5 +505,17 @@ code {
     flex-direction: column;
     gap: 4px;
     padding: 12px 0;
+  }
+
+  .history-panel {
+    padding: 18px;
+  }
+
+  .table-scroll {
+    margin: 0 -8px;
+  }
+
+  .pagination-controls {
+    justify-content: space-between;
   }
 }
