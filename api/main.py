@@ -1,3 +1,5 @@
+import os
+
 from api.database import get_db
 from api.models import Bot, Match, Move
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
@@ -6,6 +8,7 @@ from engine.tictactoe.runner import run_tictactoe_match
 from engine.registry import UnknownBotError, bot_registry
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -26,6 +29,19 @@ from api.schemas import (
     LeaderboardEntry,
     BotSummary,
 )
+
+
+DEFAULT_CORS_ALLOWED_ORIGINS = (
+    "http://localhost:5173,"
+    "http://127.0.0.1:5173,"
+    "http://localhost:3000,"
+    "http://127.0.0.1:3000"
+)
+
+
+def get_cors_allowed_origins() -> list[str]:
+    origins = os.environ.get("CORS_ALLOWED_ORIGINS", DEFAULT_CORS_ALLOWED_ORIGINS)
+    return [origin.strip() for origin in origins.split(",") if origin.strip()]
 
 
 def serialize_match_summary(match: Match) -> MatchSummary:
@@ -141,6 +157,14 @@ app = FastAPI(
     title="AhinArena API",
     description="REST API that exposes the AhinArena game engine for match execution",
     version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_allowed_origins(),
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.add_exception_handler(HTTPException, http_exception_handler)

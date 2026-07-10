@@ -267,6 +267,18 @@ variable. Export a URL using the psycopg SQLAlchemy driver:
 export DATABASE_URL="postgresql+psycopg://ahin_arena:ahin_arena@localhost:5432/ahin_arena"
 ```
 
+The API also reads allowed browser origins for CORS from
+`CORS_ALLOWED_ORIGINS`. Use a comma-separated list when the frontend runs on a
+different origin or port:
+
+```sh
+export CORS_ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
+```
+
+If unset, the local-development default allows `http://localhost:5173`,
+`http://127.0.0.1:5173`, `http://localhost:3000`, and
+`http://127.0.0.1:3000`.
+
 Run database migrations with Alembic:
 
 ```sh
