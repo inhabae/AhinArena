@@ -1,5 +1,6 @@
-import { Link, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 
+import AppLayout from "./components/AppLayout";
 import HomePage from "./pages/HomePage";
 import MatchHistoryPage from "./pages/MatchHistoryPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
@@ -7,16 +8,8 @@ import MatchDetailPage from "./pages/MatchDetailPage";
 
 function App() {
   return (
-    <>
-      <nav>
-        <Link to="/">Home</Link>{" | "}
-        <Link to="/matches">Match History</Link>{" | "}
-        <Link to="/leaderboard">Leaderboard</Link>
-      </nav>
-
-      <hr />
-
-      <Routes>
+    <Routes>
+      <Route element={<AppLayout />}>
         <Route path="/" element={<HomePage />} />
 
         <Route
@@ -33,8 +26,8 @@ function App() {
           path="/matches/:matchId"
           element={<MatchDetailPage />}
         />
-      </Routes>
-    </>
+      </Route>
+    </Routes>
   );
 }
 
