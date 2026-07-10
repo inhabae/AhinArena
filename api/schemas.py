@@ -56,3 +56,7 @@ class LeaderboardEntry(BaseModel):
     wins: int
     losses: int
     draws: int
+
+class BotSummary(BaseModel):
+    bot_id: int
+    name: str

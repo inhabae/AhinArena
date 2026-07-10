@@ -24,6 +24,7 @@ from api.schemas import (
     MatchListResponse,
     MoveEntry,
     LeaderboardEntry,
+    BotSummary,
 )
 
 
@@ -321,5 +322,32 @@ def get_leaderboard(
             "losses": bot.losses,
             "draws": bot.draws,
         }
+        for bot in bots
+    ]
+
+@app.get("/bots", response_model=list[BotSummary])
+def list_bots(
+    game_id: str = Query(default=""),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    if not game_id:
+        return []
+
+    bots = (
+        db.query(Bot)
+        .filter(Bot.game_id == game_id)
+        .order_by(Bot.name.asc(), Bot.id.asc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        BotSummary(
+            bot_id=bot.id,
+            name=bot.name,
+        )
         for bot in bots
     ]
