@@ -264,6 +264,38 @@ def test_list_matches_paginates_results(sqlite_database_dependency):
     assert body["items"][0]["winner_bot_name"] == "alpha"
 
 
+def test_list_matches_filters_by_game_id(sqlite_database_dependency):
+    tictactoe_bot = seed_bot(sqlite_database_dependency, name="ttt", game_id="tictactoe")
+    connectfour_bot = seed_bot(
+        sqlite_database_dependency,
+        name="c4",
+        game_id="connect-four",
+    )
+    tictactoe_match = make_persisted_match(
+        game_id="tictactoe",
+        bot_one_id=tictactoe_bot.id,
+        bot_two_id=tictactoe_bot.id,
+        winner_bot_id=tictactoe_bot.id,
+    )
+    connectfour_match = make_persisted_match(
+        game_id="connect-four",
+        bot_one_id=connectfour_bot.id,
+        bot_two_id=connectfour_bot.id,
+        winner_bot_id=None,
+        completed_at=datetime(2026, 1, 2, 0, 0, 1, tzinfo=timezone.utc),
+    )
+    sqlite_database_dependency.add_all([tictactoe_match, connectfour_match])
+    sqlite_database_dependency.commit()
+
+    response = client.get("/matches?game_id=connect-four")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert [item["match_id"] for item in body["items"]] == [connectfour_match.id]
+    assert body["items"][0]["game"] == "connect-four"
+
+
 @pytest.mark.parametrize("query", ["limit=0", "limit=101", "offset=-1"])
 def test_list_matches_validates_pagination_parameters(query):
     response = client.get(f"/matches?{query}")
@@ -420,6 +452,35 @@ def test_list_bots_returns_empty_list_for_empty_game_id(sqlite_database_dependen
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(
+    sqlite_database_dependency,
+):
+    api_main.seed_default_bots(sqlite_database_dependency)
+
+    response = client.get("/bots?game_id=tictactoe")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"bot_id": 1, "name": "randombot1"},
+        {"bot_id": 2, "name": "randombot2"},
+    ]
+
+    connectfour_response = client.get("/bots?game_id=connect-four")
+
+    assert connectfour_response.status_code == 200
+    assert connectfour_response.json() == [
+        {"bot_id": 3, "name": "randombot1"},
+        {"bot_id": 4, "name": "randombot2"},
+    ]
+
+
+def test_seed_default_bots_is_idempotent(sqlite_database_dependency):
+    api_main.seed_default_bots(sqlite_database_dependency)
+    api_main.seed_default_bots(sqlite_database_dependency)
+
+    assert sqlite_database_dependency.query(Bot).count() == 4
 
 
 def test_list_bots_paginates_results(sqlite_database_dependency):
@@ -820,6 +881,27 @@ def test_create_match_runs_real_random_bot_match_end_to_end(sqlite_database_depe
     assert "result" not in body
     assert match.bot_one_rating_before == 1200
     assert match.bot_two_rating_before == 1200
+
+
+def test_create_match_runs_seeded_random_bot_aliases(sqlite_database_dependency):
+    api_main.seed_default_bots(sqlite_database_dependency)
+
+    response = client.post(
+        "/matches",
+        json={
+            "game": "tictactoe",
+            "players": [
+                {"bot": "randombot1"},
+                {"bot": "randombot2"},
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    match = sqlite_database_dependency.query(Match).one()
+    assert body["match_id"] == match.id
+    assert {match.bot_one.name, match.bot_two.name} == {"randombot1", "randombot2"}
 
 
 def test_create_match_rejects_bot_missing_from_database(sqlite_database_dependency):
