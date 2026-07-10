@@ -1,6 +1,7 @@
 import os
+from contextlib import asynccontextmanager
 
-from api.database import get_db
+from api.database import get_db, get_sessionmaker
 from api.models import Bot, Match, Move
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
 from engine.connectfour.runner import run_connectfour_match
@@ -31,6 +32,8 @@ from api.schemas import (
 )
 
 
+DEFAULT_BOT_NAMES = ("randombot1", "randombot2")
+SUPPORTED_GAMES = ("tictactoe", "connect-four")
 DEFAULT_CORS_ALLOWED_ORIGINS = (
     "http://localhost:5173,"
     "http://127.0.0.1:5173,"
@@ -42,6 +45,24 @@ DEFAULT_CORS_ALLOWED_ORIGINS = (
 def get_cors_allowed_origins() -> list[str]:
     origins = os.environ.get("CORS_ALLOWED_ORIGINS", DEFAULT_CORS_ALLOWED_ORIGINS)
     return [origin.strip() for origin in origins.split(",") if origin.strip()]
+
+
+def seed_default_bots(db: Session) -> None:
+    for game_id in SUPPORTED_GAMES:
+        existing_names = {
+            name
+            for (name,) in (
+                db.query(Bot.name)
+                .filter(Bot.game_id == game_id, Bot.name.in_(DEFAULT_BOT_NAMES))
+                .all()
+            )
+        }
+
+        for bot_name in DEFAULT_BOT_NAMES:
+            if bot_name not in existing_names:
+                db.add(Bot(name=bot_name, game_id=game_id, created_by="system"))
+
+    db.commit()
 
 
 def serialize_match_summary(match: Match) -> MatchSummary:
@@ -153,10 +174,22 @@ def apply_match_record_updates(
         api_error(500, "unknown_winner_bot", f"Unknown winner bot: {winner_bot_id}")
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db = get_sessionmaker()()
+    try:
+        seed_default_bots(db)
+    finally:
+        db.close()
+
+    yield
+
+
 app = FastAPI(
     title="AhinArena API",
     description="REST API that exposes the AhinArena game engine for match execution",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -171,6 +204,7 @@ app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, unexpected_exception_handler)
+
 
 @app.get("/health")
 def health_check():
@@ -282,12 +316,18 @@ def create_match(
 def list_matches(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    game_id: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
-    total = db.query(Match).count()
+    query = db.query(Match)
+
+    if game_id:
+        query = query.filter(Match.game_id == game_id)
+
+    total = query.count()
 
     matches = (
-        db.query(Match)
+        query
         .options(selectinload(Match.bot_one), selectinload(Match.bot_two))
         .order_by(Match.completed_at.desc(), Match.id.desc())
         .offset(offset)

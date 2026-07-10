@@ -23,14 +23,15 @@ class BotRegistry:
 
 bot_registry = BotRegistry()
 
-bot_registry.register(
-    "random",
-    [sys.executable, "-m", "engine.tictactoe.random_bot"],
-    game="tictactoe",
-)
+for bot_name in ("random", "randombot1", "randombot2"):
+    bot_registry.register(
+        bot_name,
+        [sys.executable, "-m", "engine.tictactoe.random_bot"],
+        game="tictactoe",
+    )
 
-bot_registry.register(
-    "random",
-    [sys.executable, "-m", "engine.connectfour.random_bot"],
-    game="connect-four",
-)
+    bot_registry.register(
+        bot_name,
+        [sys.executable, "-m", "engine.connectfour.random_bot"],
+        game="connect-four",
+    )
