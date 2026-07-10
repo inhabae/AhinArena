@@ -6,7 +6,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { getMatch } from "../api/client";
-import { buildTicTacToeReplay } from "./matchReplay";
+import {
+  buildConnectFourReplay,
+  buildTicTacToeReplay,
+} from "./matchReplay";
 
 const games = [
   { id: "tictactoe", label: "Tic Tac Toe" },
@@ -95,10 +98,20 @@ function RatingLine({ label, before, after, delta, deltaClassName }) {
   );
 }
 
-function PlayerSummary({ marker, name, before, after, delta, deltaClassName }) {
+function PlayerSummary({
+  game,
+  marker,
+  name,
+  before,
+  after,
+  delta,
+  deltaClassName,
+}) {
   return (
     <div className="player-summary-row">
-      <span className={`marker-pill marker-${marker.toLowerCase()}`}>{marker}</span>
+      <span className={`marker-pill ${game}-marker-${marker.toLowerCase()}`}>
+        {marker}
+      </span>
       <strong>{name}</strong>
       <RatingLine
         label="Rating"
@@ -117,7 +130,9 @@ function TicTacToeBoard({ board, lastMove }) {
       {board.map((row, rowIndex) =>
         row.map((cell, colIndex) => {
           const isLastMove = lastMove?.row === rowIndex && lastMove?.col === colIndex;
-          const markerClass = cell ? ` marker-${cell.toLowerCase()}` : " marker-empty";
+          const markerClass = cell
+            ? ` tictactoe-marker-${cell.toLowerCase()}`
+            : " marker-empty";
 
           return (
             <div
@@ -139,7 +154,50 @@ function TicTacToeBoard({ board, lastMove }) {
   );
 }
 
-function formatMove(move) {
+function ConnectFourBoard({ board, lastMove }) {
+  return (
+    <div className="connect-four-board" role="grid" aria-label="Connect Four board">
+      {board.map((row, rowIndex) =>
+        row.map((cell, colIndex) => {
+          const isLastMove = lastMove?.row === rowIndex && lastMove?.col === colIndex;
+          const markerClass = cell
+            ? ` connect-four-marker-${cell.toLowerCase()}`
+            : " marker-empty";
+
+          return (
+            <div
+              key={`${rowIndex}-${colIndex}`}
+              role="gridcell"
+              aria-label={`Row ${rowIndex + 1}, column ${colIndex + 1}: ${cell ?? "empty"}`}
+              className={
+                isLastMove
+                  ? `connect-four-cell last-move${markerClass}`
+                  : `connect-four-cell${markerClass}`
+              }
+            >
+              <span aria-hidden="true" />
+            </div>
+          );
+        }),
+      )}
+    </div>
+  );
+}
+
+function MatchBoard({ game, board, lastMove }) {
+  if (game === "connect-four") {
+    return <ConnectFourBoard board={board} lastMove={lastMove} />;
+  }
+
+  return <TicTacToeBoard board={board} lastMove={lastMove} />;
+}
+
+function formatMove(game, move) {
+  if (game === "connect-four") {
+    const col = typeof move === "number" ? move : move.col;
+    return `c${col + 1}`;
+  }
+
   const row = Array.isArray(move) ? move[0] : move.row;
   const col = Array.isArray(move) ? move[1] : move.col;
 
@@ -183,11 +241,15 @@ export default function MatchDetailPage() {
   const match = matchState.data;
   const moves = match?.moves;
   const { boards, lastMoves } = useMemo(() => {
-    if (match?.game !== "tictactoe") {
-      return { boards: [], lastMoves: [] };
+    if (match?.game === "tictactoe") {
+      return buildTicTacToeReplay(match.moves ?? []);
     }
 
-    return buildTicTacToeReplay(match.moves ?? []);
+    if (match?.game === "connect-four") {
+      return buildConnectFourReplay(match.moves ?? []);
+    }
+
+    return { boards: [], lastMoves: [] };
   }, [match?.game, match?.moves]);
   const maxStep = moves?.length ?? 0;
 
@@ -245,7 +307,7 @@ export default function MatchDetailPage() {
     );
   }
 
-  if (match.game !== "tictactoe") {
+  if (match.game !== "tictactoe" && match.game !== "connect-four") {
     return (
       <main className="match-detail-page">
         <div className="page-header">
@@ -297,7 +359,7 @@ export default function MatchDetailPage() {
               </div>
             )}
 
-            <TicTacToeBoard board={board} lastMove={lastMove} />
+            <MatchBoard game={match.game} board={board} lastMove={lastMove} />
 
             <div className="replay-controls" aria-label="Replay controls">
               <button type="button" onClick={() => setStep(0)} disabled={step === 0}>
@@ -357,6 +419,7 @@ export default function MatchDetailPage() {
 
           <aside className="match-summary-panel">
             <PlayerSummary
+              game={match.game}
               marker="X"
               name={match.bot_one_name}
               before={match.bot_one_rating_before}
@@ -365,6 +428,7 @@ export default function MatchDetailPage() {
               deltaClassName={getDeltaClassName(match, match.bot_one_rating_delta)}
             />
             <PlayerSummary
+              game={match.game}
               marker="O"
               name={match.bot_two_name}
               before={match.bot_two_rating_before}
@@ -398,7 +462,7 @@ export default function MatchDetailPage() {
                           <span>{entry.move_number}</span>
                           <strong>{marker}</strong>
                           <em>{botName}</em>
-                          <code>{formatMove(entry.move)}</code>
+                          <code>{formatMove(match.game, entry.move)}</code>
                         </button>
                       </li>
                     );
