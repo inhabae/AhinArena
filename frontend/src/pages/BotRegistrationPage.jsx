@@ -2,12 +2,8 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { createBot } from "../api/client";
+import { defaultGameId, supportedGames } from "../games";
 import { useAuth } from "../useAuth";
-
-const games = [
-  { id: "tictactoe", label: "Tic Tac Toe" },
-  { id: "connect-four", label: "Connect Four" },
-];
 
 function errorMessageFor(error) {
   if (error.code === "unsupported_game") {
@@ -24,7 +20,7 @@ function errorMessageFor(error) {
 export default function BotRegistrationPage() {
   const navigate = useNavigate();
   const { isAuthenticated, loading } = useAuth();
-  const [selectedGame, setSelectedGame] = useState(games[0].id);
+  const [selectedGame, setSelectedGame] = useState(defaultGameId);
   const [name, setName] = useState("");
   const [submitState, setSubmitState] = useState({
     loading: false,
@@ -90,7 +86,7 @@ export default function BotRegistrationPage() {
               value={selectedGame}
               onChange={(event) => setSelectedGame(event.target.value)}
             >
-              {games.map((game) => (
+              {supportedGames.map((game) => (
                 <option key={game.id} value={game.id}>
                   {game.label}
                 </option>

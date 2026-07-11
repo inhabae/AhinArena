@@ -6,21 +6,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { getMatch } from "../api/client";
+import { formatGame, isSupportedGame } from "../games";
 import {
   buildConnectFourReplay,
   buildTicTacToeReplay,
 } from "./matchReplay";
 
-const games = [
-  { id: "tictactoe", label: "Tic Tac Toe" },
-  { id: "connect-four", label: "Connect Four" },
-];
-
 const nonStandardEndings = new Set(["timeout", "bot_error", "invalid_move"]);
-
-function formatGame(gameId) {
-  return games.find((game) => game.id === gameId)?.label ?? gameId;
-}
 
 function formatDelta(value) {
   if (value > 0) {
@@ -298,7 +290,7 @@ export default function MatchDetailPage() {
     );
   }
 
-  if (match.game !== "tictactoe" && match.game !== "connect-four") {
+  if (!isSupportedGame(match.game)) {
     return (
       <main className="match-detail-page">
         <div className="page-header">
