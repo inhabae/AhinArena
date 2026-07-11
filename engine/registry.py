@@ -9,14 +9,14 @@ class BotRegistry:
     def __init__(self):
         self._bots = {}
 
-    def register(self, bot_id, command, game="tictactoe"):
-        self._bots[(game, bot_id)] = command
+    def register(self, bot_name, command, game="tictactoe"):
+        self._bots[(game, bot_name)] = command
 
-    def get_command(self, bot_id, game="tictactoe"):
-        key = (game, bot_id)
+    def get_command(self, bot_name, game="tictactoe"):
+        key = (game, bot_name)
 
         if key not in self._bots:
-            raise UnknownBotError(f"Unknown bot: {bot_id}")
+            raise UnknownBotError(f"Unknown bot: {bot_name}")
 
         return self._bots[key]
 
