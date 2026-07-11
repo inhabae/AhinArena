@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getCurrentUser, loginUser } from "./api/client";
+import { getCurrentUser, loginUser, logoutUser, registerUser } from "./api/client";
 import { AuthContext } from "./useAuth";
 
 export function AuthProvider({ children }) {
@@ -40,11 +40,25 @@ export function AuthProvider({ children }) {
     return user;
   }
 
+  async function register(credentials) {
+    return registerUser(credentials);
+  }
+
+  async function logout() {
+    try {
+      await logoutUser();
+    } finally {
+      setAuthState({ loading: false, user: null, error: null });
+    }
+  }
+
   const value = useMemo(
     () => ({
       ...authState,
       isAuthenticated: Boolean(authState.user),
       login,
+      logout,
+      register,
     }),
     [authState],
   );

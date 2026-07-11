@@ -45,6 +45,17 @@ bot_owner_schema = importlib.util.module_from_spec(bot_owner_spec)
 assert bot_owner_spec.loader is not None
 bot_owner_spec.loader.exec_module(bot_owner_schema)
 
+username_spec = importlib.util.spec_from_file_location(
+    "add_usernames",
+    Path(__file__).parents[2]
+    / "alembic"
+    / "versions"
+    / "c2e49a7b6d12_add_usernames.py",
+)
+username_schema = importlib.util.module_from_spec(username_spec)
+assert username_spec.loader is not None
+username_spec.loader.exec_module(username_schema)
+
 EXPECTED_MATCH_COLUMNS = {
     "id",
     "game_id",
@@ -89,9 +100,12 @@ EXPECTED_BASELINE_BOT_COLUMNS = (EXPECTED_BOT_COLUMNS - {"owner_id"}) | {"create
 EXPECTED_USER_COLUMNS = {
     "id",
     "email",
+    "username",
     "password_hash",
     "created_at",
 }
+
+EXPECTED_AUTH_MIGRATION_USER_COLUMNS = EXPECTED_USER_COLUMNS - {"username"}
 
 EXPECTED_SESSION_COLUMNS = {
     "id",
@@ -187,14 +201,19 @@ def test_user_model_declares_expected_columns_and_constraints():
 
     assert User.__table__.c.email.nullable is False
     assert User.__table__.c.email.type.length == 320
+    assert User.__table__.c.username.nullable is False
+    assert User.__table__.c.username.type.length == 80
     assert User.__table__.c.password_hash.nullable is False
     assert User.__table__.c.password_hash.type.length == 255
     assert User.__table__.c.created_at.nullable is False
 
     constraints = {constraint.name: constraint for constraint in User.__table__.constraints}
     assert constraints["uq_users_email"].columns.keys() == ["email"]
+    assert constraints["uq_users_username"].columns.keys() == ["username"]
     assert "ck_users_email_max_length" in constraints
     assert "ck_users_email_format" in constraints
+    assert "ck_users_username_min_length" in constraints
+    assert "ck_users_username_max_length" in constraints
 
 
 def test_session_model_declares_expected_columns_and_cascade_foreign_key():
@@ -220,15 +239,23 @@ def test_user_table_enforces_unique_email_and_email_format():
     User.__table__.create(engine)
 
     with Session(engine) as session:
-        session.add(User(email="player@example.com", password_hash="hash"))
+        session.add(User(username="player", email="player@example.com", password_hash="hash"))
         session.commit()
 
-        session.add(User(email="player@example.com", password_hash="other-hash"))
+        session.add(User(username="player", email="player@example.com", password_hash="other-hash"))
         with pytest.raises(IntegrityError):
             session.commit()
 
     with Session(engine) as session:
-        session.add(User(email="not-an-email", password_hash="hash"))
+        session.add(User(username="other-player", email="first@example.com", password_hash="hash"))
+        session.commit()
+
+        session.add(User(username="other-player", email="second@example.com", password_hash="hash"))
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+    with Session(engine) as session:
+        session.add(User(username="player", email="not-an-email", password_hash="hash"))
         with pytest.raises(IntegrityError):
             session.commit()
 
@@ -244,7 +271,7 @@ def test_deleting_user_cascades_to_sessions():
     AuthSession.__table__.create(engine)
 
     with Session(engine) as session:
-        user = User(email="player@example.com", password_hash="hash")
+        user = User(username="player", email="player@example.com", password_hash="hash")
         user.sessions.append(
             AuthSession(
                 id="opaque-session-token",
@@ -405,7 +432,7 @@ def test_auth_migration_creates_users_and_sessions_schema(monkeypatch):
         session_foreign_keys = inspector.get_foreign_keys("sessions")
         session_indexes = inspector.get_indexes("sessions")
 
-        assert set(user_columns) == EXPECTED_USER_COLUMNS
+        assert set(user_columns) == EXPECTED_AUTH_MIGRATION_USER_COLUMNS
         assert set(session_columns) == EXPECTED_SESSION_COLUMNS
 
         assert user_columns["email"]["nullable"] is False
@@ -439,6 +466,47 @@ def test_auth_migration_creates_users_and_sessions_schema(monkeypatch):
             index["column_names"] == ["user_id"]
             for index in session_indexes
         )
+
+
+def test_username_migration_adds_unique_required_username(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        operations = Operations(context)
+        monkeypatch.setattr(baseline_schema, "op", operations)
+        monkeypatch.setattr(auth_schema, "op", operations)
+        monkeypatch.setattr(bot_owner_schema, "op", operations)
+        monkeypatch.setattr(username_schema, "op", operations)
+
+        baseline_schema.upgrade()
+        auth_schema.upgrade()
+        bot_owner_schema.upgrade()
+        connection.execute(
+            sa.text(
+                "INSERT INTO users (email, password_hash) "
+                "VALUES ('player@example.com', 'hash')"
+            )
+        )
+        username_schema.upgrade()
+
+        inspector = sa.inspect(connection)
+        user_columns = {column["name"]: column for column in inspector.get_columns("users")}
+        user_unique_constraints = inspector.get_unique_constraints("users")
+        user_check_constraints = inspector.get_check_constraints("users")
+        rows = connection.execute(sa.text("SELECT email, username FROM users")).all()
+
+        assert set(user_columns) == EXPECTED_USER_COLUMNS
+        assert user_columns["username"]["nullable"] is False
+        assert user_columns["username"]["type"].length == 80
+        assert rows == [("player@example.com", "player@example.com")]
+        assert any(
+            constraint["column_names"] == ["username"]
+            for constraint in user_unique_constraints
+        )
+        assert {
+            constraint["name"] for constraint in user_check_constraints
+        } >= {"ck_users_username_min_length", "ck_users_username_max_length"}
 
 
 def test_bot_owner_migration_replaces_created_by_with_nullable_owner_id(monkeypatch):

@@ -43,6 +43,10 @@ function formatResult(match) {
   return match.result_reason === "draw" ? "Draw" : match.result_reason;
 }
 
+function formatBotOption(bot) {
+  return bot.owner_name ? `${bot.name} (${bot.owner_name})` : bot.name;
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -152,7 +156,7 @@ export default function HomePage() {
     event.preventDefault();
 
     if (!isAuthenticated) {
-      navigate("/login?next=/");
+      navigate("/login");
       return;
     }
 
@@ -171,7 +175,7 @@ export default function HomePage() {
       navigate(`/matches/${match.match_id}`);
     } catch (error) {
       if (error.status === 401) {
-        navigate("/login?next=/");
+        navigate("/login");
         return;
       }
 
@@ -222,7 +226,7 @@ export default function HomePage() {
                 <h3>Log in to start a match</h3>
                 <p>Match creation is available after you log in.</p>
               </div>
-              <Link className="button-link" to="/login?next=/">
+              <Link className="button-link" to="/login">
                 Log in
               </Link>
             </div>
@@ -239,7 +243,7 @@ export default function HomePage() {
                 >
                   {botsState.items.map((bot) => (
                     <option key={bot.bot_id} value={bot.name}>
-                      {bot.name} ({bot.owner_name})
+                      {formatBotOption(bot)}
                     </option>
                   ))}
                 </select>
@@ -256,7 +260,7 @@ export default function HomePage() {
                 >
                   {botsState.items.map((bot) => (
                     <option key={bot.bot_id} value={bot.name}>
-                      {bot.name} ({bot.owner_name})
+                      {formatBotOption(bot)}
                     </option>
                   ))}
                 </select>

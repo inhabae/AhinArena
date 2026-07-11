@@ -141,6 +141,12 @@ select:focus-visible {
   text-decoration: none;
 }
 
+.auth-button {
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .nav-link:hover {
   background: var(--surface-subtle);
   color: var(--text-primary);
@@ -453,6 +459,17 @@ select:disabled {
 
 .form-panel label span {
   font-size: 13px;
+}
+
+.form-footer {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.form-footer a {
+  color: var(--accent);
+  font-weight: 500;
 }
 
 .empty-state {

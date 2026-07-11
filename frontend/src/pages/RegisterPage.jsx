@@ -4,17 +4,22 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../useAuth";
 
 function errorMessageFor(error) {
-  if (error.code === "invalid_credentials") {
-    return "The email or password is incorrect.";
+  if (error.code === "email_already_registered") {
+    return "That email is already registered.";
   }
 
-  return error.message || "Could not log in.";
+  if (error.code === "username_already_taken") {
+    return "That username is already taken.";
+  }
+
+  return error.message || "Could not create the account.";
 }
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { register } = useAuth();
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitState, setSubmitState] = useState({
     loading: false,
@@ -27,8 +32,8 @@ export default function LoginPage() {
     setSubmitState({ loading: true, error: null });
 
     try {
-      await login({ email, password });
-      navigate("/", { replace: true });
+      await register({ email, username, password });
+      navigate("/login", { replace: true });
     } catch (error) {
       setSubmitState({ loading: false, error });
     }
@@ -37,8 +42,8 @@ export default function LoginPage() {
   return (
     <main className="form-page">
       <div className="page-header">
-        <h1>Log in</h1>
-        <p>Use your account to start matches and register bots.</p>
+        <h1>Register</h1>
+        <p>Create an account to register bots and start matches.</p>
       </div>
 
       <form className="form-panel" onSubmit={handleSubmit}>
@@ -54,11 +59,23 @@ export default function LoginPage() {
         </label>
 
         <label>
+          <span>Username</span>
+          <input
+            type="text"
+            value={username}
+            autoComplete="username"
+            onChange={(event) => setUsername(event.target.value)}
+            maxLength={80}
+            required
+          />
+        </label>
+
+        <label>
           <span>Password</span>
           <input
             type="password"
             value={password}
-            autoComplete="current-password"
+            autoComplete="new-password"
             onChange={(event) => setPassword(event.target.value)}
             required
           />
@@ -71,11 +88,11 @@ export default function LoginPage() {
         )}
 
         <button type="submit" disabled={submitState.loading}>
-          {submitState.loading ? "Logging in..." : "Log in"}
+          {submitState.loading ? "Registering..." : "Register"}
         </button>
 
         <p className="form-footer">
-          Need an account? <Link to="/register">Register</Link>
+          Already have an account? <Link to="/login">Log in</Link>
         </p>
       </form>
     </main>

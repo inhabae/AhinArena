@@ -35,7 +35,7 @@ export default function BotRegistrationPage() {
     event.preventDefault();
 
     if (!isAuthenticated) {
-      navigate("/login?next=/bots/new");
+      navigate("/login");
       return;
     }
 
@@ -53,7 +53,7 @@ export default function BotRegistrationPage() {
       navigate("/");
     } catch (error) {
       if (error.status === 401) {
-        navigate("/login?next=/bots/new");
+        navigate("/login");
         return;
       }
 
@@ -76,7 +76,7 @@ export default function BotRegistrationPage() {
             <h2>Log in to register a bot</h2>
             <p>Bot ownership is tied to your account.</p>
           </div>
-          <Link className="button-link" to="/login?next=/bots/new">
+          <Link className="button-link" to="/login">
             Log in
           </Link>
         </section>

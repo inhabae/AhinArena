@@ -127,3 +127,9 @@ export function registerUser(credentials) {
     body: JSON.stringify(credentials),
   });
 }
+
+export function logoutUser() {
+  return request("/auth/logout", {
+    method: "POST",
+  });
+}

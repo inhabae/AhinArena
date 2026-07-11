@@ -1,4 +1,12 @@
-import { IconChartBar, IconHome, IconLogin, IconPlus, IconTrophy } from "@tabler/icons-react";
+import {
+  IconChartBar,
+  IconHome,
+  IconLogin,
+  IconLogout,
+  IconPlus,
+  IconTrophy,
+  IconUserPlus,
+} from "@tabler/icons-react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "../useAuth";
@@ -11,7 +19,7 @@ const navItems = [
 ];
 
 export default function AppLayout() {
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, loading, logout, user } = useAuth();
 
   return (
     <div className="app-shell">
@@ -39,13 +47,25 @@ export default function AppLayout() {
 
         <div className="auth-nav">
           {!loading && isAuthenticated && (
-            <span title={user.email}>{user.email}</span>
+            <>
+              <span title={user.email}>{user.username}</span>
+              <button type="button" className="nav-link auth-button" onClick={logout}>
+                <IconLogout size={17} stroke={1.75} aria-hidden="true" />
+                <span>Log out</span>
+              </button>
+            </>
           )}
           {!loading && !isAuthenticated && (
-            <NavLink to="/login" className="nav-link">
-              <IconLogin size={17} stroke={1.75} aria-hidden="true" />
-              <span>Log in</span>
-            </NavLink>
+            <>
+              <NavLink to="/login" className="nav-link">
+                <IconLogin size={17} stroke={1.75} aria-hidden="true" />
+                <span>Log in</span>
+              </NavLink>
+              <NavLink to="/register" className="nav-link">
+                <IconUserPlus size={17} stroke={1.75} aria-hidden="true" />
+                <span>Register</span>
+              </NavLink>
+            </>
           )}
         </div>
       </header>
