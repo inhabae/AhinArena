@@ -11,8 +11,10 @@ The system consists of a web frontend, backend services, persistent storage, and
 ## High-Level Architecture
 
 ```text
-                Frontend (React)
+        Frontend (React + Vite)
+   Home / History / Leaderboard / Replay
                         │
+                        │ /api via frontend/src/api/client.js
                         ▼
               Backend API (FastAPI)
                         │
@@ -35,10 +37,44 @@ The system consists of a web frontend, backend services, persistent storage, and
 
 ## Components
 
-- **Frontend** — User interface
-- **Backend API** — Application logic
-- **PostgreSQL** — Persistent data
-- **Redis** — Cache and queues
-- **Matchmaker** — Selects opponents
-- **Game Runner** — Executes matches
-- **Docker** — Secure AI execution
+- **Frontend** — React/Vite web interface in `frontend/`. It uses React Router
+  for the Home, Match History, Leaderboard, and Match Detail/Replay pages.
+- **Frontend API client** — `frontend/src/api/client.js` centralizes browser
+  calls to the Backend API. It prefixes requests with `/api`, serializes query
+  params, parses JSON responses, and raises `ApiError` instances for normalized
+  backend errors.
+- **Backend API** — FastAPI application logic for health checks, bot lookup,
+  match creation, match history, match detail, and leaderboard data.
+- **PostgreSQL** — Persistent data for bots, completed matches, ordered moves,
+  ratings, records, and per-match rating snapshots.
+- **Redis** — Planned cache and queue layer.
+- **Matchmaker** — Planned opponent selection service.
+- **Game Runner** — Executes matches through the registered game engines.
+- **Docker** — Planned secure AI execution boundary.
+
+## Frontend Flow
+
+The frontend runs as a Vite development server during local development. Vite
+proxies browser requests from `/api/*` to the FastAPI backend at
+`http://127.0.0.1:8000`, stripping the `/api` prefix before forwarding.
+
+The main routes are:
+
+- `/` — Home page for selecting a supported game, choosing two registered bots,
+  starting a match, and viewing recent matches for the selected game.
+- `/matches` — Match history page with all-game or per-game filtering and
+  limit/offset-backed pagination.
+- `/leaderboard` — Leaderboard page with per-game rankings, configurable row
+  count, and pagination.
+- `/matches/:matchId` — Match detail page with result summary, rating deltas,
+  move history, and replay controls for supported games.
+
+Replay state is rebuilt entirely in the browser from the move list returned by
+`GET /matches/{match_id}`. Tic-Tac-Toe moves are applied to a 3x3 board and
+Connect Four moves are dropped into a 6x7 board from the bottom row upward. Each
+intermediate board is stored so the replay can jump, scrub, or auto-play by
+move number.
+
+Known frontend gap: replay rendering currently supports `tictactoe` and
+`connect-four`. Other persisted game IDs fall back to a match summary with a
+message that replay is not supported yet.

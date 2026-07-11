@@ -105,14 +105,20 @@ Introduce competitive rankings.
 
 **Goal**
 
-Provide a basic web application for interacting with the platform.
+Provide a web application for starting matches, browsing persisted results,
+tracking rankings, and replaying supported games.
 
 **Deliverables**
 
-- Home page
-- Match history
-- Leaderboard
-- Replay viewer
+- React/Vite frontend under `frontend/`
+- Shared application layout and route map for `/`, `/matches`, `/leaderboard`, and `/matches/:matchId`
+- Home page with game selection, bot selection, match creation, recent matches, and API error handling
+- Match history page with all-game/per-game filtering, 20-row pagination, rating deltas, and match-detail navigation
+- Leaderboard page with per-game rankings, configurable page sizes, and offset pagination
+- Match detail page with result summary, rating snapshots, ordered move history, and replay controls
+- Browser replay reconstruction for Tic-Tac-Toe and Connect Four from persisted move history
+- Unsupported-game replay fallback that shows the matchup/result and reports that replay is not supported yet
+- Frontend API client conventions documented in `docs/frontend.md`
 
 ---
 
