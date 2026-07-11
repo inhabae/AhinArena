@@ -3,6 +3,8 @@ import selectors
 import subprocess
 from typing import Any, Protocol
 
+PROCESS_EXIT_TIMEOUT = 1.0
+
 
 class BotTimeoutError(RuntimeError):
     pass
@@ -23,13 +25,12 @@ class BotProcess:
         self.process.stdin.write(json.dumps(state) + "\n")
         self.process.stdin.flush()
 
-        selector = selectors.DefaultSelector()
-        selector.register(self.process.stdout, selectors.EVENT_READ)
-
-        events = selector.select(timeout=self.timeout)
+        with selectors.DefaultSelector() as selector:
+            selector.register(self.process.stdout, selectors.EVENT_READ)
+            events = selector.select(timeout=self.timeout)
 
         if not events:
-            self.process.kill()
+            self._kill_and_wait()
             raise BotTimeoutError(
                 f"Bot timed out after {self.timeout} seconds"
             )
@@ -45,6 +46,15 @@ class BotProcess:
     def close(self):
         if self.process.poll() is None:
             self.process.terminate()
+            try:
+                self.process.wait(timeout=PROCESS_EXIT_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                self._kill_and_wait()
+
+    def _kill_and_wait(self):
+        if self.process.poll() is None:
+            self.process.kill()
+        self.process.wait(timeout=PROCESS_EXIT_TIMEOUT)
 
 
 class GameRules(Protocol):
