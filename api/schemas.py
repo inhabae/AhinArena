@@ -1,11 +1,36 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class UserRegisterRequest(BaseModel):
-    email: str
-    username: str
+    email: str = Field(max_length=320)
+    username: str = Field(min_length=1, max_length=80)
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value):
+        email = value.strip().lower()
+        if "@" not in email:
+            raise ValueError("Email must contain an @ sign.")
+
+        local_part, domain = email.rsplit("@", maxsplit=1)
+        if not local_part or "." not in domain:
+            raise ValueError("Email format is invalid.")
+
+        domain_parts = domain.split(".")
+        if any(part == "" for part in domain_parts):
+            raise ValueError("Email format is invalid.")
+
+        return value
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, value):
+        if not value.strip():
+            raise ValueError("Username is required.")
+
+        return value
 
 
 class UserLoginRequest(BaseModel):

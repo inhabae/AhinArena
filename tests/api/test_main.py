@@ -263,6 +263,62 @@ def test_register_user_returns_409_for_duplicate_username(sqlite_database_depend
     assert sqlite_database_dependency.query(User).count() == 1
 
 
+@pytest.mark.parametrize(
+    "email",
+    [
+        "not-an-email",
+        "player@example",
+        "@example.com",
+        "player@example.",
+        "player..example",
+    ],
+)
+def test_register_user_returns_422_for_invalid_email(email, sqlite_database_dependency):
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": email,
+            "username": "player",
+            "password": "new-password",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert sqlite_database_dependency.query(User).count() == 0
+
+
+def test_register_user_returns_422_for_overlong_email(sqlite_database_dependency):
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": f"{'a' * 309}@example.com",
+            "username": "player",
+            "password": "new-password",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert sqlite_database_dependency.query(User).count() == 0
+
+
+@pytest.mark.parametrize("username", ["", "   ", "a" * 81])
+def test_register_user_returns_422_for_invalid_username(username, sqlite_database_dependency):
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "player@example.com",
+            "username": username,
+            "password": "new-password",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert sqlite_database_dependency.query(User).count() == 0
+
+
 def test_cors_allowed_origins_default_to_local_react_dev_servers(monkeypatch):
     monkeypatch.delenv("CORS_ALLOWED_ORIGINS", raising=False)
 
