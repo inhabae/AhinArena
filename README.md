@@ -46,7 +46,7 @@ Backend API (FastAPI)
 - [x] Milestone 3 — Multi-Game Support
 - [x] Milestone 4 — Persistent Match History
 - [x] Milestone 5 — Elo Leaderboard
-- [ ] Milestone 6 — Web Interface
+- [x] Milestone 6 — Web Interface
 - [ ] Milestone 7 — User Accounts
 - [ ] Milestone 8 — Bot Submission
 - [ ] Milestone 9 — Docker Sandboxing
@@ -80,6 +80,34 @@ Both local runners print each move, the board after that move, and the final mat
 
 - `docs/tictactoe-engine-referee.md` documents Tic-Tac-Toe bot/referee communication.
 - `docs/connectfour-engine-referee.md` documents Connect Four bot/referee communication.
+- `docs/frontend.md` documents the React web interface routes, replay behavior, and API client conventions.
+
+---
+
+## Web Interface
+
+The React/Vite frontend lives in `frontend/`. It provides:
+
+- a Home page for selecting a game, choosing two registered bots, starting a match, and viewing recent matches;
+- a Match History page with game filtering and pagination;
+- a Leaderboard page with per-game rankings, configurable row count, and pagination;
+- a Match Detail page with rating summaries, ordered move history, and replay controls.
+
+Run the FastAPI backend locally on `http://127.0.0.1:8000`, then start the web app:
+
+```sh
+cd frontend
+npm install
+npm run dev
+```
+
+Vite serves the frontend, usually at `http://localhost:5173`, and proxies
+`/api/*` requests to the local backend. See `docs/frontend.md` for the route map
+and implementation details.
+
+Known gap: replay rendering currently supports Tic-Tac-Toe and Connect Four.
+Matches for unsupported game IDs fall back to a summary view without a board
+replay.
 
 ---
 
@@ -295,6 +323,7 @@ PostgreSQL instance.
 ```
 AhinArena/
 ├── api/
+├── frontend/
 ├── engine/
 │   ├── connectfour/
 │   └── tictactoe/
