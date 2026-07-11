@@ -80,6 +80,20 @@ def seed_bot(session, *, name="random", game_id="tictactoe"):
     return bot
 
 
+def login_user(session, *, email="player@example.com", password="correct"):
+    user = User(email=email, password_hash=hash_password(password))
+    session.add(user)
+    session.commit()
+
+    response = client.post(
+        "/auth/login",
+        json={"email": email, "password": password},
+    )
+    assert response.status_code == 200
+
+    return user
+
+
 @pytest.fixture
 def sqlite_database_dependency():
     engine = create_engine(
@@ -675,6 +689,80 @@ def test_list_bots_returns_all_bots_for_empty_game_id(sqlite_database_dependency
         {"bot_id": alpha.id, "name": "alpha"},
         {"bot_id": beta.id, "name": "beta"},
     ]
+
+
+def test_create_bot_requires_authentication(sqlite_database_dependency):
+    response = client.post(
+        "/bots",
+        json={"game_id": "tictactoe", "name": "custom"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": {
+            "code": "unauthorized",
+            "message": "Unauthorized.",
+        }
+    }
+    assert sqlite_database_dependency.query(Bot).count() == 0
+
+
+def test_create_bot_rejects_unsupported_game(sqlite_database_dependency):
+    login_user(sqlite_database_dependency)
+
+    response = client.post(
+        "/bots",
+        json={"game_id": "missing-game", "name": "custom"},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "unsupported_game",
+            "message": "Unsupported game: missing-game",
+        }
+    }
+    assert sqlite_database_dependency.query(Bot).count() == 0
+
+
+def test_create_bot_returns_409_for_duplicate_name_within_game(sqlite_database_dependency):
+    login_user(sqlite_database_dependency)
+    seed_bot(sqlite_database_dependency, name="custom", game_id="tictactoe")
+
+    response = client.post(
+        "/bots",
+        json={"game_id": "tictactoe", "name": "custom"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "bot_name_taken",
+            "message": "Bot name is already taken for this game.",
+        }
+    }
+    assert sqlite_database_dependency.query(Bot).count() == 1
+
+
+def test_create_bot_sets_owner_to_authenticated_user(sqlite_database_dependency):
+    user = login_user(sqlite_database_dependency)
+
+    response = client.post(
+        "/bots",
+        json={"game_id": "tictactoe", "name": "custom"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    bot = sqlite_database_dependency.query(Bot).one()
+
+    assert body == {
+        "bot_id": bot.id,
+        "game_id": "tictactoe",
+        "name": "custom",
+        "owner_id": user.id,
+    }
+    assert bot.owner_id == user.id
 
 
 def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(

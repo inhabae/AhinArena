@@ -76,3 +76,13 @@ class LeaderboardEntry(BaseModel):
 class BotSummary(BaseModel):
     bot_id: int
     name: str
+
+class BotCreateRequest(BaseModel):
+    game_id: str
+    name: str
+
+class BotCreateResponse(BaseModel):
+    bot_id: int
+    game_id: str
+    name: str
+    owner_id: int
