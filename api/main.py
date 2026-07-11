@@ -224,17 +224,6 @@ def score_for_bot_one_or_error(
     bot_one_id: int,
     bot_two_id: int,
 ) -> float:
-<<<<<<< Updated upstream
-    assert winner_bot_id in {bot_one_id, bot_two_id, None}
-
-    if winner_bot_id == bot_one_id:
-        return 1.0
-
-    if winner_bot_id is None:
-        return 0.5
-
-    return 0.0
-=======
     try:
         return calculate_score_for_bot_one(
             winner_bot_id=winner_bot_id,
@@ -243,7 +232,6 @@ def score_for_bot_one_or_error(
         )
     except ValueError:
         api_error(500, "unknown_winner_bot", f"Unknown winner bot: {winner_bot_id}")
->>>>>>> Stashed changes
 
 
 def apply_match_record_updates(
