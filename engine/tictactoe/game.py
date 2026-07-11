@@ -8,7 +8,7 @@ class Board:
 
         if self.grid[row][col] != " ":
             return False
-    
+
         self.grid[row][col] = marker
         return True
 
