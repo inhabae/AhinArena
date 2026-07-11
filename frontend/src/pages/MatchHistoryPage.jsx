@@ -2,18 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { getMatches } from "../api/client";
-
-const games = [
-  { id: "", label: "All games" },
-  { id: "tictactoe", label: "Tic Tac Toe" },
-  { id: "connect-four", label: "Connect Four" },
-];
+import { formatGame, gameFilters } from "../games";
 
 const pageSize = 20;
-
-function formatGame(gameId) {
-  return games.find((game) => game.id === gameId)?.label ?? gameId;
-}
 
 function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, {
@@ -39,7 +30,7 @@ function formatDelta(value) {
 }
 
 function getValidGame(gameId) {
-  return games.some((game) => game.id === gameId) ? gameId : "";
+  return gameFilters.some((game) => game.id === gameId) ? gameId : "";
 }
 
 function getValidOffset(value) {
@@ -161,7 +152,7 @@ export default function MatchHistoryPage() {
       </div>
 
       <div className="game-tabs" role="tablist" aria-label="Filter matches by game">
-        {games.map((game) => (
+        {gameFilters.map((game) => (
           <button
             key={game.label}
             type="button"

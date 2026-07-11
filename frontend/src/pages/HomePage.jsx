@@ -2,12 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { createMatch, getBots, getMatches } from "../api/client";
+import { formatGame, supportedGames } from "../games";
 import { useAuth } from "../useAuth";
-
-const games = [
-  { id: "tictactoe", label: "Tic Tac Toe" },
-  { id: "connect-four", label: "Connect Four" },
-];
 
 const recentMatchLimit = 5;
 
@@ -31,10 +27,6 @@ function errorMessageFor(error) {
   return error.message || "The match could not be started.";
 }
 
-function formatGame(gameId) {
-  return games.find((game) => game.id === gameId)?.label ?? gameId;
-}
-
 function formatResult(match) {
   if (match.winner_bot_name) {
     return `${match.winner_bot_name} won`;
@@ -50,7 +42,7 @@ function formatBotOption(bot) {
 export default function HomePage() {
   const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [selectedGame, setSelectedGame] = useState(games[0].id);
+  const [selectedGame, setSelectedGame] = useState(supportedGames[0].id);
   const [botsState, setBotsState] = useState({
     loading: true,
     items: [],
@@ -191,7 +183,7 @@ export default function HomePage() {
       </div>
 
       <div className="game-tabs" role="tablist" aria-label="Game">
-        {games.map((game) => (
+        {supportedGames.map((game) => (
           <button
             key={game.id}
             type="button"

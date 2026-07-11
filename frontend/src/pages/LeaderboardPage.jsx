@@ -2,18 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { getLeaderboard } from "../api/client";
-
-const games = [
-  { id: "tictactoe", label: "Tic Tac Toe" },
-  { id: "connect-four", label: "Connect Four" },
-];
+import { defaultGameId, isSupportedGame, supportedGames } from "../games";
 
 const defaultPageSize = 50;
 const maxPageSize = 500;
 const pageSizeOptions = [25, 50, 100, 250, 500];
 
 function getValidGame(gameId) {
-  return games.some((game) => game.id === gameId) ? gameId : games[0].id;
+  return isSupportedGame(gameId) ? gameId : defaultGameId;
 }
 
 function clampLimit(value) {
@@ -174,7 +170,7 @@ export default function LeaderboardPage() {
       </div>
 
       <div className="game-tabs" role="tablist" aria-label="Select leaderboard game">
-        {games.map((game) => (
+        {supportedGames.map((game) => (
           <button
             key={game.id}
             type="button"
