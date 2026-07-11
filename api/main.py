@@ -1,14 +1,16 @@
 import os
+import secrets
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 
-from api.auth import hash_password
+from api.auth import hash_password, verify_password
 from api.database import get_db, get_sessionmaker
-from api.models import Bot, Match, Move, User
+from api.models import Bot, Match, Move, Session as AuthSession, User
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
 from engine.registry import UnknownBotError, bot_registry
-from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
@@ -31,6 +33,7 @@ from api.schemas import (
     MoveEntry,
     LeaderboardEntry,
     BotSummary,
+    UserLoginRequest,
     UserPublic,
     UserRegisterRequest,
 )
@@ -44,11 +47,87 @@ DEFAULT_CORS_ALLOWED_ORIGINS = (
     "http://localhost:3000,"
     "http://127.0.0.1:3000"
 )
+SESSION_COOKIE_NAME = "ahin_arena_session"
+SESSION_ID_BYTES = 48
+SESSION_TTL = timedelta(days=14)
 
 
 def get_cors_allowed_origins() -> list[str]:
     origins = os.environ.get("CORS_ALLOWED_ORIGINS", DEFAULT_CORS_ALLOWED_ORIGINS)
-    return [origin.strip() for origin in origins.split(",") if origin.strip()]
+    allowed_origins = [origin.strip() for origin in origins.split(",") if origin.strip()]
+    if "*" in allowed_origins:
+        raise ValueError("CORS_ALLOWED_ORIGINS cannot include * when credentials are enabled.")
+    return allowed_origins
+
+
+def should_secure_auth_cookie() -> bool:
+    environment = (
+        os.environ.get("ENVIRONMENT")
+        or os.environ.get("APP_ENV")
+        or os.environ.get("FASTAPI_ENV")
+        or "development"
+    )
+    return environment.lower() in {"production", "prod"}
+
+
+def set_session_cookie(response: Response, session_id: str, expires_at: datetime) -> None:
+    max_age = max(0, int((expires_at - datetime.now(timezone.utc)).total_seconds()))
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        session_id,
+        max_age=max_age,
+        httponly=True,
+        secure=should_secure_auth_cookie(),
+        samesite="lax",
+    )
+
+
+def clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        SESSION_COOKIE_NAME,
+        httponly=True,
+        secure=should_secure_auth_cookie(),
+        samesite="lax",
+    )
+
+
+def is_expired(expires_at: datetime) -> bool:
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at <= datetime.now(timezone.utc)
+
+
+def unauthorized():
+    api_error(401, "unauthorized", "Unauthorized.")
+
+
+def invalid_credentials():
+    api_error(401, "invalid_credentials", "Invalid credentials.")
+
+
+def get_current_user(
+    session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+    db: Session = Depends(get_db),
+) -> User:
+    if not session_id:
+        unauthorized()
+
+    auth_session = (
+        db.query(AuthSession)
+        .options(selectinload(AuthSession.user))
+        .filter(AuthSession.id == session_id)
+        .first()
+    )
+
+    if auth_session is None or auth_session.user is None:
+        unauthorized()
+
+    if is_expired(auth_session.expires_at):
+        db.delete(auth_session)
+        db.commit()
+        unauthorized()
+
+    return auth_session.user
 
 
 def seed_default_bots(db: Session) -> None:
@@ -199,7 +278,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_allowed_origins(),
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -253,6 +332,63 @@ def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
         id=user.id,
         email=user.email,
         created_at=user.created_at,
+    )
+
+
+@app.post(
+    "/auth/login",
+    response_model=UserPublic,
+)
+def login_user(
+    request: UserLoginRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    normalized_email = request.email.strip().lower()
+    user = db.query(User).filter(User.email == normalized_email).first()
+
+    if user is None or not verify_password(request.password, user.password_hash):
+        invalid_credentials()
+
+    expires_at = datetime.now(timezone.utc) + SESSION_TTL
+    auth_session = AuthSession(
+        id=secrets.token_urlsafe(SESSION_ID_BYTES),
+        user_id=user.id,
+        expires_at=expires_at,
+    )
+    db.add(auth_session)
+    db.commit()
+
+    set_session_cookie(response, auth_session.id, expires_at)
+
+    return UserPublic(
+        id=user.id,
+        email=user.email,
+        created_at=user.created_at,
+    )
+
+
+@app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout_user(
+    response: Response,
+    session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+    db: Session = Depends(get_db),
+):
+    if session_id:
+        auth_session = db.query(AuthSession).filter(AuthSession.id == session_id).first()
+        if auth_session is not None:
+            db.delete(auth_session)
+            db.commit()
+
+    clear_session_cookie(response)
+
+
+@app.get("/auth/me", response_model=UserPublic)
+def get_authenticated_user(current_user: User = Depends(get_current_user)):
+    return UserPublic(
+        id=current_user.id,
+        email=current_user.email,
+        created_at=current_user.created_at,
     )
 
 

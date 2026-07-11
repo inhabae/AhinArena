@@ -307,6 +307,10 @@ If unset, the local-development default allows `http://localhost:5173`,
 `http://127.0.0.1:5173`, `http://localhost:3000`, and
 `http://127.0.0.1:3000`.
 
+The API enables credentialed CORS so browser requests can include the auth
+cookie. Because credentials are allowed, `CORS_ALLOWED_ORIGINS` must list
+explicit origins and cannot be `*`.
+
 Run database migrations with Alembic:
 
 ```sh
