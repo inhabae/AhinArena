@@ -58,14 +58,14 @@ def get_bot_owner_name(bot: Bot) -> str:
     if bot.owner is None:
         return "System"
 
-    return bot.owner.email
+    return bot.owner.username
 
 
 def get_bot_owner_display_name(bot: Bot) -> str | None:
     if bot.owner is None:
         return None
 
-    return bot.owner.email
+    return bot.owner.username
 
 
 def get_cors_allowed_origins() -> list[str]:
@@ -317,17 +317,34 @@ def health_check():
 )
 def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
     normalized_email = request.email.strip().lower()
-    existing_user = db.query(User).filter(User.email == normalized_email).first()
+    username = request.username.strip()
 
-    if existing_user is not None:
+    if not username:
+        api_error(422, "validation_error", "Username is required.")
+
+    existing_user = (
+        db.query(User)
+        .filter((User.email == normalized_email) | (User.username == username))
+        .first()
+    )
+
+    if existing_user is not None and existing_user.email == normalized_email:
         api_error(
             409,
             "email_already_registered",
             "Email is already registered.",
         )
 
+    if existing_user is not None:
+        api_error(
+            409,
+            "username_already_taken",
+            "Username is already taken.",
+        )
+
     user = User(
         email=normalized_email,
+        username=username,
         password_hash=hash_password(request.password),
     )
     db.add(user)
@@ -336,17 +353,14 @@ def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
         db.commit()
     except IntegrityError:
         db.rollback()
-        api_error(
-            409,
-            "email_already_registered",
-            "Email is already registered.",
-        )
+        api_error(409, "registration_conflict", "Email or username is already registered.")
 
     db.refresh(user)
 
     return UserPublic(
         id=user.id,
         email=user.email,
+        username=user.username,
         created_at=user.created_at,
     )
 
@@ -380,6 +394,7 @@ def login_user(
     return UserPublic(
         id=user.id,
         email=user.email,
+        username=user.username,
         created_at=user.created_at,
     )
 
@@ -404,6 +419,7 @@ def get_authenticated_user(current_user: User = Depends(get_current_user)):
     return UserPublic(
         id=current_user.id,
         email=current_user.email,
+        username=current_user.username,
         created_at=current_user.created_at,
     )
 
