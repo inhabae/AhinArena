@@ -445,13 +445,30 @@ def test_list_bots_returns_empty_list_for_unknown_game(sqlite_database_dependenc
     assert response.json() == []
 
 
-def test_list_bots_returns_empty_list_for_empty_game_id(sqlite_database_dependency):
-    seed_bot(sqlite_database_dependency, name="random", game_id="tictactoe")
+def test_list_bots_returns_all_bots_without_game_id(sqlite_database_dependency):
+    alpha = seed_bot(sqlite_database_dependency, name="alpha", game_id="tictactoe")
+    beta = seed_bot(sqlite_database_dependency, name="beta", game_id="connect-four")
+
+    response = client.get("/bots")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"bot_id": alpha.id, "name": "alpha"},
+        {"bot_id": beta.id, "name": "beta"},
+    ]
+
+
+def test_list_bots_returns_all_bots_for_empty_game_id(sqlite_database_dependency):
+    alpha = seed_bot(sqlite_database_dependency, name="alpha", game_id="tictactoe")
+    beta = seed_bot(sqlite_database_dependency, name="beta", game_id="connect-four")
 
     response = client.get("/bots?game_id=")
 
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json() == [
+        {"bot_id": alpha.id, "name": "alpha"},
+        {"bot_id": beta.id, "name": "beta"},
+    ]
 
 
 def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(
