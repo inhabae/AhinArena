@@ -33,6 +33,8 @@ from api.schemas import (
     MoveEntry,
     LeaderboardEntry,
     BotSummary,
+    BotCreateRequest,
+    BotCreateResponse,
     UserLoginRequest,
     UserPublic,
     UserRegisterRequest,
@@ -389,6 +391,54 @@ def get_authenticated_user(current_user: User = Depends(get_current_user)):
         id=current_user.id,
         email=current_user.email,
         created_at=current_user.created_at,
+    )
+
+
+def bot_name_taken():
+    api_error(409, "bot_name_taken", "Bot name is already taken for this game.")
+
+
+@app.post(
+    "/bots",
+    status_code=status.HTTP_201_CREATED,
+    response_model=BotCreateResponse,
+)
+def create_bot(
+    request: BotCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if request.game_id not in SUPPORTED_GAMES:
+        api_error(400, "unsupported_game", f"Unsupported game: {request.game_id}")
+
+    existing_bot = (
+        db.query(Bot)
+        .filter(Bot.game_id == request.game_id, Bot.name == request.name)
+        .first()
+    )
+    if existing_bot is not None:
+        bot_name_taken()
+
+    bot = Bot(
+        name=request.name,
+        game_id=request.game_id,
+        owner_id=current_user.id,
+    )
+    db.add(bot)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        bot_name_taken()
+
+    db.refresh(bot)
+
+    return BotCreateResponse(
+        bot_id=bot.id,
+        game_id=bot.game_id,
+        name=bot.name,
+        owner_id=bot.owner_id,
     )
 
 
