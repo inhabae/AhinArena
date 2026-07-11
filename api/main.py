@@ -396,17 +396,12 @@ def list_bots(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    if not game_id:
-        return []
+    query = db.query(Bot)
 
-    bots = (
-        db.query(Bot)
-        .filter(Bot.game_id == game_id)
-        .order_by(Bot.name.asc(), Bot.id.asc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    if game_id:
+        query = query.filter(Bot.game_id == game_id)
+
+    bots = query.order_by(Bot.name.asc(), Bot.id.asc()).offset(offset).limit(limit).all()
 
     return [
         BotSummary(
