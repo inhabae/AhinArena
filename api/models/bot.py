@@ -18,7 +18,7 @@ from api.ratings import DEFAULT_ELO_RATING
 class Bot(Base):
     __tablename__ = "bots"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
 
     name = Column(String, nullable=False)
 

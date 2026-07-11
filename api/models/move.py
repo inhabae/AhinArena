@@ -10,7 +10,7 @@ class Move(Base):
         UniqueConstraint("match_id", "move_number", name="uq_moves_match_id_move_number"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
 
     match_id = Column(Integer, ForeignKey("matches.id"), nullable=False, index=True)
 

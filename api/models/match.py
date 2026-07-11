@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import relationship
 
 from api.database import Base
@@ -6,8 +6,9 @@ from api.database import Base
 
 class Match(Base):
     __tablename__ = "matches"
+    __table_args__ = (Index("ix_matches_game_id", "game_id"),)
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
 
     game_id = Column(String, nullable=False)
 
