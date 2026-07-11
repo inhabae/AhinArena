@@ -73,8 +73,8 @@ def valid_connectfour_match_request():
     }
 
 
-def seed_bot(session, *, name="random", game_id="tictactoe", created_by="system"):
-    bot = Bot(name=name, game_id=game_id, created_by=created_by)
+def seed_bot(session, *, name="random", game_id="tictactoe"):
+    bot = Bot(name=name, game_id=game_id)
     session.add(bot)
     session.commit()
     return bot
@@ -520,7 +520,6 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
     low = Bot(
         name="low",
         game_id="tictactoe",
-        created_by="test",
         rating=1100,
         games_played=3,
         wins=1,
@@ -530,18 +529,16 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
     high = Bot(
         name="high",
         game_id="tictactoe",
-        created_by="test",
         rating=1500,
         games_played=4,
         wins=3,
         losses=1,
         draws=0,
     )
-    no_games = Bot(name="new", game_id="tictactoe", created_by="test")
+    no_games = Bot(name="new", game_id="tictactoe")
     other_game = Bot(
         name="connect-four-high",
         game_id="connect-four",
-        created_by="test",
         rating=1800,
     )
     sqlite_database_dependency.add_all([low, high, no_games, other_game])
@@ -582,8 +579,8 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
 
 
 def test_leaderboard_uses_stable_tie_breaker(sqlite_database_dependency):
-    second = Bot(name="second", game_id="tictactoe", created_by="test", rating=1300)
-    first = Bot(name="first", game_id="tictactoe", created_by="test", rating=1300)
+    second = Bot(name="second", game_id="tictactoe", rating=1300)
+    first = Bot(name="first", game_id="tictactoe", rating=1300)
     sqlite_database_dependency.add_all([second, first])
     sqlite_database_dependency.commit()
 
@@ -595,9 +592,9 @@ def test_leaderboard_uses_stable_tie_breaker(sqlite_database_dependency):
 
 def test_leaderboard_paginates_results(sqlite_database_dependency):
     bots = [
-        Bot(name="first", game_id="tictactoe", created_by="test", rating=1500),
-        Bot(name="second", game_id="tictactoe", created_by="test", rating=1400),
-        Bot(name="third", game_id="tictactoe", created_by="test", rating=1300),
+        Bot(name="first", game_id="tictactoe", rating=1500),
+        Bot(name="second", game_id="tictactoe", rating=1400),
+        Bot(name="third", game_id="tictactoe", rating=1300),
     ]
     sqlite_database_dependency.add_all(bots)
     sqlite_database_dependency.commit()
@@ -630,9 +627,9 @@ def test_leaderboard_validates_pagination_parameters(query):
 
 
 def test_list_bots_returns_bots_for_game_ordered_by_name(sqlite_database_dependency):
-    beta = Bot(name="beta", game_id="tictactoe", created_by="test")
-    alpha = Bot(name="alpha", game_id="tictactoe", created_by="test")
-    other_game = Bot(name="alpha", game_id="connect-four", created_by="test")
+    beta = Bot(name="beta", game_id="tictactoe")
+    alpha = Bot(name="alpha", game_id="tictactoe")
+    other_game = Bot(name="alpha", game_id="connect-four")
     sqlite_database_dependency.add_all([beta, alpha, other_game])
     sqlite_database_dependency.commit()
 
@@ -700,6 +697,12 @@ def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(
         {"bot_id": 3, "name": "randombot1"},
         {"bot_id": 4, "name": "randombot2"},
     ]
+    assert {
+        bot.owner_id
+        for bot in sqlite_database_dependency.query(Bot)
+        .filter(Bot.name.in_(("randombot1", "randombot2")))
+        .all()
+    } == {None}
 
 
 def test_seed_default_bots_is_idempotent(sqlite_database_dependency):
@@ -711,9 +714,9 @@ def test_seed_default_bots_is_idempotent(sqlite_database_dependency):
 
 def test_list_bots_paginates_results(sqlite_database_dependency):
     bots = [
-        Bot(name="alpha", game_id="tictactoe", created_by="test"),
-        Bot(name="beta", game_id="tictactoe", created_by="test"),
-        Bot(name="gamma", game_id="tictactoe", created_by="test"),
+        Bot(name="alpha", game_id="tictactoe"),
+        Bot(name="beta", game_id="tictactoe"),
+        Bot(name="gamma", game_id="tictactoe"),
     ]
     sqlite_database_dependency.add_all(bots)
     sqlite_database_dependency.commit()
@@ -932,7 +935,6 @@ def test_create_match_updates_distinct_bot_ratings_and_records(
     bot_one = Bot(
         name="alpha",
         game_id="tictactoe",
-        created_by="test",
         rating=1400,
         games_played=3,
         wins=2,
@@ -942,7 +944,6 @@ def test_create_match_updates_distinct_bot_ratings_and_records(
     bot_two = Bot(
         name="beta",
         game_id="tictactoe",
-        created_by="test",
         rating=1200,
         games_played=4,
         wins=1,
@@ -1007,8 +1008,8 @@ def test_create_match_updates_ratings_and_records_for_draw(
     sqlite_database_dependency,
     monkeypatch,
 ):
-    bot_one = Bot(name="draw-alpha", game_id="tictactoe", created_by="test")
-    bot_two = Bot(name="draw-beta", game_id="tictactoe", created_by="test")
+    bot_one = Bot(name="draw-alpha", game_id="tictactoe")
+    bot_two = Bot(name="draw-beta", game_id="tictactoe")
     sqlite_database_dependency.add_all([bot_one, bot_two])
     sqlite_database_dependency.commit()
 
