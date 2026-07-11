@@ -1,4 +1,5 @@
 import importlib
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,7 @@ from alembic.operations import Operations
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.models import Bot, Match, Move
+from api.models import Bot, Match, Move, Session as AuthSession, User
 
 
 spec = importlib.util.spec_from_file_location(
@@ -21,6 +22,17 @@ spec = importlib.util.spec_from_file_location(
 baseline_schema = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(baseline_schema)
+
+auth_spec = importlib.util.spec_from_file_location(
+    "add_users_and_sessions",
+    Path(__file__).parents[2]
+    / "alembic"
+    / "versions"
+    / "49ec82f79706_add_users_and_sessions.py",
+)
+auth_schema = importlib.util.module_from_spec(auth_spec)
+assert auth_spec.loader is not None
+auth_spec.loader.exec_module(auth_schema)
 
 EXPECTED_MATCH_COLUMNS = {
     "id",
@@ -59,6 +71,20 @@ EXPECTED_BOT_COLUMNS = {
     "draws",
     "created_at",
     "updated_at",
+}
+
+EXPECTED_USER_COLUMNS = {
+    "id",
+    "email",
+    "password_hash",
+    "created_at",
+}
+
+EXPECTED_SESSION_COLUMNS = {
+    "id",
+    "user_id",
+    "created_at",
+    "expires_at",
 }
 
 
@@ -137,6 +163,84 @@ def test_bot_table_applies_defaults_and_unique_names_within_game():
         session.add(Bot(name="random", game_id="tictactoe", created_by="system"))
         with pytest.raises(IntegrityError):
             session.commit()
+
+
+def test_user_model_declares_expected_columns_and_constraints():
+    assert set(User.__table__.columns.keys()) == EXPECTED_USER_COLUMNS
+
+    assert User.__table__.c.email.nullable is False
+    assert User.__table__.c.email.type.length == 320
+    assert User.__table__.c.password_hash.nullable is False
+    assert User.__table__.c.password_hash.type.length == 255
+    assert User.__table__.c.created_at.nullable is False
+
+    constraints = {constraint.name: constraint for constraint in User.__table__.constraints}
+    assert constraints["uq_users_email"].columns.keys() == ["email"]
+    assert "ck_users_email_max_length" in constraints
+    assert "ck_users_email_format" in constraints
+
+
+def test_session_model_declares_expected_columns_and_cascade_foreign_key():
+    assert set(AuthSession.__table__.columns.keys()) == EXPECTED_SESSION_COLUMNS
+
+    assert AuthSession.__table__.c.id.nullable is False
+    assert AuthSession.__table__.c.id.type.length == 128
+    assert AuthSession.__table__.c.user_id.nullable is False
+    assert AuthSession.__table__.c.created_at.nullable is False
+    assert AuthSession.__table__.c.expires_at.nullable is False
+
+    foreign_keys = list(AuthSession.__table__.c.user_id.foreign_keys)
+    assert len(foreign_keys) == 1
+    assert foreign_keys[0].target_fullname == "users.id"
+    assert foreign_keys[0].ondelete == "CASCADE"
+
+    indexes = {index.name: index for index in AuthSession.__table__.indexes}
+    assert indexes["ix_sessions_user_id"].columns.keys() == ["user_id"]
+
+
+def test_user_table_enforces_unique_email_and_email_format():
+    engine = sa.create_engine("sqlite:///:memory:")
+    User.__table__.create(engine)
+
+    with Session(engine) as session:
+        session.add(User(email="player@example.com", password_hash="hash"))
+        session.commit()
+
+        session.add(User(email="player@example.com", password_hash="other-hash"))
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+    with Session(engine) as session:
+        session.add(User(email="not-an-email", password_hash="hash"))
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+
+def test_deleting_user_cascades_to_sessions():
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    @sa.event.listens_for(engine, "connect")
+    def enable_foreign_keys(dbapi_connection, _connection_record):
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+    User.__table__.create(engine)
+    AuthSession.__table__.create(engine)
+
+    with Session(engine) as session:
+        user = User(email="player@example.com", password_hash="hash")
+        user.sessions.append(
+            AuthSession(
+                id="opaque-session-token",
+                expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+            )
+        )
+        session.add(user)
+        session.commit()
+
+        session.delete(user)
+        session.commit()
+
+        assert session.query(AuthSession).count() == 0
 
 
 def test_match_model_declares_expected_columns():
@@ -260,6 +364,83 @@ def test_baseline_migration_creates_expected_schema(monkeypatch):
             constraint["column_names"] == ["match_id", "move_number"]
             for constraint in move_unique_constraints
         )
+
+
+def test_auth_migration_creates_users_and_sessions_schema(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        operations = Operations(context)
+        monkeypatch.setattr(baseline_schema, "op", operations)
+        monkeypatch.setattr(auth_schema, "op", operations)
+
+        baseline_schema.upgrade()
+        auth_schema.upgrade()
+
+        inspector = sa.inspect(connection)
+        user_columns = {column["name"]: column for column in inspector.get_columns("users")}
+        session_columns = {
+            column["name"]: column for column in inspector.get_columns("sessions")
+        }
+        user_unique_constraints = inspector.get_unique_constraints("users")
+        user_check_constraints = inspector.get_check_constraints("users")
+        session_foreign_keys = inspector.get_foreign_keys("sessions")
+        session_indexes = inspector.get_indexes("sessions")
+
+        assert set(user_columns) == EXPECTED_USER_COLUMNS
+        assert set(session_columns) == EXPECTED_SESSION_COLUMNS
+
+        assert user_columns["email"]["nullable"] is False
+        assert user_columns["email"]["type"].length == 320
+        assert user_columns["password_hash"]["nullable"] is False
+        assert user_columns["password_hash"]["type"].length == 255
+        assert user_columns["created_at"]["nullable"] is False
+        assert inspector.get_pk_constraint("users")["constrained_columns"] == ["id"]
+        assert any(
+            constraint["column_names"] == ["email"]
+            for constraint in user_unique_constraints
+        )
+        assert {
+            constraint["name"] for constraint in user_check_constraints
+        } >= {"ck_users_email_format", "ck_users_email_max_length"}
+
+        assert session_columns["id"]["nullable"] is False
+        assert session_columns["id"]["type"].length == 128
+        assert session_columns["user_id"]["nullable"] is False
+        assert session_columns["created_at"]["nullable"] is False
+        assert session_columns["expires_at"]["nullable"] is False
+        assert inspector.get_pk_constraint("sessions")["constrained_columns"] == ["id"]
+        assert any(
+            foreign_key["constrained_columns"] == ["user_id"]
+            and foreign_key["referred_table"] == "users"
+            and foreign_key["referred_columns"] == ["id"]
+            and foreign_key["options"].get("ondelete") == "CASCADE"
+            for foreign_key in session_foreign_keys
+        )
+        assert any(
+            index["column_names"] == ["user_id"]
+            for index in session_indexes
+        )
+
+
+def test_auth_migration_downgrade_drops_users_and_sessions(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        operations = Operations(context)
+        monkeypatch.setattr(baseline_schema, "op", operations)
+        monkeypatch.setattr(auth_schema, "op", operations)
+
+        baseline_schema.upgrade()
+        auth_schema.upgrade()
+        auth_schema.downgrade()
+
+        inspector = sa.inspect(connection)
+        assert "users" not in inspector.get_table_names()
+        assert "sessions" not in inspector.get_table_names()
+        assert {"bots", "matches", "moves"} <= set(inspector.get_table_names())
 
 
 def test_baseline_migration_downgrade_drops_schema(monkeypatch):
