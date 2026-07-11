@@ -15,7 +15,7 @@ class User(Base):
         CheckConstraint("email LIKE '%_@_%._%'", name="ck_users_email_format"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
 
     email = Column(String(320), nullable=False)
     username = Column(String(80), nullable=False)

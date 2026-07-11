@@ -56,6 +56,17 @@ username_schema = importlib.util.module_from_spec(username_spec)
 assert username_spec.loader is not None
 username_spec.loader.exec_module(username_schema)
 
+cleanup_indexes_spec = importlib.util.spec_from_file_location(
+    "cleanup_redundant_pk_indexes",
+    Path(__file__).parents[2]
+    / "alembic"
+    / "versions"
+    / "d6f4c8a1b2e3_cleanup_redundant_pk_indexes.py",
+)
+cleanup_indexes_schema = importlib.util.module_from_spec(cleanup_indexes_spec)
+assert cleanup_indexes_spec.loader is not None
+cleanup_indexes_spec.loader.exec_module(cleanup_indexes_schema)
+
 EXPECTED_MATCH_COLUMNS = {
     "id",
     "game_id",
@@ -169,6 +180,7 @@ def test_bot_model_declares_expected_columns_defaults_and_constraints():
 
     indexes = {index.name: index for index in Bot.__table__.indexes}
     assert indexes["ix_bots_game_id_rating"].columns.keys() == ["game_id", "rating"]
+    assert "ix_bots_id" not in indexes
 
 
 def test_bot_table_applies_defaults_and_unique_names_within_game():
@@ -214,6 +226,8 @@ def test_user_model_declares_expected_columns_and_constraints():
     assert "ck_users_email_format" in constraints
     assert "ck_users_username_min_length" in constraints
     assert "ck_users_username_max_length" in constraints
+
+    assert not User.__table__.indexes
 
 
 def test_session_model_declares_expected_columns_and_cascade_foreign_key():
@@ -316,6 +330,10 @@ def test_match_model_declares_expected_columns():
     assert Match.__table__.c.winner_bot_id.nullable is True
     assert Match.__table__.c.result_reason.nullable is False
 
+    indexes = {index.name: index for index in Match.__table__.indexes}
+    assert indexes["ix_matches_game_id"].columns.keys() == ["game_id"]
+    assert "ix_matches_id" not in indexes
+
 
 def test_move_model_declares_expected_columns():
     assert set(Move.__table__.columns.keys()) == EXPECTED_MOVE_COLUMNS
@@ -328,6 +346,9 @@ def test_move_model_declares_expected_columns():
         for foreign_key in Move.__table__.c.bot_id.foreign_keys
     } == {"bots.id"}
     assert Move.__table__.c.move.nullable is False
+
+    indexes = {index.name: index for index in Move.__table__.indexes}
+    assert "ix_moves_id" not in indexes
 
 
 def test_baseline_migration_creates_expected_schema(monkeypatch):
@@ -507,6 +528,44 @@ def test_username_migration_adds_unique_required_username(monkeypatch):
         assert {
             constraint["name"] for constraint in user_check_constraints
         } >= {"ck_users_username_min_length", "ck_users_username_max_length"}
+
+
+def test_cleanup_indexes_migration_removes_redundant_pk_indexes(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        operations = Operations(context)
+        monkeypatch.setattr(baseline_schema, "op", operations)
+        monkeypatch.setattr(auth_schema, "op", operations)
+        monkeypatch.setattr(bot_owner_schema, "op", operations)
+        monkeypatch.setattr(username_schema, "op", operations)
+        monkeypatch.setattr(cleanup_indexes_schema, "op", operations)
+
+        baseline_schema.upgrade()
+        auth_schema.upgrade()
+        bot_owner_schema.upgrade()
+        username_schema.upgrade()
+        cleanup_indexes_schema.upgrade()
+
+        inspector = sa.inspect(connection)
+        bot_indexes = {index["name"]: index for index in inspector.get_indexes("bots")}
+        match_indexes = {
+            index["name"]: index for index in inspector.get_indexes("matches")
+        }
+        move_indexes = {index["name"]: index for index in inspector.get_indexes("moves")}
+        user_indexes = {index["name"]: index for index in inspector.get_indexes("users")}
+
+        assert "ix_bots_id" not in bot_indexes
+        assert "ix_matches_id" not in match_indexes
+        assert "ix_moves_id" not in move_indexes
+        assert "ix_users_id" not in user_indexes
+        assert match_indexes["ix_matches_game_id"]["column_names"] == ["game_id"]
+        assert bot_indexes["ix_bots_game_id_rating"]["column_names"] == [
+            "game_id",
+            "rating",
+        ]
+        assert move_indexes["ix_moves_match_id"]["column_names"] == ["match_id"]
 
 
 def test_bot_owner_migration_replaces_created_by_with_nullable_owner_id(monkeypatch):
