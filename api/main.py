@@ -54,6 +54,13 @@ SESSION_ID_BYTES = 48
 SESSION_TTL = timedelta(days=14)
 
 
+def get_bot_owner_name(bot: Bot) -> str:
+    if bot.owner is None:
+        return "System"
+
+    return bot.owner.email
+
+
 def get_cors_allowed_origins() -> list[str]:
     origins = os.environ.get("CORS_ALLOWED_ORIGINS", DEFAULT_CORS_ALLOWED_ORIGINS)
     allowed_origins = [origin.strip() for origin in origins.split(",") if origin.strip()]
@@ -604,6 +611,7 @@ def get_leaderboard(
 ):
     bots = (
         db.query(Bot)
+        .options(selectinload(Bot.owner))
         .filter(Bot.game_id == game_id)
         .order_by(Bot.rating.desc(), Bot.id.asc())
         .offset(offset)
@@ -615,6 +623,7 @@ def get_leaderboard(
         {
             "bot_id": bot.id,
             "name": bot.name,
+            "owner_name": get_bot_owner_name(bot),
             "rating": bot.rating,
             "games_played": bot.games_played,
             "wins": bot.wins,
@@ -636,12 +645,19 @@ def list_bots(
     if game_id:
         query = query.filter(Bot.game_id == game_id)
 
-    bots = query.order_by(Bot.name.asc(), Bot.id.asc()).offset(offset).limit(limit).all()
+    bots = (
+        query.options(selectinload(Bot.owner))
+        .order_by(Bot.name.asc(), Bot.id.asc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
     return [
         BotSummary(
             bot_id=bot.id,
             name=bot.name,
+            owner_name=get_bot_owner_name(bot),
         )
         for bot in bots
     ]

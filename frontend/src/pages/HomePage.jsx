@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { createMatch, getBots, getMatches } from "../api/client";
+import { useAuth } from "../useAuth";
 
 const games = [
   { id: "tictactoe", label: "Tic Tac Toe" },
@@ -44,6 +45,7 @@ function formatResult(match) {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [selectedGame, setSelectedGame] = useState(games[0].id);
   const [botsState, setBotsState] = useState({
     loading: true,
@@ -118,8 +120,15 @@ export default function HomePage() {
   }, [selectedGame]);
 
   const canSubmit = useMemo(
-    () => Boolean(botOne && botTwo && botOne !== botTwo && !submitState.loading),
-    [botOne, botTwo, submitState.loading],
+    () =>
+      Boolean(
+        isAuthenticated &&
+          botOne &&
+          botTwo &&
+          botOne !== botTwo &&
+          !submitState.loading,
+      ),
+    [botOne, botTwo, isAuthenticated, submitState.loading],
   );
   const hasDuplicateBots = Boolean(botOne && botTwo && botOne === botTwo);
   const matchFeedback = submitState.error
@@ -142,6 +151,11 @@ export default function HomePage() {
   async function handleSubmit(event) {
     event.preventDefault();
 
+    if (!isAuthenticated) {
+      navigate("/login?next=/");
+      return;
+    }
+
     if (!canSubmit) {
       return;
     }
@@ -156,6 +170,11 @@ export default function HomePage() {
 
       navigate(`/matches/${match.match_id}`);
     } catch (error) {
+      if (error.status === 401) {
+        navigate("/login?next=/");
+        return;
+      }
+
       setSubmitState({ loading: false, error });
     }
   }
@@ -183,7 +202,7 @@ export default function HomePage() {
       </div>
 
       <section className="home-grid">
-        <form className="match-panel" onSubmit={handleSubmit}>
+        <section className="match-panel">
           <div className="section-heading">
             <h2>Start a new match</h2>
             <span>{formatGame(selectedGame)}</span>
@@ -195,43 +214,59 @@ export default function HomePage() {
             </p>
           )}
 
-          <div className="match-controls">
-            <label>
-              <span>Select your bot</span>
-              <select
-                value={botOne}
-                onChange={(event) => setBotOne(event.target.value)}
-                disabled={botsState.loading || botsState.items.length === 0}
-              >
-                {botsState.items.map((bot) => (
-                  <option key={bot.bot_id} value={bot.name}>
-                    {bot.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {authLoading && <p className="empty-state">Checking session...</p>}
 
-            <span className="versus">vs</span>
+          {!authLoading && !isAuthenticated && (
+            <div className="login-gate">
+              <div>
+                <h3>Log in to start a match</h3>
+                <p>Match creation is available after you log in.</p>
+              </div>
+              <Link className="button-link" to="/login?next=/">
+                Log in
+              </Link>
+            </div>
+          )}
 
-            <label>
-              <span>Select opponent bot</span>
-              <select
-                value={botTwo}
-                onChange={(event) => setBotTwo(event.target.value)}
-                disabled={botsState.loading || botsState.items.length === 0}
-              >
-                {botsState.items.map((bot) => (
-                  <option key={bot.bot_id} value={bot.name}>
-                    {bot.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {!authLoading && isAuthenticated && (
+            <form className="match-controls" onSubmit={handleSubmit}>
+              <label>
+                <span>Select your bot</span>
+                <select
+                  value={botOne}
+                  onChange={(event) => setBotOne(event.target.value)}
+                  disabled={botsState.loading || botsState.items.length === 0}
+                >
+                  {botsState.items.map((bot) => (
+                    <option key={bot.bot_id} value={bot.name}>
+                      {bot.name} ({bot.owner_name})
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <button type="submit" disabled={!canSubmit}>
-              {submitState.loading ? "Running..." : "Run match"}
-            </button>
-          </div>
+              <span className="versus">vs</span>
+
+              <label>
+                <span>Select opponent bot</span>
+                <select
+                  value={botTwo}
+                  onChange={(event) => setBotTwo(event.target.value)}
+                  disabled={botsState.loading || botsState.items.length === 0}
+                >
+                  {botsState.items.map((bot) => (
+                    <option key={bot.bot_id} value={bot.name}>
+                      {bot.name} ({bot.owner_name})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button type="submit" disabled={!canSubmit}>
+                {submitState.loading ? "Running..." : "Run match"}
+              </button>
+            </form>
+          )}
 
           <div className="match-feedback" aria-live="polite">
             {matchFeedback && (
@@ -240,7 +275,7 @@ export default function HomePage() {
               </p>
             )}
           </div>
-        </form>
+        </section>
 
         <div className="stats-row" aria-label={`${formatGame(selectedGame)} stats`}>
           <div className="stat-card">

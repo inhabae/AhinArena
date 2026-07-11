@@ -58,6 +58,7 @@ button:disabled {
 
 button:focus-visible,
 a:focus-visible,
+input:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -110,6 +111,22 @@ select:focus-visible {
   align-items: center;
   display: flex;
   gap: 6px;
+}
+
+.auth-nav {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.auth-nav > span {
+  color: var(--text-muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-link {
@@ -352,6 +369,17 @@ select {
   width: 100%;
 }
 
+input {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font: 14px/1.2 var(--sans);
+  min-height: 38px;
+  padding: 0 11px;
+  width: 100%;
+}
+
 select:disabled {
   color: var(--text-muted);
   opacity: 0.7;
@@ -369,6 +397,62 @@ select:disabled {
 
 .match-feedback p {
   margin: 0;
+}
+
+.login-gate {
+  align-items: center;
+  background: var(--surface-subtle);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.login-gate > div {
+  display: grid;
+  gap: 4px;
+}
+
+.login-gate p {
+  color: var(--text-muted);
+}
+
+.button-link {
+  align-items: center;
+  background: var(--accent);
+  border: 0.5px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--surface);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-weight: 500;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  text-decoration: none;
+}
+
+.form-panel {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 18px;
+  max-width: 720px;
+  padding: 24px;
+}
+
+.form-panel label {
+  color: var(--text-primary);
+  display: grid;
+  font-weight: 500;
+  gap: 7px;
+}
+
+.form-panel label span {
+  font-size: 13px;
 }
 
 .empty-state {
@@ -445,7 +529,7 @@ select:disabled {
 }
 
 .leaderboard-table {
-  min-width: 720px;
+  min-width: 820px;
 }
 
 .match-replay-panel {
@@ -821,6 +905,11 @@ code {
     width: 100%;
   }
 
+  .auth-nav {
+    margin-left: 0;
+    width: 100%;
+  }
+
   .nav-link {
     flex: 1 1 auto;
     justify-content: center;
@@ -847,6 +936,11 @@ code {
 
   .versus {
     padding: 0;
+  }
+
+  .login-gate {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .recent-match-list a {

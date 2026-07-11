@@ -67,6 +67,7 @@ class MatchListResponse(BaseModel):
 class LeaderboardEntry(BaseModel):
     bot_id: int
     name: str
+    owner_name: str
     rating: int
     games_played: int
     wins: int
@@ -76,6 +77,7 @@ class LeaderboardEntry(BaseModel):
 class BotSummary(BaseModel):
     bot_id: int
     name: str
+    owner_name: str
 
 class BotCreateRequest(BaseModel):
     game_id: str

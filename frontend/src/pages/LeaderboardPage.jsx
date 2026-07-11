@@ -229,6 +229,7 @@ export default function LeaderboardPage() {
                 <tr>
                   <th scope="col">Rank</th>
                   <th scope="col">Bot name</th>
+                  <th scope="col">Owner</th>
                   <th scope="col">Rating</th>
                   <th scope="col">Games played</th>
                   <th scope="col">Win rate</th>
@@ -240,6 +241,7 @@ export default function LeaderboardPage() {
                   <tr key={bot.bot_id}>
                     <td>{offset + index + 1}</td>
                     <td className="bot-name-cell">{bot.name}</td>
+                    <td>{bot.owner_name}</td>
                     <td>{bot.rating}</td>
                     <td>{bot.games_played}</td>
                     <td>{formatWinRate(bot)}</td>
