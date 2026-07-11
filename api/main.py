@@ -223,14 +223,13 @@ def score_for_bot_one(
     bot_one_id: int,
     bot_two_id: int,
 ) -> float:
+    assert winner_bot_id in {bot_one_id, bot_two_id, None}
+
     if winner_bot_id == bot_one_id:
         return 1.0
 
     if winner_bot_id is None:
         return 0.5
-
-    if winner_bot_id != bot_two_id:
-        api_error(500, "unknown_winner_bot", f"Unknown winner bot: {winner_bot_id}")
 
     return 0.0
 
@@ -243,17 +242,8 @@ def apply_match_record_updates(
     bot_one_rating_after: int,
     bot_two_rating_after: int,
 ) -> None:
-    if bot_one.id == bot_two.id:
-        bot_one.rating += (bot_one_rating_after - bot_one.rating) + (
-            bot_two_rating_after - bot_two.rating
-        )
-        bot_one.games_played += 2
-        if winner_bot_id is None:
-            bot_one.draws += 2
-        else:
-            bot_one.wins += 1
-            bot_one.losses += 1
-        return
+    assert bot_one.id != bot_two.id
+    assert winner_bot_id in {bot_one.id, bot_two.id, None}
 
     bot_one.rating = bot_one_rating_after
     bot_two.rating = bot_two_rating_after
@@ -269,8 +259,6 @@ def apply_match_record_updates(
     elif winner_bot_id == bot_two.id:
         bot_two.wins += 1
         bot_one.losses += 1
-    else:
-        api_error(500, "unknown_winner_bot", f"Unknown winner bot: {winner_bot_id}")
 
 
 @asynccontextmanager
