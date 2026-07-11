@@ -12,16 +12,16 @@ The system consists of a web frontend, backend services, persistent storage, and
 
 ```text
         Frontend (React + Vite)
-   Home / History / Leaderboard / Replay
+ Auth / Home / History / Leaderboard / Replay
                         │
                         │ /api via frontend/src/api/client.js
                         ▼
               Backend API (FastAPI)
                         │
-        ┌───────────────┼───────────────┐
-        │               │               │
-        ▼               ▼               ▼
-   PostgreSQL         Redis        Matchmaker
+        ┌───────────────┼───────────────┬───────────────┐
+        │               │               │               │
+        ▼               ▼               ▼               ▼
+   PostgreSQL    Session Storage      Redis        Matchmaker
                                         │
                                         ▼
                                   Game Runner
@@ -38,15 +38,20 @@ The system consists of a web frontend, backend services, persistent storage, and
 ## Components
 
 - **Frontend** — React/Vite web interface in `frontend/`. It uses React Router
-  for the Home, Match History, Leaderboard, and Match Detail/Replay pages.
+  for the Login, Register, Home, Bot Registration, Match History, Leaderboard,
+  and Match Detail/Replay pages.
 - **Frontend API client** — `frontend/src/api/client.js` centralizes browser
   calls to the Backend API. It prefixes requests with `/api`, serializes query
   params, parses JSON responses, and raises `ApiError` instances for normalized
   backend errors.
-- **Backend API** — FastAPI application logic for health checks, bot lookup,
-  match creation, match history, match detail, and leaderboard data.
+- **Backend API** — FastAPI application logic for health checks, registration,
+  login/logout, current-user lookup, bot lookup and creation, match creation,
+  match history, match detail, and leaderboard data.
 - **PostgreSQL** — Persistent data for bots, completed matches, ordered moves,
-  ratings, records, and per-match rating snapshots.
+  ratings, records, users, sessions, and per-match rating snapshots.
+- **Session Storage** — Server-side auth sessions stored in the PostgreSQL
+  `sessions` table and referenced by the browser's HTTP-only
+  `ahin_arena_session` cookie. Expired sessions are removed when encountered.
 - **Redis** — Planned cache and queue layer.
 - **Matchmaker** — Planned opponent selection service.
 - **Game Runner** — Executes matches through the registered game engines.
@@ -60,8 +65,12 @@ proxies browser requests from `/api/*` to the FastAPI backend at
 
 The main routes are:
 
+- `/login` — Login page that posts credentials and receives the session cookie.
+- `/register` — Registration page that creates an account before login.
 - `/` — Home page for selecting a supported game, choosing two registered bots,
   starting a match, and viewing recent matches for the selected game.
+- `/bots/new` — Authenticated bot registration page for adding a bot name to a
+  supported game.
 - `/matches` — Match history page with all-game or per-game filtering and
   limit/offset-backed pagination.
 - `/leaderboard` — Leaderboard page with per-game rankings, configurable row
@@ -78,3 +87,7 @@ move number.
 Known frontend gap: replay rendering currently supports `tictactoe` and
 `connect-four`. Other persisted game IDs fall back to a match summary with a
 message that replay is not supported yet.
+
+Known auth gap: sessions are durable and cookie-backed, but account management
+is intentionally minimal. Password reset, email verification, role-based access,
+and custom bot code upload are not implemented yet.

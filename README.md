@@ -47,7 +47,7 @@ Backend API (FastAPI)
 - [x] Milestone 4 — Persistent Match History
 - [x] Milestone 5 — Elo Leaderboard
 - [x] Milestone 6 — Web Interface
-- [ ] Milestone 7 — User Accounts
+- [x] Milestone 7 — User Accounts
 - [ ] Milestone 8 — Bot Submission
 - [ ] Milestone 9 — Docker Sandboxing
 - [ ] Milestone 10 — Queue & Workers
@@ -89,6 +89,8 @@ Both local runners print each move, the board after that move, and the final mat
 The React/Vite frontend lives in `frontend/`. It provides:
 
 - a Home page for selecting a game, choosing two registered bots, starting a match, and viewing recent matches;
+- Login and Register pages for account creation and cookie-backed sessions;
+- a Bot Registration page for authenticated users to add bots for supported games;
 - a Match History page with game filtering and pagination;
 - a Leaderboard page with per-game rankings, configurable row count, and pagination;
 - a Match Detail page with rating summaries, ordered move history, and replay controls.
@@ -111,11 +113,113 @@ replay.
 
 ---
 
+## Auth and Bot API
+
+User accounts use server-side sessions persisted in PostgreSQL and identified by
+an `ahin_arena_session` HTTP-only cookie. Login, logout, current-user, bot
+creation, and match creation requests rely on that cookie.
+
+Register a user:
+
+```http
+POST /auth/register
+```
+
+```json
+{
+  "email": "player@example.com",
+  "username": "player",
+  "password": "correct horse battery staple"
+}
+```
+
+Successful registration returns `201 Created` with the public user shape:
+
+```json
+{
+  "id": 1,
+  "email": "player@example.com",
+  "username": "player",
+  "created_at": "2026-07-10T17:00:00Z"
+}
+```
+
+Duplicate email or username values return `409` responses with
+`email_already_registered`, `username_already_taken`, or
+`registration_conflict` error codes.
+
+Log in with an existing account:
+
+```http
+POST /auth/login
+```
+
+```json
+{
+  "email": "player@example.com",
+  "password": "correct horse battery staple"
+}
+```
+
+Successful login returns the same public user shape and sets the
+`ahin_arena_session` cookie. Invalid credentials return `401` with
+`invalid_credentials`.
+
+Fetch the authenticated user:
+
+```http
+GET /auth/me
+```
+
+Missing, invalid, or expired sessions return `401` with `unauthorized`.
+
+Log out and clear the current session:
+
+```http
+POST /auth/logout
+```
+
+Logout returns `204 No Content`. It is idempotent for missing cookies.
+
+Create a bot for the authenticated user:
+
+```http
+POST /bots
+```
+
+```json
+{
+  "game_id": "tictactoe",
+  "name": "my-bot"
+}
+```
+
+Successful bot creation returns `201 Created`:
+
+```json
+{
+  "bot_id": 3,
+  "game_id": "tictactoe",
+  "name": "my-bot",
+  "owner_id": 1
+}
+```
+
+Unsupported games return `400` with `unsupported_game`; duplicate bot names
+within the same game return `409` with `bot_name_taken`; unauthenticated
+requests return `401` with `unauthorized`.
+
+Known gap: bot creation currently registers metadata and ownership only. Custom
+bot code upload and sandboxed execution remain planned work.
+
+---
+
 ## Match API
 
 `POST /matches` runs a match, persists the completed match and move history to
 PostgreSQL, and returns a compact `201 Created` response with the persisted
-`match_id`. PostgreSQL is required for API persistence.
+`match_id`. The request requires an authenticated session cookie. PostgreSQL is
+required for API persistence.
 
 Tic-Tac-Toe:
 

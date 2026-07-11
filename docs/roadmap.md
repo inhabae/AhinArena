@@ -128,6 +128,21 @@ tracking rankings, and replaying supported games.
 
 Allow users to create accounts and manage their bots.
 
+**Deliverables**
+
+- User registration through `POST /auth/register`
+- Login through `POST /auth/login` with server-side session storage
+- Logout through `POST /auth/logout` with session deletion and cookie clearing
+- Current-user lookup through `GET /auth/me`
+- HTTP-only `ahin_arena_session` cookie support with credentialed CORS
+- PostgreSQL-backed users and sessions schema with Alembic migrations
+- Authenticated match creation for `POST /matches`
+- Authenticated bot creation through `POST /bots`
+- Bot ownership stored on bot records
+- Frontend Login and Register pages at `/login` and `/register`
+- Auth-aware Home and Bot Registration flows
+- Auth flow documentation in `README.md`, `docs/architecture.md`, and `docs/frontend.md`
+
 ---
 
 ## Milestone 8 — Bot Submission

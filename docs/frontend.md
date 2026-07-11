@@ -25,6 +25,9 @@ Routes are defined in `frontend/src/App.jsx`:
 - `/` renders `HomePage`.
 - `/matches` renders `MatchHistoryPage`.
 - `/leaderboard` renders `LeaderboardPage`.
+- `/bots/new` renders `BotRegistrationPage`.
+- `/login` renders `LoginPage`.
+- `/register` renders `RegisterPage`.
 - `/matches/:matchId` renders `MatchDetailPage`.
 
 All routes share `AppLayout`, which provides the common application shell.
@@ -37,10 +40,30 @@ All routes share `AppLayout`, which provides the common application shell.
 either Tic-Tac-Toe or Connect Four, loads registered bots for that game with
 `getBots`, and submits a `POST /matches` request through `createMatch`. A
 successful match creation navigates directly to the persisted match detail page.
+Starting a match requires an authenticated session; unauthenticated users are
+sent to `/login`.
 
 The page also loads a small recent-match list with `getMatches`, filtered to the
 selected game and limited to five rows. It displays basic totals for matches
 played and bots registered.
+
+### Login and Register
+
+`frontend/src/pages/LoginPage.jsx` posts email and password credentials through
+`loginUser`. A successful login stores the session in the backend's HTTP-only
+cookie and refreshes the shared auth context.
+
+`frontend/src/pages/RegisterPage.jsx` creates an account through `registerUser`
+and then sends the user to `/login`. Registration errors map backend auth error
+codes such as `email_already_registered` and `username_already_taken` to form
+messages.
+
+### Bot Registration
+
+`frontend/src/pages/BotRegistrationPage.jsx` requires an authenticated session.
+It submits `POST /bots` through `createBot`, assigning the new bot to the
+current user and selected supported game. Users without a valid session are sent
+to `/login`.
 
 ### Match History
 
@@ -128,6 +151,15 @@ Exported endpoint helpers are:
 - `createMatch(match)` -> `POST /matches`
 - `getLeaderboard(params)` -> `GET /leaderboard`
 - `getBots(params)` -> `GET /bots`
+- `createBot(bot)` -> `POST /bots`
+- `getCurrentUser()` -> `GET /auth/me`
+- `loginUser(credentials)` -> `POST /auth/login`
+- `registerUser(credentials)` -> `POST /auth/register`
+- `logoutUser()` -> `POST /auth/logout`
 
 Pages should use these helpers instead of calling `fetch` directly so error
 handling and `/api` URL construction stay consistent.
+
+Known gap: auth-aware pages use the shared session context, but the frontend
+does not yet provide password reset, email verification, or full account
+management screens.
