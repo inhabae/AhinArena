@@ -2,12 +2,14 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
     UniqueConstraint,
     func,
 )
+from sqlalchemy.orm import relationship
 
 from api.database import Base
 from api.ratings import DEFAULT_ELO_RATING
@@ -22,7 +24,8 @@ class Bot(Base):
 
     game_id = Column(String, nullable=False)
 
-    created_by = Column(String, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    owner = relationship("User")
 
     rating = Column(
         Integer,

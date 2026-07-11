@@ -34,6 +34,17 @@ auth_schema = importlib.util.module_from_spec(auth_spec)
 assert auth_spec.loader is not None
 auth_spec.loader.exec_module(auth_schema)
 
+bot_owner_spec = importlib.util.spec_from_file_location(
+    "replace_bot_created_by_with_owner_id",
+    Path(__file__).parents[2]
+    / "alembic"
+    / "versions"
+    / "8a4f1f3d7b20_replace_bot_created_by_with_owner_id.py",
+)
+bot_owner_schema = importlib.util.module_from_spec(bot_owner_spec)
+assert bot_owner_spec.loader is not None
+bot_owner_spec.loader.exec_module(bot_owner_schema)
+
 EXPECTED_MATCH_COLUMNS = {
     "id",
     "game_id",
@@ -63,7 +74,7 @@ EXPECTED_BOT_COLUMNS = {
     "id",
     "name",
     "game_id",
-    "created_by",
+    "owner_id",
     "rating",
     "games_played",
     "wins",
@@ -72,6 +83,8 @@ EXPECTED_BOT_COLUMNS = {
     "created_at",
     "updated_at",
 }
+
+EXPECTED_BASELINE_BOT_COLUMNS = (EXPECTED_BOT_COLUMNS - {"owner_id"}) | {"created_by"}
 
 EXPECTED_USER_COLUMNS = {
     "id",
@@ -106,7 +119,11 @@ def test_bot_model_declares_expected_columns_defaults_and_constraints():
 
     assert Bot.__table__.c.name.nullable is False
     assert Bot.__table__.c.game_id.nullable is False
-    assert Bot.__table__.c.created_by.nullable is False
+    assert Bot.__table__.c.owner_id.nullable is True
+    assert {
+        foreign_key.target_fullname
+        for foreign_key in Bot.__table__.c.owner_id.foreign_keys
+    } == {"users.id"}
     assert Bot.__table__.c.rating.nullable is False
     assert Bot.__table__.c.games_played.nullable is False
     assert Bot.__table__.c.wins.nullable is False
@@ -142,14 +159,14 @@ def test_bot_model_declares_expected_columns_defaults_and_constraints():
 
 def test_bot_table_applies_defaults_and_unique_names_within_game():
     engine = sa.create_engine("sqlite:///:memory:")
+    User.__table__.create(engine)
     Bot.__table__.create(engine)
 
     with Session(engine) as session:
-        bot = Bot(name="random", game_id="tictactoe", created_by="system")
+        bot = Bot(name="random", game_id="tictactoe")
         same_name_different_game = Bot(
             name="random",
             game_id="connect-four",
-            created_by="system",
         )
         session.add_all([bot, same_name_different_game])
         session.commit()
@@ -160,7 +177,7 @@ def test_bot_table_applies_defaults_and_unique_names_within_game():
         assert bot.losses == 0
         assert bot.draws == 0
 
-        session.add(Bot(name="random", game_id="tictactoe", created_by="system"))
+        session.add(Bot(name="random", game_id="tictactoe"))
         with pytest.raises(IntegrityError):
             session.commit()
 
@@ -309,7 +326,7 @@ def test_baseline_migration_creates_expected_schema(monkeypatch):
         match_foreign_keys = inspector.get_foreign_keys("matches")
         bot_unique_constraints = inspector.get_unique_constraints("bots")
 
-        assert set(bot_columns) == EXPECTED_BOT_COLUMNS
+        assert set(bot_columns) == EXPECTED_BASELINE_BOT_COLUMNS
         assert set(match_columns) == EXPECTED_MATCH_COLUMNS
         assert set(move_columns) == EXPECTED_MOVE_COLUMNS
 
@@ -421,6 +438,34 @@ def test_auth_migration_creates_users_and_sessions_schema(monkeypatch):
         assert any(
             index["column_names"] == ["user_id"]
             for index in session_indexes
+        )
+
+
+def test_bot_owner_migration_replaces_created_by_with_nullable_owner_id(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        operations = Operations(context)
+        monkeypatch.setattr(baseline_schema, "op", operations)
+        monkeypatch.setattr(auth_schema, "op", operations)
+        monkeypatch.setattr(bot_owner_schema, "op", operations)
+
+        baseline_schema.upgrade()
+        auth_schema.upgrade()
+        bot_owner_schema.upgrade()
+
+        inspector = sa.inspect(connection)
+        bot_columns = {column["name"]: column for column in inspector.get_columns("bots")}
+        bot_foreign_keys = inspector.get_foreign_keys("bots")
+
+        assert set(bot_columns) == EXPECTED_BOT_COLUMNS
+        assert bot_columns["owner_id"]["nullable"] is True
+        assert any(
+            foreign_key["constrained_columns"] == ["owner_id"]
+            and foreign_key["referred_table"] == "users"
+            and foreign_key["referred_columns"] == ["id"]
+            for foreign_key in bot_foreign_keys
         )
 
 

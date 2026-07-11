@@ -143,7 +143,7 @@ def seed_default_bots(db: Session) -> None:
 
         for bot_name in DEFAULT_BOT_NAMES:
             if bot_name not in existing_names:
-                db.add(Bot(name=bot_name, game_id=game_id, created_by="system"))
+                db.add(Bot(name=bot_name, game_id=game_id, owner_id=None))
 
     db.commit()
 
