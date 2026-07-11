@@ -6,8 +6,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from api.auth import hash_password, verify_password
 from api.database import Base, get_db
-from api.models import Bot, Match, Move
+from api.models import Bot, Match, Move, User
 import api.main as api_main
 
 
@@ -140,6 +141,58 @@ def test_health_endpoint_returns_ok():
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_password_hash_verifies_round_trip():
+    password_hash = hash_password("correct horse battery staple")
+
+    assert password_hash != "correct horse battery staple"
+    assert verify_password("correct horse battery staple", password_hash) is True
+
+
+def test_password_hash_rejects_wrong_password():
+    password_hash = hash_password("correct horse battery staple")
+
+    assert verify_password("wrong password", password_hash) is False
+
+
+def test_register_user_creates_public_user_response(sqlite_database_dependency):
+    response = client.post(
+        "/auth/register",
+        json={"email": "Player@Example.com", "password": "super-secret"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert set(body.keys()) == {"id", "email", "created_at"}
+    assert body["email"] == "player@example.com"
+    assert body["created_at"]
+
+    user = sqlite_database_dependency.query(User).one()
+    assert user.email == "player@example.com"
+    assert user.password_hash != "super-secret"
+    assert verify_password("super-secret", user.password_hash) is True
+
+
+def test_register_user_returns_409_for_duplicate_email(sqlite_database_dependency):
+    sqlite_database_dependency.add(
+        User(email="player@example.com", password_hash=hash_password("old-password"))
+    )
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        "/auth/register",
+        json={"email": "PLAYER@example.com", "password": "new-password"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "email_already_registered",
+            "message": "Email is already registered.",
+        }
+    }
+    assert sqlite_database_dependency.query(User).count() == 1
 
 
 def test_cors_allowed_origins_default_to_local_react_dev_servers(monkeypatch):

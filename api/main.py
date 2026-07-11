@@ -1,8 +1,9 @@
 import os
 from contextlib import asynccontextmanager
 
+from api.auth import hash_password
 from api.database import get_db, get_sessionmaker
-from api.models import Bot, Match, Move
+from api.models import Bot, Match, Move, User
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
@@ -10,6 +11,7 @@ from engine.registry import UnknownBotError, bot_registry
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -29,6 +31,8 @@ from api.schemas import (
     MoveEntry,
     LeaderboardEntry,
     BotSummary,
+    UserPublic,
+    UserRegisterRequest,
 )
 
 
@@ -209,6 +213,48 @@ app.add_exception_handler(Exception, unexpected_exception_handler)
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.post(
+    "/auth/register",
+    status_code=status.HTTP_201_CREATED,
+    response_model=UserPublic,
+)
+def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
+    normalized_email = request.email.strip().lower()
+    existing_user = db.query(User).filter(User.email == normalized_email).first()
+
+    if existing_user is not None:
+        api_error(
+            409,
+            "email_already_registered",
+            "Email is already registered.",
+        )
+
+    user = User(
+        email=normalized_email,
+        password_hash=hash_password(request.password),
+    )
+    db.add(user)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        api_error(
+            409,
+            "email_already_registered",
+            "Email is already registered.",
+        )
+
+    db.refresh(user)
+
+    return UserPublic(
+        id=user.id,
+        email=user.email,
+        created_at=user.created_at,
+    )
+
 
 @app.post(
     "/matches",
