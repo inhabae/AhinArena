@@ -565,6 +565,7 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
         {
             "bot_id": high.id,
             "name": "high",
+            "owner_name": "System",
             "rating": 1500,
             "games_played": 4,
             "wins": 3,
@@ -574,6 +575,7 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
         {
             "bot_id": no_games.id,
             "name": "new",
+            "owner_name": "System",
             "rating": 1200,
             "games_played": 0,
             "wins": 0,
@@ -583,6 +585,7 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
         {
             "bot_id": low.id,
             "name": "low",
+            "owner_name": "System",
             "rating": 1100,
             "games_played": 3,
             "wins": 1,
@@ -604,6 +607,35 @@ def test_leaderboard_uses_stable_tie_breaker(sqlite_database_dependency):
     assert [bot["bot_id"] for bot in response.json()] == [second.id, first.id]
 
 
+def test_leaderboard_returns_user_and_system_bot_owners(sqlite_database_dependency):
+    user = User(
+        email="owner@example.com",
+        password_hash=hash_password("password"),
+    )
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.flush()
+    system_bot = Bot(name="system", game_id="tictactoe", rating=1400)
+    user_bot = Bot(
+        name="owned",
+        game_id="tictactoe",
+        rating=1300,
+        owner_id=user.id,
+    )
+    sqlite_database_dependency.add_all([system_bot, user_bot])
+    sqlite_database_dependency.commit()
+
+    response = client.get("/leaderboard?game_id=tictactoe")
+
+    assert response.status_code == 200
+    assert [
+        (bot["name"], bot["owner_name"])
+        for bot in response.json()
+    ] == [
+        ("system", "System"),
+        ("owned", "owner@example.com"),
+    ]
+
+
 def test_leaderboard_paginates_results(sqlite_database_dependency):
     bots = [
         Bot(name="first", game_id="tictactoe", rating=1500),
@@ -620,6 +652,7 @@ def test_leaderboard_paginates_results(sqlite_database_dependency):
         {
             "bot_id": bots[1].id,
             "name": "second",
+            "owner_name": "System",
             "rating": 1400,
             "games_played": 0,
             "wins": 0,
@@ -651,8 +684,8 @@ def test_list_bots_returns_bots_for_game_ordered_by_name(sqlite_database_depende
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": alpha.id, "name": "alpha"},
-        {"bot_id": beta.id, "name": "beta"},
+        {"bot_id": alpha.id, "name": "alpha", "owner_name": "System"},
+        {"bot_id": beta.id, "name": "beta", "owner_name": "System"},
     ]
 
 
@@ -673,8 +706,8 @@ def test_list_bots_returns_all_bots_without_game_id(sqlite_database_dependency):
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": alpha.id, "name": "alpha"},
-        {"bot_id": beta.id, "name": "beta"},
+        {"bot_id": alpha.id, "name": "alpha", "owner_name": "System"},
+        {"bot_id": beta.id, "name": "beta", "owner_name": "System"},
     ]
 
 
@@ -686,8 +719,29 @@ def test_list_bots_returns_all_bots_for_empty_game_id(sqlite_database_dependency
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": alpha.id, "name": "alpha"},
-        {"bot_id": beta.id, "name": "beta"},
+        {"bot_id": alpha.id, "name": "alpha", "owner_name": "System"},
+        {"bot_id": beta.id, "name": "beta", "owner_name": "System"},
+    ]
+
+
+def test_list_bots_returns_user_and_system_bot_owners(sqlite_database_dependency):
+    user = User(
+        email="owner@example.com",
+        password_hash=hash_password("password"),
+    )
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.flush()
+    system_bot = Bot(name="alpha", game_id="tictactoe")
+    user_bot = Bot(name="beta", game_id="tictactoe", owner_id=user.id)
+    sqlite_database_dependency.add_all([system_bot, user_bot])
+    sqlite_database_dependency.commit()
+
+    response = client.get("/bots?game_id=tictactoe")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"bot_id": system_bot.id, "name": "alpha", "owner_name": "System"},
+        {"bot_id": user_bot.id, "name": "beta", "owner_name": "owner@example.com"},
     ]
 
 
@@ -774,16 +828,16 @@ def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": 1, "name": "randombot1"},
-        {"bot_id": 2, "name": "randombot2"},
+        {"bot_id": 1, "name": "randombot1", "owner_name": "System"},
+        {"bot_id": 2, "name": "randombot2", "owner_name": "System"},
     ]
 
     connectfour_response = client.get("/bots?game_id=connect-four")
 
     assert connectfour_response.status_code == 200
     assert connectfour_response.json() == [
-        {"bot_id": 3, "name": "randombot1"},
-        {"bot_id": 4, "name": "randombot2"},
+        {"bot_id": 3, "name": "randombot1", "owner_name": "System"},
+        {"bot_id": 4, "name": "randombot2", "owner_name": "System"},
     ]
     assert {
         bot.owner_id
@@ -812,7 +866,9 @@ def test_list_bots_paginates_results(sqlite_database_dependency):
     response = client.get("/bots?game_id=tictactoe&limit=1&offset=1")
 
     assert response.status_code == 200
-    assert response.json() == [{"bot_id": bots[1].id, "name": "beta"}]
+    assert response.json() == [
+        {"bot_id": bots[1].id, "name": "beta", "owner_name": "System"}
+    ]
 
 
 @pytest.mark.parametrize("query", ["limit=0", "limit=501", "offset=-1"])

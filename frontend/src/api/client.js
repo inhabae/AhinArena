@@ -41,6 +41,7 @@ function buildUrl(path, params = {}) {
 export async function request(path, options = {}) {
   const { params, headers, ...fetchOptions } = options;
   const response = await fetch(buildUrl(path, params), {
+    credentials: "include",
     ...fetchOptions,
     headers: {
       Accept: "application/json",
@@ -85,10 +86,44 @@ export function createMatch(match) {
   });
 }
 
+export function createBot(bot) {
+  return request("/bots", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(bot),
+  });
+}
+
 export function getLeaderboard(params) {
   return request("/leaderboard", { params });
 }
 
 export function getBots(params) {
   return request("/bots", { params });
+}
+
+export function getCurrentUser() {
+  return request("/auth/me");
+}
+
+export function loginUser(credentials) {
+  return request("/auth/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(credentials),
+  });
+}
+
+export function registerUser(credentials) {
+  return request("/auth/register", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(credentials),
+  });
 }

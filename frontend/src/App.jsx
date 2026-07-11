@@ -1,33 +1,48 @@
 import { Route, Routes } from "react-router-dom";
 
 import AppLayout from "./components/AppLayout";
+import { AuthProvider } from "./auth";
+import BotRegistrationPage from "./pages/BotRegistrationPage";
 import HomePage from "./pages/HomePage";
 import MatchHistoryPage from "./pages/MatchHistoryPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
+import LoginPage from "./pages/LoginPage";
 import MatchDetailPage from "./pages/MatchDetailPage";
 
 function App() {
   return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<HomePage />} />
+    <AuthProvider>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<HomePage />} />
 
-        <Route
-          path="/matches"
-          element={<MatchHistoryPage />}
-        />
+          <Route
+            path="/matches"
+            element={<MatchHistoryPage />}
+          />
 
-        <Route
-          path="/leaderboard"
-          element={<LeaderboardPage />}
-        />
+          <Route
+            path="/leaderboard"
+            element={<LeaderboardPage />}
+          />
 
-        <Route
-          path="/matches/:matchId"
-          element={<MatchDetailPage />}
-        />
-      </Route>
-    </Routes>
+          <Route
+            path="/bots/new"
+            element={<BotRegistrationPage />}
+          />
+
+          <Route
+            path="/login"
+            element={<LoginPage />}
+          />
+
+          <Route
+            path="/matches/:matchId"
+            element={<MatchDetailPage />}
+          />
+        </Route>
+      </Routes>
+    </AuthProvider>
   );
 }
 

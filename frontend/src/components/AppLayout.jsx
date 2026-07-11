@@ -1,13 +1,18 @@
-import { IconChartBar, IconHome, IconTrophy } from "@tabler/icons-react";
+import { IconChartBar, IconHome, IconLogin, IconPlus, IconTrophy } from "@tabler/icons-react";
 import { NavLink, Outlet } from "react-router-dom";
+
+import { useAuth } from "../useAuth";
 
 const navItems = [
   { to: "/", label: "Home", icon: IconHome, end: true },
   { to: "/matches", label: "Match History", icon: IconChartBar },
   { to: "/leaderboard", label: "Leaderboard", icon: IconTrophy },
+  { to: "/bots/new", label: "Register Bot", icon: IconPlus },
 ];
 
 export default function AppLayout() {
+  const { isAuthenticated, loading, user } = useAuth();
+
   return (
     <div className="app-shell">
       <header className="top-nav">
@@ -31,6 +36,18 @@ export default function AppLayout() {
             </NavLink>
           ))}
         </nav>
+
+        <div className="auth-nav">
+          {!loading && isAuthenticated && (
+            <span title={user.email}>{user.email}</span>
+          )}
+          {!loading && !isAuthenticated && (
+            <NavLink to="/login" className="nav-link">
+              <IconLogin size={17} stroke={1.75} aria-hidden="true" />
+              <span>Log in</span>
+            </NavLink>
+          )}
+        </div>
       </header>
 
       <Outlet />
