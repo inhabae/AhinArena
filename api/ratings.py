@@ -36,3 +36,21 @@ def calculate_elo_rating_change(
         bot_one_rating=round(bot_one_rating + k_factor * (bot_one_score - bot_one_expected)),
         bot_two_rating=round(bot_two_rating + k_factor * (bot_two_score - bot_two_expected)),
     )
+
+
+def score_for_bot_one(
+    *,
+    winner_bot_id: int | None,
+    bot_one_id: int,
+    bot_two_id: int,
+) -> float:
+    if winner_bot_id == bot_one_id:
+        return 1.0
+
+    if winner_bot_id is None:
+        return 0.5
+
+    if winner_bot_id != bot_two_id:
+        raise ValueError(f"Unknown winner bot: {winner_bot_id}")
+
+    return 0.0

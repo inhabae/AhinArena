@@ -7,6 +7,7 @@ from api.auth import hash_password, verify_password
 from api.database import get_db, get_sessionmaker
 from api.models import Bot, Match, Move, Session as AuthSession, User
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
+from api.ratings import score_for_bot_one as calculate_score_for_bot_one
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
 from engine.registry import UnknownBotError, bot_registry
@@ -218,20 +219,19 @@ def resolve_bot(db: Session, *, game_id: str, bot_name: str) -> Bot:
     return bot
 
 
-def score_for_bot_one(
+def score_for_bot_one_or_error(
     winner_bot_id: int | None,
     bot_one_id: int,
     bot_two_id: int,
 ) -> float:
-    assert winner_bot_id in {bot_one_id, bot_two_id, None}
-
-    if winner_bot_id == bot_one_id:
-        return 1.0
-
-    if winner_bot_id is None:
-        return 0.5
-
-    return 0.0
+    try:
+        return calculate_score_for_bot_one(
+            winner_bot_id=winner_bot_id,
+            bot_one_id=bot_one_id,
+            bot_two_id=bot_two_id,
+        )
+    except ValueError:
+        api_error(500, "unknown_winner_bot", f"Unknown winner bot: {winner_bot_id}")
 
 
 def apply_match_record_updates(
@@ -519,7 +519,7 @@ def create_match(
     rating_change = calculate_elo_rating_change(
         bot_one_rating=bot_one_rating_before,
         bot_two_rating=bot_two_rating_before,
-        bot_one_score=score_for_bot_one(
+        bot_one_score=score_for_bot_one_or_error(
             winner_bot_id,
             bot_one.id,
             bot_two.id,

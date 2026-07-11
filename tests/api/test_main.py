@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import Response
+from fastapi import HTTPException, Response
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -70,6 +70,21 @@ def valid_connectfour_match_request():
             {"bot": "randombot1"},
             {"bot": "randombot2"},
         ],
+    }
+
+
+def test_score_for_bot_one_or_error_maps_unknown_winner_to_api_error():
+    with pytest.raises(HTTPException) as error:
+        api_main.score_for_bot_one_or_error(
+            winner_bot_id=3,
+            bot_one_id=1,
+            bot_two_id=2,
+        )
+
+    assert error.value.status_code == 500
+    assert error.value.detail == {
+        "code": "unknown_winner_bot",
+        "message": "Unknown winner bot: 3",
     }
 
 
