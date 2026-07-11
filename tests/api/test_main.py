@@ -94,6 +94,14 @@ def login_user(session, *, email="player@example.com", password="correct"):
     return user
 
 
+def authenticate_request_dependency():
+    api_main.app.dependency_overrides[api_main.get_current_user] = lambda: User(
+        id=1,
+        email="player@example.com",
+        password_hash="unused",
+    )
+
+
 @pytest.fixture
 def sqlite_database_dependency():
     engine = create_engine(
@@ -684,8 +692,8 @@ def test_list_bots_returns_bots_for_game_ordered_by_name(sqlite_database_depende
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": alpha.id, "name": "alpha", "owner_name": "System"},
-        {"bot_id": beta.id, "name": "beta", "owner_name": "System"},
+        {"bot_id": alpha.id, "name": "alpha", "owner_name": None},
+        {"bot_id": beta.id, "name": "beta", "owner_name": None},
     ]
 
 
@@ -706,8 +714,8 @@ def test_list_bots_returns_all_bots_without_game_id(sqlite_database_dependency):
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": alpha.id, "name": "alpha", "owner_name": "System"},
-        {"bot_id": beta.id, "name": "beta", "owner_name": "System"},
+        {"bot_id": alpha.id, "name": "alpha", "owner_name": None},
+        {"bot_id": beta.id, "name": "beta", "owner_name": None},
     ]
 
 
@@ -719,8 +727,8 @@ def test_list_bots_returns_all_bots_for_empty_game_id(sqlite_database_dependency
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": alpha.id, "name": "alpha", "owner_name": "System"},
-        {"bot_id": beta.id, "name": "beta", "owner_name": "System"},
+        {"bot_id": alpha.id, "name": "alpha", "owner_name": None},
+        {"bot_id": beta.id, "name": "beta", "owner_name": None},
     ]
 
 
@@ -740,7 +748,7 @@ def test_list_bots_returns_user_and_system_bot_owners(sqlite_database_dependency
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": system_bot.id, "name": "alpha", "owner_name": "System"},
+        {"bot_id": system_bot.id, "name": "alpha", "owner_name": None},
         {"bot_id": user_bot.id, "name": "beta", "owner_name": "owner@example.com"},
     ]
 
@@ -828,16 +836,16 @@ def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": 1, "name": "randombot1", "owner_name": "System"},
-        {"bot_id": 2, "name": "randombot2", "owner_name": "System"},
+        {"bot_id": 1, "name": "randombot1", "owner_name": None},
+        {"bot_id": 2, "name": "randombot2", "owner_name": None},
     ]
 
     connectfour_response = client.get("/bots?game_id=connect-four")
 
     assert connectfour_response.status_code == 200
     assert connectfour_response.json() == [
-        {"bot_id": 3, "name": "randombot1", "owner_name": "System"},
-        {"bot_id": 4, "name": "randombot2", "owner_name": "System"},
+        {"bot_id": 3, "name": "randombot1", "owner_name": None},
+        {"bot_id": 4, "name": "randombot2", "owner_name": None},
     ]
     assert {
         bot.owner_id
@@ -867,7 +875,7 @@ def test_list_bots_paginates_results(sqlite_database_dependency):
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": bots[1].id, "name": "beta", "owner_name": "System"}
+        {"bot_id": bots[1].id, "name": "beta", "owner_name": None}
     ]
 
 
@@ -937,7 +945,23 @@ def test_get_match_returns_404_for_unknown_match_id(sqlite_database_dependency):
     }
 
 
+def test_create_match_requires_authentication(sqlite_database_dependency):
+    api_main.seed_default_bots(sqlite_database_dependency)
+
+    response = client.post("/matches", json=valid_match_request())
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": {
+            "code": "unauthorized",
+            "message": "Unauthorized.",
+        }
+    }
+    assert sqlite_database_dependency.query(Match).count() == 0
+
+
 def test_create_match_uses_overridden_database_session(sqlite_database_dependency):
+    authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
 
     response = client.post("/matches", json=valid_match_request())
@@ -950,6 +974,7 @@ def test_create_match_runs_tictactoe_match_successfully(
     sqlite_database_dependency,
     monkeypatch,
 ):
+    authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
     observed = {}
 
@@ -993,6 +1018,7 @@ def test_create_match_runs_tictactoe_match_successfully(
 
 
 def test_create_match_persists_completed_match(sqlite_database_dependency, monkeypatch):
+    authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
 
     def fake_run_tictactoe_match(p1_command, p2_command, on_move):
@@ -1047,6 +1073,7 @@ def test_create_match_rejects_same_bot_for_both_players(
     sqlite_database_dependency,
     monkeypatch,
 ):
+    authenticate_request_dependency()
     seed_bot(sqlite_database_dependency)
 
     def fake_run_tictactoe_match(p1_command, p2_command, on_move):
@@ -1076,6 +1103,7 @@ def test_create_match_updates_distinct_bot_ratings_and_records(
     sqlite_database_dependency,
     monkeypatch,
 ):
+    authenticate_request_dependency()
     bot_one = Bot(
         name="alpha",
         game_id="tictactoe",
@@ -1152,6 +1180,7 @@ def test_create_match_updates_ratings_and_records_for_draw(
     sqlite_database_dependency,
     monkeypatch,
 ):
+    authenticate_request_dependency()
     bot_one = Bot(name="draw-alpha", game_id="tictactoe")
     bot_two = Bot(name="draw-beta", game_id="tictactoe")
     sqlite_database_dependency.add_all([bot_one, bot_two])
@@ -1203,6 +1232,7 @@ def test_create_match_runs_connectfour_match_successfully(
     sqlite_database_dependency,
     monkeypatch,
 ):
+    authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
     observed = {}
 
@@ -1272,6 +1302,7 @@ def test_create_match_runs_connectfour_match_successfully(
 
 
 def test_create_match_runs_real_random_bot_match_end_to_end(sqlite_database_dependency):
+    authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
 
     response = client.post("/matches", json=valid_match_request())
@@ -1291,6 +1322,7 @@ def test_create_match_runs_real_random_bot_match_end_to_end(sqlite_database_depe
 
 
 def test_create_match_runs_seeded_random_bot_aliases(sqlite_database_dependency):
+    authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
 
     response = client.post(
@@ -1312,6 +1344,7 @@ def test_create_match_runs_seeded_random_bot_aliases(sqlite_database_dependency)
 
 
 def test_create_match_rejects_bot_missing_from_database(sqlite_database_dependency):
+    authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
     payload = valid_match_request()
     payload["players"][1]["bot"] = "missing-bot"
@@ -1330,6 +1363,7 @@ def test_create_match_rejects_bot_missing_from_database(sqlite_database_dependen
 def test_create_match_rejects_first_player_missing_from_database(
     sqlite_database_dependency,
 ):
+    authenticate_request_dependency()
     payload = valid_match_request()
     payload["players"][0]["bot"] = "missing-first-bot"
 
@@ -1347,6 +1381,7 @@ def test_create_match_rejects_first_player_missing_from_database(
 def test_create_match_rejects_database_bot_without_registry_command(
     sqlite_database_dependency,
 ):
+    authenticate_request_dependency()
     seed_bot(sqlite_database_dependency, name="database-only-one")
     seed_bot(sqlite_database_dependency, name="database-only-two")
 
@@ -1371,6 +1406,7 @@ def test_create_match_rejects_database_bot_without_registry_command(
 
 
 def test_create_match_rejects_missing_required_fields():
+    authenticate_request_dependency()
     response = client.post(
         "/matches",
         json={
@@ -1387,6 +1423,7 @@ def test_create_match_rejects_missing_required_fields():
 
 
 def test_create_match_rejects_malformed_json_body():
+    authenticate_request_dependency()
     response = client.post(
         "/matches",
         content="{not valid json",
@@ -1401,6 +1438,7 @@ def test_create_match_rejects_malformed_json_body():
 
 
 def test_create_match_rejects_wrong_payload_types():
+    authenticate_request_dependency()
     response = client.post(
         "/matches",
         json={
@@ -1419,6 +1457,7 @@ def test_create_match_rejects_wrong_payload_types():
 def test_create_match_runs_real_random_connectfour_bot_match_end_to_end(
     sqlite_database_dependency,
 ):
+    authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
 
     payload = valid_match_request()
@@ -1441,6 +1480,7 @@ def test_create_match_runs_real_random_connectfour_bot_match_end_to_end(
 
 
 def test_create_match_rejects_unsupported_game(override_database_dependency):
+    authenticate_request_dependency()
     payload = valid_match_request()
     payload["game"] = "missing-game"
 
@@ -1458,6 +1498,7 @@ def test_create_match_rejects_unsupported_game(override_database_dependency):
 
 
 def test_create_match_rejects_invalid_player_count(override_database_dependency):
+    authenticate_request_dependency()
     payload = {
         "game": "tictactoe",
         "players": [{"bot": "random"}],
@@ -1477,6 +1518,7 @@ def test_create_match_rejects_invalid_player_count(override_database_dependency)
 
 
 def test_create_match_rejects_empty_players():
+    authenticate_request_dependency()
     payload = {
         "game": "tictactoe",
         "players": [],
@@ -1494,6 +1536,7 @@ def test_create_match_rejects_empty_players():
 
 
 def test_create_match_rejects_too_many_players():
+    authenticate_request_dependency()
     payload = valid_match_request()
     payload["players"].append({"bot": "random"})
 
@@ -1512,6 +1555,7 @@ def test_create_match_returns_error_when_match_execution_fails(
     sqlite_database_dependency,
     monkeypatch,
 ):
+    authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
 
     def failing_run_tictactoe_match(p1_command, p2_command, on_move):
