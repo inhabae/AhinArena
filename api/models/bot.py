@@ -20,7 +20,7 @@ class Bot(Base):
 
     id = Column(Integer, primary_key=True)
 
-    name = Column(String, nullable=False)
+    name = Column(String(64), nullable=False)
 
     game_id = Column(String, nullable=False)
 
@@ -48,6 +48,7 @@ class Bot(Base):
 
     __table_args__ = (
         UniqueConstraint("game_id", "name", name="uq_bots_game_id_name"),
+        CheckConstraint("length(name) <= 64", name="ck_bots_name_max_length"),
         CheckConstraint("rating >= 0", name="ck_bots_rating_non_negative"),
         CheckConstraint("games_played >= 0", name="ck_bots_games_played_non_negative"),
         CheckConstraint("wins >= 0", name="ck_bots_wins_non_negative"),

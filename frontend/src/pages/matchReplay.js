@@ -12,7 +12,7 @@ export function getTicTacToeMovePosition(move) {
 
 export function applyTicTacToeMove(board, move, marker) {
   const { row, col } = getTicTacToeMovePosition(move);
-  const nextBoard = board.map((row) => [...row]);
+  const nextBoard = board.map((boardRow) => [...boardRow]);
 
   nextBoard[row][col] = marker;
 

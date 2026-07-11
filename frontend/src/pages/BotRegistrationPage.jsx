@@ -104,7 +104,7 @@ export default function BotRegistrationPage() {
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              maxLength={120}
+              maxLength={64}
               required
             />
           </label>

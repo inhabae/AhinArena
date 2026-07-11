@@ -80,7 +80,7 @@ class MatchSummary(BaseModel):
 class MoveEntry(BaseModel):
     move_number: int
     bot_id: int
-    move: object
+    move: int | list[int]
 
 class MatchDetail(MatchSummary):
     moves: list[MoveEntry]
@@ -108,7 +108,7 @@ class BotSummary(BaseModel):
 
 class BotCreateRequest(BaseModel):
     game_id: str
-    name: str
+    name: str = Field(max_length=64)
 
 class BotCreateResponse(BaseModel):
     bot_id: int
