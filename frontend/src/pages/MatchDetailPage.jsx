@@ -62,20 +62,11 @@ function getBotName(match, botId) {
   return "Unknown bot";
 }
 
-function getEndingBot(match) {
-  const finalMove = match.moves.at(-1);
+function getForfeitingBot(match) {
+  const losingBotId =
+    match.winner_bot_id === match.bot_one_id ? match.bot_two_id : match.bot_one_id;
 
-  if (finalMove) {
-    return getBotName(match, finalMove.bot_id);
-  }
-
-  if (match.result_reason === "timeout" && match.winner_bot_id) {
-    const losingBotId =
-      match.winner_bot_id === match.bot_one_id ? match.bot_two_id : match.bot_one_id;
-    return getBotName(match, losingBotId);
-  }
-
-  return "A bot";
+  return getBotName(match, losingBotId);
 }
 
 function getDeltaClassName(match, delta) {
@@ -353,7 +344,7 @@ export default function MatchDetailPage() {
               <div className="ending-banner" role="status">
                 <strong>{formatReason(match.result_reason)}</strong>
                 <span>
-                  {getEndingBot(match)} caused the match to end by{" "}
+                  {getForfeitingBot(match)} caused the match to end by{" "}
                   {formatReason(match.result_reason)}.
                 </span>
               </div>
