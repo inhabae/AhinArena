@@ -234,6 +234,9 @@ def create_match(
     bot_one = resolve_bot(db, game_id=request.game, bot_name=request.players[0].bot)
     bot_two = resolve_bot(db, game_id=request.game, bot_name=request.players[1].bot)
 
+    if bot_one.id == bot_two.id:
+        api_error(400, "duplicate_bot_match", "A bot cannot play against itself")
+
     try:
         p1_command = bot_registry.get_command(bot_one.name, request.game)
         p2_command = bot_registry.get_command(bot_two.name, request.game)

@@ -23,6 +23,10 @@ function errorMessageFor(error) {
     return "One of the selected bots could not be found. Refresh the list and try again.";
   }
 
+  if (error.code === "duplicate_bot_match") {
+    return "Choose two different bots to start a match.";
+  }
+
   return error.message || "The match could not be started.";
 }
 
@@ -114,9 +118,26 @@ export default function HomePage() {
   }, [selectedGame]);
 
   const canSubmit = useMemo(
-    () => Boolean(botOne && botTwo && !submitState.loading),
+    () => Boolean(botOne && botTwo && botOne !== botTwo && !submitState.loading),
     [botOne, botTwo, submitState.loading],
   );
+  const hasDuplicateBots = Boolean(botOne && botTwo && botOne === botTwo);
+  const matchFeedback = submitState.error
+    ? {
+        className: "error",
+        message: errorMessageFor(submitState.error),
+      }
+    : hasDuplicateBots
+      ? {
+          className: "error",
+          message: "Choose two different bots to start a match.",
+        }
+      : !botsState.loading && botsState.items.length === 0
+        ? {
+            className: "empty-state",
+            message: "No bots are registered for this game yet.",
+          }
+        : null;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -212,15 +233,13 @@ export default function HomePage() {
             </button>
           </div>
 
-          {!botsState.loading && botsState.items.length === 0 && (
-            <p className="empty-state">No bots are registered for this game yet.</p>
-          )}
-
-          {submitState.error && (
-            <p className="error" role="alert">
-              {errorMessageFor(submitState.error)}
-            </p>
-          )}
+          <div className="match-feedback" aria-live="polite">
+            {matchFeedback && (
+              <p className={matchFeedback.className} role="alert">
+                {matchFeedback.message}
+              </p>
+            )}
+          </div>
         </form>
 
         <div className="stats-row" aria-label={`${formatGame(selectedGame)} stats`}>

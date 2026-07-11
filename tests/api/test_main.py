@@ -54,8 +54,8 @@ def valid_match_request():
     return {
         "game": "tictactoe",
         "players": [
-            {"bot": "random"},
-            {"bot": "random"},
+            {"bot": "randombot1"},
+            {"bot": "randombot2"},
         ],
     }
 
@@ -64,8 +64,8 @@ def valid_connectfour_match_request():
     return {
         "game": "connect-four",
         "players": [
-            {"bot": "random"},
-            {"bot": "random"},
+            {"bot": "randombot1"},
+            {"bot": "randombot2"},
         ],
     }
 
@@ -582,7 +582,7 @@ def test_get_match_returns_404_for_unknown_match_id(sqlite_database_dependency):
 
 
 def test_create_match_uses_overridden_database_session(sqlite_database_dependency):
-    seed_bot(sqlite_database_dependency)
+    api_main.seed_default_bots(sqlite_database_dependency)
 
     response = client.post("/matches", json=valid_match_request())
 
@@ -594,7 +594,7 @@ def test_create_match_runs_tictactoe_match_successfully(
     sqlite_database_dependency,
     monkeypatch,
 ):
-    seed_bot(sqlite_database_dependency)
+    api_main.seed_default_bots(sqlite_database_dependency)
     observed = {}
 
     def fake_run_tictactoe_match(p1_command, p2_command, on_move):
@@ -621,11 +621,11 @@ def test_create_match_runs_tictactoe_match_successfully(
     match = sqlite_database_dependency.query(Match).one()
     assert response.headers["location"] == f"/matches/{match.id}"
     assert observed["p1_command"] == api_main.bot_registry.get_command(
-        "random",
+        "randombot1",
         "tictactoe",
     )
     assert observed["p2_command"] == api_main.bot_registry.get_command(
-        "random",
+        "randombot2",
         "tictactoe",
     )
     assert response.json() == {
@@ -637,7 +637,7 @@ def test_create_match_runs_tictactoe_match_successfully(
 
 
 def test_create_match_persists_completed_match(sqlite_database_dependency, monkeypatch):
-    seed_bot(sqlite_database_dependency)
+    api_main.seed_default_bots(sqlite_database_dependency)
 
     def fake_run_tictactoe_match(p1_command, p2_command, on_move):
         on_move("p1", (0, 0), [])
@@ -656,13 +656,14 @@ def test_create_match_persists_completed_match(sqlite_database_dependency, monke
     assert response.json()["match_id"] == match.id
 
     assert match.game_id == "tictactoe"
-    assert match.bot_one_id == match.bot_two_id
+    assert match.bot_one.name == "randombot1"
+    assert match.bot_two.name == "randombot2"
     assert match.bot_one_rating_before == 1200
     assert match.bot_two_rating_before == 1200
-    assert match.bot_one_rating_after == 1216
-    assert match.bot_two_rating_after == 1184
-    assert match.bot_one_rating_delta == 16
-    assert match.bot_two_rating_delta == -16
+    assert match.bot_one_rating_after == 1184
+    assert match.bot_two_rating_after == 1216
+    assert match.bot_one_rating_delta == -16
+    assert match.bot_two_rating_delta == 16
     assert match.winner_bot_id == match.bot_two_id
     assert match.result_reason == "win"
     assert [
@@ -672,12 +673,47 @@ def test_create_match_persists_completed_match(sqlite_database_dependency, monke
         (1, match.bot_one_id, [0, 0]),
         (2, match.bot_two_id, [1, 0]),
     ]
-    bot = sqlite_database_dependency.query(Bot).one()
-    assert bot.rating == 1200
-    assert bot.games_played == 2
-    assert bot.wins == 1
-    assert bot.losses == 1
-    assert bot.draws == 0
+    bot_one = sqlite_database_dependency.get(Bot, match.bot_one_id)
+    bot_two = sqlite_database_dependency.get(Bot, match.bot_two_id)
+    assert bot_one.rating == 1184
+    assert bot_one.games_played == 1
+    assert bot_one.wins == 0
+    assert bot_one.losses == 1
+    assert bot_one.draws == 0
+    assert bot_two.rating == 1216
+    assert bot_two.games_played == 1
+    assert bot_two.wins == 1
+    assert bot_two.losses == 0
+    assert bot_two.draws == 0
+
+
+def test_create_match_rejects_same_bot_for_both_players(
+    sqlite_database_dependency,
+    monkeypatch,
+):
+    seed_bot(sqlite_database_dependency)
+
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+        raise AssertionError("runner should not be called")
+
+    monkeypatch.setattr(api_main, "run_tictactoe_match", fake_run_tictactoe_match)
+
+    response = client.post(
+        "/matches",
+        json={
+            "game": "tictactoe",
+            "players": [{"bot": "random"}, {"bot": "random"}],
+        },
+    )
+
+    assert response.status_code == 400
+    assert sqlite_database_dependency.query(Match).count() == 0
+    assert response.json() == {
+        "error": {
+            "code": "duplicate_bot_match",
+            "message": "A bot cannot play against itself",
+        }
+    }
 
 
 def test_create_match_updates_distinct_bot_ratings_and_records(
@@ -813,7 +849,7 @@ def test_create_match_runs_connectfour_match_successfully(
     sqlite_database_dependency,
     monkeypatch,
 ):
-    seed_bot(sqlite_database_dependency, game_id="connect-four")
+    api_main.seed_default_bots(sqlite_database_dependency)
     observed = {}
 
     def fake_run_connectfour_match(p1_command, p2_command, on_move):
@@ -842,11 +878,11 @@ def test_create_match_runs_connectfour_match_successfully(
     match = sqlite_database_dependency.query(Match).one()
     assert response.headers["location"] == f"/matches/{match.id}"
     assert observed["p1_command"] == api_main.bot_registry.get_command(
-        "random",
+        "randombot1",
         "connect-four",
     )
     assert observed["p2_command"] == api_main.bot_registry.get_command(
-        "random",
+        "randombot2",
         "connect-four",
     )
     assert response.json() == {
@@ -882,7 +918,7 @@ def test_create_match_runs_connectfour_match_successfully(
 
 
 def test_create_match_runs_real_random_bot_match_end_to_end(sqlite_database_dependency):
-    seed_bot(sqlite_database_dependency)
+    api_main.seed_default_bots(sqlite_database_dependency)
 
     response = client.post("/matches", json=valid_match_request())
 
@@ -922,7 +958,7 @@ def test_create_match_runs_seeded_random_bot_aliases(sqlite_database_dependency)
 
 
 def test_create_match_rejects_bot_missing_from_database(sqlite_database_dependency):
-    seed_bot(sqlite_database_dependency)
+    api_main.seed_default_bots(sqlite_database_dependency)
     payload = valid_match_request()
     payload["players"][1]["bot"] = "missing-bot"
 
@@ -957,15 +993,16 @@ def test_create_match_rejects_first_player_missing_from_database(
 def test_create_match_rejects_database_bot_without_registry_command(
     sqlite_database_dependency,
 ):
-    seed_bot(sqlite_database_dependency, name="database-only")
+    seed_bot(sqlite_database_dependency, name="database-only-one")
+    seed_bot(sqlite_database_dependency, name="database-only-two")
 
     response = client.post(
         "/matches",
         json={
             "game": "tictactoe",
             "players": [
-                {"bot": "database-only"},
-                {"bot": "database-only"},
+                {"bot": "database-only-one"},
+                {"bot": "database-only-two"},
             ],
         },
     )
@@ -974,7 +1011,7 @@ def test_create_match_rejects_database_bot_without_registry_command(
     assert response.json() == {
         "error": {
             "code": "unknown_bot",
-            "message": "Unknown bot: database-only",
+            "message": "Unknown bot: database-only-one",
         }
     }
 
@@ -1028,7 +1065,7 @@ def test_create_match_rejects_wrong_payload_types():
 def test_create_match_runs_real_random_connectfour_bot_match_end_to_end(
     sqlite_database_dependency,
 ):
-    seed_bot(sqlite_database_dependency, game_id="connect-four")
+    api_main.seed_default_bots(sqlite_database_dependency)
 
     payload = valid_match_request()
     payload["game"] = "connect-four"
@@ -1121,7 +1158,7 @@ def test_create_match_returns_error_when_match_execution_fails(
     sqlite_database_dependency,
     monkeypatch,
 ):
-    seed_bot(sqlite_database_dependency)
+    api_main.seed_default_bots(sqlite_database_dependency)
 
     def failing_run_tictactoe_match(p1_command, p2_command, on_move):
         raise RuntimeError("runner failed")

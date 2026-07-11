@@ -363,6 +363,14 @@ select:disabled {
   padding-bottom: 11px;
 }
 
+.match-feedback {
+  min-height: 21px;
+}
+
+.match-feedback p {
+  margin: 0;
+}
+
 .empty-state {
   color: var(--text-muted);
 }
