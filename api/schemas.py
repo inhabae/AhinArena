@@ -7,6 +7,11 @@ class UserRegisterRequest(BaseModel):
     password: str
 
 
+class UserLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
 class UserPublic(BaseModel):
     id: int
     email: str

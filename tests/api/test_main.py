@@ -1,6 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
+from fastapi import Response
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -8,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from api.auth import hash_password, verify_password
 from api.database import Base, get_db
-from api.models import Bot, Match, Move, User
+from api.models import Bot, Match, Move, Session as AuthSession, User
 import api.main as api_main
 
 
@@ -38,6 +39,7 @@ class DummySession:
 
 @pytest.fixture(autouse=True)
 def override_database_dependency():
+    client.cookies.clear()
     session = DummySession()
 
     def fake_get_db():
@@ -229,7 +231,161 @@ def test_cors_preflight_allows_local_frontend_origin(sqlite_database_dependency)
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert response.headers["access-control-allow-credentials"] == "true"
     assert "GET" in response.headers["access-control-allow-methods"]
+
+
+def test_cors_allowed_origins_rejects_wildcard_when_credentials_are_enabled(monkeypatch):
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "*")
+
+    with pytest.raises(ValueError, match="cannot include"):
+        api_main.get_cors_allowed_origins()
+
+
+def test_login_sets_http_only_lax_cookie(sqlite_database_dependency):
+    user = User(email="player@example.com", password_hash=hash_password("correct"))
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        "/auth/login",
+        json={"email": "PLAYER@example.com", "password": "correct"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body.keys()) == {"id", "email", "created_at"}
+    assert body["email"] == "player@example.com"
+    assert sqlite_database_dependency.query(AuthSession).count() == 1
+
+    set_cookie = response.headers["set-cookie"]
+    assert f"{api_main.SESSION_COOKIE_NAME}=" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "SameSite=lax" in set_cookie
+
+
+def test_session_cookie_is_secure_in_production(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    response = Response()
+
+    api_main.set_session_cookie(
+        response,
+        "session-id",
+        datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+
+    assert "secure" in response.headers["set-cookie"].lower()
+
+
+@pytest.mark.parametrize(
+    ("email", "password"),
+    [
+        ("missing@example.com", "correct"),
+        ("player@example.com", "wrong"),
+    ],
+)
+def test_login_returns_same_401_for_wrong_email_or_password(
+    sqlite_database_dependency,
+    email,
+    password,
+):
+    sqlite_database_dependency.add(
+        User(email="player@example.com", password_hash=hash_password("correct"))
+    )
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        "/auth/login",
+        json={"email": email, "password": password},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": {
+            "code": "invalid_credentials",
+            "message": "Invalid credentials.",
+        }
+    }
+
+
+def test_auth_me_returns_current_user_from_cookie(sqlite_database_dependency):
+    user = User(email="player@example.com", password_hash=hash_password("correct"))
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "player@example.com", "password": "correct"},
+    )
+    response = client.get("/auth/me")
+
+    assert login_response.status_code == 200
+    assert response.status_code == 200
+    assert response.json()["email"] == "player@example.com"
+
+
+def test_auth_me_returns_401_for_missing_cookie(sqlite_database_dependency):
+    response = client.get("/auth/me")
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": {
+            "code": "unauthorized",
+            "message": "Unauthorized.",
+        }
+    }
+
+
+def test_auth_me_returns_401_for_invalid_session_id(sqlite_database_dependency):
+    client.cookies.set(api_main.SESSION_COOKIE_NAME, "missing-session")
+
+    response = client.get("/auth/me")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_auth_me_returns_401_for_expired_session(sqlite_database_dependency):
+    user = User(email="player@example.com", password_hash=hash_password("correct"))
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+    sqlite_database_dependency.add(
+        AuthSession(
+            id="expired-session",
+            user_id=user.id,
+            expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        )
+    )
+    sqlite_database_dependency.commit()
+    client.cookies.set(api_main.SESSION_COOKIE_NAME, "expired-session")
+
+    response = client.get("/auth/me")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_logout_deletes_session_and_replayed_cookie_is_rejected(sqlite_database_dependency):
+    user = User(email="player@example.com", password_hash=hash_password("correct"))
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "player@example.com", "password": "correct"},
+    )
+    session_id = client.cookies.get(api_main.SESSION_COOKIE_NAME)
+
+    logout_response = client.post("/auth/logout")
+
+    assert login_response.status_code == 200
+    assert logout_response.status_code == 204
+    assert sqlite_database_dependency.query(AuthSession).count() == 0
+
+    client.cookies.set(api_main.SESSION_COOKIE_NAME, session_id)
+    replay_response = client.get("/auth/me")
+
+    assert replay_response.status_code == 401
+    assert replay_response.json()["error"]["code"] == "unauthorized"
 
 
 def test_list_matches_returns_empty_history(sqlite_database_dependency):
