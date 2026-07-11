@@ -77,7 +77,7 @@ class LeaderboardEntry(BaseModel):
 class BotSummary(BaseModel):
     bot_id: int
     name: str
-    owner_name: str
+    owner_name: str | None
 
 class BotCreateRequest(BaseModel):
     game_id: str

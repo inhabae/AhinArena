@@ -61,6 +61,13 @@ def get_bot_owner_name(bot: Bot) -> str:
     return bot.owner.email
 
 
+def get_bot_owner_display_name(bot: Bot) -> str | None:
+    if bot.owner is None:
+        return None
+
+    return bot.owner.email
+
+
 def get_cors_allowed_origins() -> list[str]:
     origins = os.environ.get("CORS_ALLOWED_ORIGINS", DEFAULT_CORS_ALLOWED_ORIGINS)
     allowed_origins = [origin.strip() for origin in origins.split(",") if origin.strip()]
@@ -457,6 +464,7 @@ def create_bot(
 def create_match(
     request: MatchRequest,
     response: Response,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     runners = {
@@ -657,7 +665,7 @@ def list_bots(
         BotSummary(
             bot_id=bot.id,
             name=bot.name,
-            owner_name=get_bot_owner_name(bot),
+            owner_name=get_bot_owner_display_name(bot),
         )
         for bot in bots
     ]
