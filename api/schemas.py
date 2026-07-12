@@ -22,7 +22,7 @@ class UserRegisterRequest(BaseModel):
         if any(part == "" for part in domain_parts):
             raise ValueError("Email format is invalid.")
 
-        return value
+        return email
 
     @field_validator("username")
     @classmethod
@@ -30,7 +30,7 @@ class UserRegisterRequest(BaseModel):
         if not value.strip():
             raise ValueError("Username is required.")
 
-        return value
+        return value.strip()
 
 
 class UserLoginRequest(BaseModel):

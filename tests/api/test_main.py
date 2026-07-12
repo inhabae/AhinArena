@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from api.auth import hash_password, verify_password
 from api.database import Base, get_db
 from api.models import Bot, BotSubmission, Match, Move, Session as AuthSession, User
+from api.schemas import UserRegisterRequest
 import api.main as api_main
 
 
@@ -240,6 +241,17 @@ def test_register_user_creates_public_user_response(sqlite_database_dependency):
     assert user.username == "PlayerOne"
     assert user.password_hash != "super-secret"
     assert verify_password("super-secret", user.password_hash) is True
+
+
+def test_user_register_request_normalizes_email_and_username():
+    request = UserRegisterRequest(
+        email="  Player@Example.com  ",
+        username="  PlayerOne  ",
+        password="super-secret",
+    )
+
+    assert request.email == "player@example.com"
+    assert request.username == "PlayerOne"
 
 
 def test_register_user_returns_409_for_duplicate_email(sqlite_database_dependency):
@@ -941,6 +953,62 @@ def test_create_bot_returns_409_for_duplicate_name_within_game(sqlite_database_d
         }
     }
     assert sqlite_database_dependency.query(Bot).count() == 1
+
+
+def test_create_bot_trims_name_before_storing(sqlite_database_dependency):
+    user = login_user(sqlite_database_dependency)
+
+    response = client.post(
+        "/bots",
+        json={"game_id": "tictactoe", "name": "  custom  "},
+    )
+
+    assert response.status_code == 201
+    bot = sqlite_database_dependency.query(Bot).one()
+    assert response.json() == {
+        "bot_id": bot.id,
+        "game_id": "tictactoe",
+        "name": "custom",
+        "owner_id": user.id,
+    }
+    assert bot.name == "custom"
+
+
+def test_create_bot_rejects_duplicate_name_after_trimming(sqlite_database_dependency):
+    login_user(sqlite_database_dependency)
+    seed_bot(sqlite_database_dependency, name="custom", game_id="tictactoe")
+
+    response = client.post(
+        "/bots",
+        json={"game_id": "tictactoe", "name": " custom "},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "bot_name_taken",
+            "message": "Bot name is already taken for this game.",
+        }
+    }
+    assert sqlite_database_dependency.query(Bot).count() == 1
+
+
+def test_create_bot_rejects_blank_name_after_trimming(sqlite_database_dependency):
+    login_user(sqlite_database_dependency)
+
+    response = client.post(
+        "/bots",
+        json={"game_id": "tictactoe", "name": "   "},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {
+            "code": "validation_error",
+            "message": "Bot name is required.",
+        }
+    }
+    assert sqlite_database_dependency.query(Bot).count() == 0
 
 
 def test_create_bot_sets_owner_to_authenticated_user(sqlite_database_dependency):

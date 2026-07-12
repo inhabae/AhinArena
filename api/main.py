@@ -516,16 +516,20 @@ def create_bot(
     if request.game_id not in SUPPORTED_GAMES:
         api_error(400, "unsupported_game", f"Unsupported game: {request.game_id}")
 
+    bot_name = request.name.strip()
+    if not bot_name:
+        api_error(422, "validation_error", "Bot name is required.")
+
     existing_bot = (
         db.query(Bot)
-        .filter(Bot.game_id == request.game_id, Bot.name == request.name)
+        .filter(Bot.game_id == request.game_id, Bot.name == bot_name)
         .first()
     )
     if existing_bot is not None:
         bot_name_taken()
 
     bot = Bot(
-        name=request.name,
+        name=bot_name,
         game_id=request.game_id,
         owner_id=current_user.id,
     )
