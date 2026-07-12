@@ -6,6 +6,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -26,6 +27,24 @@ class Bot(Base):
 
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     owner = relationship("User")
+
+    active_submission_id = Column(
+        Integer,
+        ForeignKey("bot_submissions.id"),
+        nullable=True,
+    )
+    active_submission = relationship(
+        "BotSubmission",
+        foreign_keys=[active_submission_id],
+        post_update=True,
+    )
+    submissions = relationship(
+        "BotSubmission",
+        back_populates="bot",
+        cascade="all, delete-orphan",
+        foreign_keys="BotSubmission.bot_id",
+        order_by="BotSubmission.version",
+    )
 
     rating = Column(
         Integer,
@@ -59,4 +78,22 @@ class Bot(Base):
             name="ck_bots_record_matches_games_played",
         ),
         Index("ix_bots_game_id_rating", "game_id", "rating"),
+    )
+
+
+class BotSubmission(Base):
+    __tablename__ = "bot_submissions"
+
+    id = Column(Integer, primary_key=True)
+
+    bot_id = Column(Integer, ForeignKey("bots.id"), nullable=False)
+    bot = relationship("Bot", back_populates="submissions", foreign_keys=[bot_id])
+
+    version = Column(Integer, nullable=False)
+    language = Column(String, nullable=False)
+    source_code = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("bot_id", "version", name="uq_bot_submissions_bot_id_version"),
     )
