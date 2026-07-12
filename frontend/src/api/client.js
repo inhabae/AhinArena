@@ -96,6 +96,16 @@ export function createBot(bot) {
   });
 }
 
+export function submitBotCode(botId, submission) {
+  return request(`/bots/${botId}/submission`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(submission),
+  });
+}
+
 export function getLeaderboard(params) {
   return request("/leaderboard", { params });
 }

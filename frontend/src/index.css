@@ -59,7 +59,8 @@ button:disabled {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -230,6 +231,10 @@ th {
   color: var(--danger);
 }
 
+.success {
+  color: var(--success);
+}
+
 .page-header {
   display: grid;
   gap: 8px;
@@ -386,6 +391,18 @@ input {
   width: 100%;
 }
 
+textarea {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font: 13px/1.5 var(--mono);
+  min-height: 260px;
+  padding: 11px;
+  resize: vertical;
+  width: 100%;
+}
+
 select:disabled {
   color: var(--text-muted);
   opacity: 0.7;
@@ -448,6 +465,11 @@ select:disabled {
   gap: 18px;
   max-width: 720px;
   padding: 24px;
+}
+
+.bot-registration-flow {
+  display: grid;
+  gap: 18px;
 }
 
 .form-panel label {
