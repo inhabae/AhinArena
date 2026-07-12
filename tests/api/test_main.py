@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from api.auth import hash_password, verify_password
 from api.database import Base, get_db
-from api.models import Bot, Match, Move, Session as AuthSession, User
+from api.models import Bot, BotSubmission, Match, Move, Session as AuthSession, User
 import api.main as api_main
 
 
@@ -944,6 +944,160 @@ def test_create_bot_sets_owner_to_authenticated_user(sqlite_database_dependency)
         "owner_id": user.id,
     }
     assert bot.owner_id == user.id
+
+
+def test_submit_bot_source_creates_first_submission_and_sets_active(
+    sqlite_database_dependency,
+):
+    user = login_user(sqlite_database_dependency)
+    bot = Bot(name="custom", game_id="tictactoe", owner_id=user.id)
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        f"/bots/{bot.id}/submission",
+        json={"source_code": "def choose_move(board):\n    return 0\n"},
+    )
+
+    assert response.status_code == 201
+    submission = sqlite_database_dependency.query(BotSubmission).one()
+    sqlite_database_dependency.refresh(bot)
+    assert response.json() == {
+        "bot_id": bot.id,
+        "submission_id": submission.id,
+        "version": 1,
+    }
+    assert submission.bot_id == bot.id
+    assert submission.version == 1
+    assert submission.language == "python"
+    assert bot.active_submission_id == submission.id
+
+
+def test_submit_bot_source_versions_successive_submissions_and_latest_is_active(
+    sqlite_database_dependency,
+):
+    user = login_user(sqlite_database_dependency)
+    bot = Bot(name="custom", game_id="tictactoe", owner_id=user.id)
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+
+    first_response = client.post(
+        f"/bots/{bot.id}/submission",
+        json={"source_code": "def choose_move(board):\n    return 0\n"},
+    )
+    second_response = client.post(
+        f"/bots/{bot.id}/submission",
+        json={"source_code": "def choose_move(board):\n    return 1\n"},
+    )
+
+    submissions = (
+        sqlite_database_dependency.query(BotSubmission)
+        .order_by(BotSubmission.version)
+        .all()
+    )
+    sqlite_database_dependency.refresh(bot)
+    assert first_response.status_code == 201
+    assert second_response.status_code == 201
+    assert [submission.version for submission in submissions] == [1, 2]
+    assert first_response.json()["version"] == 1
+    assert second_response.json()["version"] == 2
+    assert bot.active_submission_id == submissions[-1].id
+
+
+def test_submit_bot_source_requires_authentication(sqlite_database_dependency):
+    bot = Bot(name="custom", game_id="tictactoe", owner_id=1)
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        f"/bots/{bot.id}/submission",
+        json={"source_code": "def choose_move(board):\n    return 0\n"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+    assert sqlite_database_dependency.query(BotSubmission).count() == 0
+
+
+def test_submit_bot_source_rejects_non_owner(sqlite_database_dependency):
+    owner = User(
+        username="owner",
+        email="owner@example.com",
+        password_hash=hash_password("password"),
+    )
+    sqlite_database_dependency.add(owner)
+    sqlite_database_dependency.commit()
+    bot = Bot(name="custom", game_id="tictactoe", owner_id=owner.id)
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+    login_user(sqlite_database_dependency, email="other@example.com")
+
+    response = client.post(
+        f"/bots/{bot.id}/submission",
+        json={"source_code": "def choose_move(board):\n    return 0\n"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {
+            "code": "bot_not_owned",
+            "message": "Bot is not owned by the authenticated user.",
+        }
+    }
+    assert sqlite_database_dependency.query(BotSubmission).count() == 0
+
+
+def test_submit_bot_source_returns_404_for_missing_bot(sqlite_database_dependency):
+    login_user(sqlite_database_dependency)
+
+    response = client.post(
+        "/bots/999/submission",
+        json={"source_code": "def choose_move(board):\n    return 0\n"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "bot_not_found"
+    assert sqlite_database_dependency.query(BotSubmission).count() == 0
+
+
+def test_submit_bot_source_rejects_invalid_python_before_insert(
+    sqlite_database_dependency,
+):
+    user = login_user(sqlite_database_dependency)
+    bot = Bot(name="custom", game_id="tictactoe", owner_id=user.id)
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        f"/bots/{bot.id}/submission",
+        json={"source_code": "def choose_move(:\n    return 0\n"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_syntax"
+    assert sqlite_database_dependency.query(BotSubmission).count() == 0
+    sqlite_database_dependency.refresh(bot)
+    assert bot.active_submission_id is None
+
+
+def test_submit_bot_source_rejects_oversized_source_before_insert(
+    sqlite_database_dependency,
+):
+    user = login_user(sqlite_database_dependency)
+    bot = Bot(name="custom", game_id="tictactoe", owner_id=user.id)
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        f"/bots/{bot.id}/submission",
+        json={"source_code": "x = 1\n" + ("#" * api_main.MAX_BOT_SUBMISSION_SOURCE_BYTES)},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "submission_too_large"
+    assert sqlite_database_dependency.query(BotSubmission).count() == 0
+    sqlite_database_dependency.refresh(bot)
+    assert bot.active_submission_id is None
 
 
 def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(

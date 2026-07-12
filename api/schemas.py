@@ -115,3 +115,12 @@ class BotCreateResponse(BaseModel):
     game_id: str
     name: str
     owner_id: int
+
+class BotSubmissionRequest(BaseModel):
+    source_code: str
+    language: str = "python"
+
+class BotSubmissionResponse(BaseModel):
+    bot_id: int
+    submission_id: int
+    version: int

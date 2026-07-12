@@ -1,3 +1,4 @@
+import ast
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -5,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from api.auth import hash_password, verify_password
 from api.database import get_db, get_sessionmaker
-from api.models import Bot, Match, Move, Session as AuthSession, User
+from api.models import Bot, BotSubmission, Match, Move, Session as AuthSession, User
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
 from api.ratings import score_for_bot_one as calculate_score_for_bot_one
 from engine.connectfour.runner import run_connectfour_match
@@ -36,6 +37,8 @@ from api.schemas import (
     BotSummary,
     BotCreateRequest,
     BotCreateResponse,
+    BotSubmissionRequest,
+    BotSubmissionResponse,
     UserLoginRequest,
     UserPublic,
     UserRegisterRequest,
@@ -53,6 +56,7 @@ DEFAULT_CORS_ALLOWED_ORIGINS = (
 SESSION_COOKIE_NAME = "ahin_arena_session"
 SESSION_ID_BYTES = 48
 SESSION_TTL = timedelta(days=14)
+MAX_BOT_SUBMISSION_SOURCE_BYTES = 100_000
 
 
 def get_bot_owner_name(bot: Bot) -> str:
@@ -416,6 +420,19 @@ def bot_name_taken():
     api_error(409, "bot_name_taken", "Bot name is already taken for this game.")
 
 
+def validate_python_submission_source(source_code: str) -> None:
+    if not source_code.strip():
+        api_error(422, "validation_error", "Source code is required.")
+
+    if len(source_code.encode("utf-8")) > MAX_BOT_SUBMISSION_SOURCE_BYTES:
+        api_error(413, "submission_too_large", "Submission source code is too large.")
+
+    try:
+        ast.parse(source_code)
+    except SyntaxError as error:
+        api_error(422, "invalid_syntax", f"Invalid Python syntax: {error.msg}.")
+
+
 @app.post(
     "/bots",
     status_code=status.HTTP_201_CREATED,
@@ -457,6 +474,62 @@ def create_bot(
         game_id=bot.game_id,
         name=bot.name,
         owner_id=bot.owner_id,
+    )
+
+
+@app.post(
+    "/bots/{bot_id}/submission",
+    status_code=status.HTTP_201_CREATED,
+    response_model=BotSubmissionResponse,
+)
+def submit_bot_source(
+    bot_id: int,
+    request: BotSubmissionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bot = db.query(Bot).filter(Bot.id == bot_id).first()
+    if bot is None:
+        api_error(404, "bot_not_found", f"Bot not found: {bot_id}")
+
+    if bot.owner_id != current_user.id:
+        api_error(403, "bot_not_owned", "Bot is not owned by the authenticated user.")
+
+    if request.language != "python":
+        api_error(400, "unsupported_language", f"Unsupported language: {request.language}")
+
+    validate_python_submission_source(request.source_code)
+
+    current_max_version = (
+        db.query(BotSubmission.version)
+        .filter(BotSubmission.bot_id == bot.id)
+        .order_by(BotSubmission.version.desc())
+        .limit(1)
+        .scalar()
+    )
+    submission = BotSubmission(
+        bot_id=bot.id,
+        version=(current_max_version or 0) + 1,
+        language=request.language,
+        source_code=request.source_code,
+    )
+    db.add(submission)
+
+    try:
+        db.flush()
+        bot.active_submission_id = submission.id
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        api_error(409, "submission_conflict", "Submission version already exists.")
+
+    db.refresh(submission)
+    db.refresh(bot)
+
+    return BotSubmissionResponse(
+        bot_id=bot.id,
+        submission_id=submission.id,
+        version=submission.version,
     )
 
 
