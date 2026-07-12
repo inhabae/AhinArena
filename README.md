@@ -48,7 +48,7 @@ Backend API (FastAPI)
 - [x] Milestone 5 — Elo Leaderboard
 - [x] Milestone 6 — Web Interface
 - [x] Milestone 7 — User Accounts
-- [ ] Milestone 8 — Bot Submission
+- [x] Milestone 8 — Bot Submission
 - [ ] Milestone 9 — Docker Sandboxing
 - [ ] Milestone 10 — Queue & Workers
 - [ ] Milestone 11 — Real-Time Games
@@ -81,6 +81,7 @@ Both local runners print each move, the board after that move, and the final mat
 - `docs/tictactoe-engine-referee.md` documents Tic-Tac-Toe bot/referee communication.
 - `docs/connectfour-engine-referee.md` documents Connect Four bot/referee communication.
 - `docs/frontend.md` documents the React web interface routes, replay behavior, and API client conventions.
+- `docs/bot-submission.md` documents uploaded bot source storage, validation, and match execution.
 
 ---
 
@@ -90,7 +91,7 @@ The React/Vite frontend lives in `frontend/`. It provides:
 
 - a Home page for selecting a game, choosing two registered bots, starting a match, and viewing recent matches;
 - Login and Register pages for account creation and cookie-backed sessions;
-- a Bot Registration page for authenticated users to add bots for supported games;
+- a Bot Registration page for authenticated users to add bots for supported games and submit Python source code;
 - a Match History page with game filtering and pagination;
 - a Leaderboard page with per-game rankings, configurable row count, and pagination;
 - a Match Detail page with rating summaries, ordered move history, and replay controls.
@@ -118,6 +119,12 @@ replay.
 User accounts use server-side sessions persisted in PostgreSQL and identified by
 an `ahin_arena_session` HTTP-only cookie. Login, logout, current-user, bot
 creation, and match creation requests rely on that cookie.
+
+Authenticated users can submit Python source for bots they own with
+`POST /bots/{bot_id}/submission`. Each accepted submission is versioned and the
+latest version becomes the bot's active match code. See
+`docs/bot-submission.md` for the milestone 8 details and current security
+limitations.
 
 Register a user:
 

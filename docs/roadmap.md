@@ -151,6 +151,20 @@ Allow users to create accounts and manage their bots.
 
 Allow developers to upload custom AI agents.
 
+**Deliverables**
+
+- Persistent `bot_submissions` table with per-bot versioning
+- `bots.active_submission_id` pointer for the source used in new matches
+- Authenticated `POST /bots/{bot_id}/submission` endpoint
+- Bot ownership enforcement for source uploads
+- Python-only submission validation for non-empty source, 100 KB maximum size,
+  and parseable syntax
+- Submitted source execution through the existing referee subprocess protocol
+- Match creation rejection for bots without an active submission
+- Default random bot submissions seeded for supported games
+- Frontend source-code submission flow on `/bots/new`
+- Bot submission documentation in `docs/bot-submission.md`
+
 ---
 
 ## Milestone 9 — Docker Sandboxing
