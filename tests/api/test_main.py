@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 import sys
 
 import pytest
@@ -1279,6 +1280,8 @@ def test_create_match_runs_tictactoe_match_successfully(
     def fake_run_tictactoe_match(p1_command, p2_command, on_move):
         observed["p1_command"] = p1_command
         observed["p2_command"] = p2_command
+        observed["p1_source"] = Path(p1_command[1]).read_text(encoding="utf-8")
+        observed["p2_source"] = Path(p2_command[1]).read_text(encoding="utf-8")
         for player, move in [
             ("p1", (0, 0)),
             ("p2", (1, 0)),
@@ -1303,8 +1306,10 @@ def test_create_match_runs_tictactoe_match_successfully(
     assert observed["p2_command"][0] == sys.executable
     assert observed["p1_command"][1].endswith(".py")
     assert observed["p2_command"][1].endswith(".py")
-    assert "engine.tictactoe" in open(observed["p1_command"][1], encoding="utf-8").read()
-    assert "engine.tictactoe" in open(observed["p2_command"][1], encoding="utf-8").read()
+    assert "engine.tictactoe" in observed["p1_source"]
+    assert "engine.tictactoe" in observed["p2_source"]
+    assert not Path(observed["p1_command"][1]).exists()
+    assert not Path(observed["p2_command"][1]).exists()
     assert response.json() == {
         "match_id": match.id,
         "game": "tictactoe",
@@ -1529,6 +1534,8 @@ def test_create_match_runs_connectfour_match_successfully(
     def fake_run_connectfour_match(p1_command, p2_command, on_move):
         observed["p1_command"] = p1_command
         observed["p2_command"] = p2_command
+        observed["p1_source"] = Path(p1_command[1]).read_text(encoding="utf-8")
+        observed["p2_source"] = Path(p2_command[1]).read_text(encoding="utf-8")
         for player, move in [
             ("p1", 0),
             ("p2", 1),
@@ -1555,8 +1562,10 @@ def test_create_match_runs_connectfour_match_successfully(
     assert observed["p2_command"][0] == sys.executable
     assert observed["p1_command"][1].endswith(".py")
     assert observed["p2_command"][1].endswith(".py")
-    assert "engine.connectfour" in open(observed["p1_command"][1], encoding="utf-8").read()
-    assert "engine.connectfour" in open(observed["p2_command"][1], encoding="utf-8").read()
+    assert "engine.connectfour" in observed["p1_source"]
+    assert "engine.connectfour" in observed["p2_source"]
+    assert not Path(observed["p1_command"][1]).exists()
+    assert not Path(observed["p2_command"][1]).exists()
     assert response.json() == {
         "match_id": match.id,
         "game": "connect-four",
@@ -1899,8 +1908,11 @@ def test_create_match_returns_error_when_match_execution_fails(
 ):
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
+    observed = {}
 
     def failing_run_tictactoe_match(p1_command, p2_command, on_move):
+        observed["p1_command"] = p1_command
+        observed["p2_command"] = p2_command
         raise RuntimeError("runner failed")
 
     monkeypatch.setattr(api_main, "run_tictactoe_match", failing_run_tictactoe_match)
@@ -1915,6 +1927,8 @@ def test_create_match_returns_error_when_match_execution_fails(
             "message": "runner failed",
         }
     }
+    assert not Path(observed["p1_command"][1]).exists()
+    assert not Path(observed["p2_command"][1]).exists()
 
 
 def test_unknown_route_returns_standard_http_error():
