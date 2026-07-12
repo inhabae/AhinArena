@@ -1,8 +1,11 @@
 import ast
 import os
 import secrets
+import sys
+import tempfile
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from api.auth import hash_password, verify_password
 from api.database import get_db, get_sessionmaker
@@ -11,7 +14,6 @@ from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
 from api.ratings import score_for_bot_one as calculate_score_for_bot_one
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
-from engine.registry import UnknownBotError, bot_registry
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,6 +59,11 @@ SESSION_COOKIE_NAME = "ahin_arena_session"
 SESSION_ID_BYTES = 48
 SESSION_TTL = timedelta(days=14)
 MAX_BOT_SUBMISSION_SOURCE_BYTES = 100_000
+
+DEFAULT_BOT_SOURCE_PATHS = {
+    "tictactoe": Path(__file__).resolve().parent.parent / "engine" / "tictactoe" / "random_bot.py",
+    "connect-four": Path(__file__).resolve().parent.parent / "engine" / "connectfour" / "random_bot.py",
+}
 
 
 def get_bot_owner_name(bot: Bot) -> str:
@@ -152,19 +159,38 @@ def get_current_user(
 
 
 def seed_default_bots(db: Session) -> None:
+    default_bot_sources = {
+        game_id: source_path.read_text(encoding="utf-8")
+        for game_id, source_path in DEFAULT_BOT_SOURCE_PATHS.items()
+    }
+
     for game_id in SUPPORTED_GAMES:
-        existing_names = {
-            name
-            for (name,) in (
-                db.query(Bot.name)
+        existing_bots = {
+            bot.name: bot
+            for bot in (
+                db.query(Bot)
                 .filter(Bot.game_id == game_id, Bot.name.in_(DEFAULT_BOT_NAMES))
                 .all()
             )
         }
 
         for bot_name in DEFAULT_BOT_NAMES:
-            if bot_name not in existing_names:
-                db.add(Bot(name=bot_name, game_id=game_id, owner_id=None))
+            bot = existing_bots.get(bot_name)
+            if bot is None:
+                bot = Bot(name=bot_name, game_id=game_id, owner_id=None)
+                db.add(bot)
+                db.flush()
+
+            if bot.active_submission_id is None:
+                submission = BotSubmission(
+                    bot_id=bot.id,
+                    version=1,
+                    language="python",
+                    source_code=default_bot_sources[game_id],
+                )
+                db.add(submission)
+                db.flush()
+                bot.active_submission_id = submission.id
 
     db.commit()
 
@@ -221,6 +247,35 @@ def resolve_bot(db: Session, *, game_id: str, bot_name: str) -> Bot:
         api_error(404, "bot_not_found", f"Bot not found: {bot_name}")
 
     return bot
+
+
+def resolve_bot_command(bot: Bot) -> list[str]:
+    if bot.active_submission_id is None or bot.active_submission is None:
+        api_error(
+            400,
+            "bot_has_no_submission",
+            f"Bot has no active submission: {bot.name}",
+        )
+
+    project_root = Path(__file__).resolve().parent.parent
+    source_code = bot.active_submission.source_code
+    bootstrapped_source = (
+        "import sys\n"
+        f"sys.path.insert(0, {str(project_root)!r})\n"
+        f"exec(compile({source_code!r}, __file__, 'exec'))\n"
+    )
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".py",
+        prefix=f"ahinarena_bot_{bot.id}_",
+        encoding="utf-8",
+        delete=False,
+    ) as source_file:
+        source_file.write(bootstrapped_source)
+        source_path = source_file.name
+
+    return [sys.executable, source_path]
 
 
 def score_for_bot_one_or_error(
@@ -561,11 +616,8 @@ def create_match(
     if bot_one.id == bot_two.id:
         api_error(400, "duplicate_bot_match", "A bot cannot play against itself")
 
-    try:
-        p1_command = bot_registry.get_command(bot_one.name, request.game)
-        p2_command = bot_registry.get_command(bot_two.name, request.game)
-    except UnknownBotError as error:
-        api_error(400, "unknown_bot", str(error))
+    p1_command = resolve_bot_command(bot_one)
+    p2_command = resolve_bot_command(bot_two)
 
     try:
         moves = []
