@@ -9,7 +9,7 @@ from alembic.operations import Operations
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.models import Bot, Match, Move, Session as AuthSession, User
+from api.models import Bot, BotSubmission, Match, Move, Session as AuthSession, User
 
 
 spec = importlib.util.spec_from_file_location(
@@ -67,6 +67,17 @@ cleanup_indexes_schema = importlib.util.module_from_spec(cleanup_indexes_spec)
 assert cleanup_indexes_spec.loader is not None
 cleanup_indexes_spec.loader.exec_module(cleanup_indexes_schema)
 
+bot_submissions_spec = importlib.util.spec_from_file_location(
+    "add_bot_submissions",
+    Path(__file__).parents[2]
+    / "alembic"
+    / "versions"
+    / "3f2a1b0c9d8e_add_bot_submissions.py",
+)
+bot_submissions_schema = importlib.util.module_from_spec(bot_submissions_spec)
+assert bot_submissions_spec.loader is not None
+bot_submissions_spec.loader.exec_module(bot_submissions_schema)
+
 EXPECTED_MATCH_COLUMNS = {
     "id",
     "game_id",
@@ -97,6 +108,7 @@ EXPECTED_BOT_COLUMNS = {
     "name",
     "game_id",
     "owner_id",
+    "active_submission_id",
     "rating",
     "games_played",
     "wins",
@@ -106,7 +118,21 @@ EXPECTED_BOT_COLUMNS = {
     "updated_at",
 }
 
+EXPECTED_BOT_OWNER_MIGRATION_BOT_COLUMNS = EXPECTED_BOT_COLUMNS - {
+    "active_submission_id"
+}
+
 EXPECTED_BASELINE_BOT_COLUMNS = (EXPECTED_BOT_COLUMNS - {"owner_id"}) | {"created_by"}
+EXPECTED_BASELINE_BOT_COLUMNS -= {"active_submission_id"}
+
+EXPECTED_BOT_SUBMISSION_COLUMNS = {
+    "id",
+    "bot_id",
+    "version",
+    "language",
+    "source_code",
+    "created_at",
+}
 
 EXPECTED_USER_COLUMNS = {
     "id",
@@ -149,6 +175,11 @@ def test_bot_model_declares_expected_columns_defaults_and_constraints():
         foreign_key.target_fullname
         for foreign_key in Bot.__table__.c.owner_id.foreign_keys
     } == {"users.id"}
+    assert Bot.__table__.c.active_submission_id.nullable is True
+    assert {
+        foreign_key.target_fullname
+        for foreign_key in Bot.__table__.c.active_submission_id.foreign_keys
+    } == {"bot_submissions.id"}
     assert Bot.__table__.c.rating.nullable is False
     assert Bot.__table__.c.games_played.nullable is False
     assert Bot.__table__.c.wins.nullable is False
@@ -183,6 +214,28 @@ def test_bot_model_declares_expected_columns_defaults_and_constraints():
     assert "ix_bots_id" not in indexes
 
 
+def test_bot_submission_model_declares_expected_columns_and_constraints():
+    assert set(BotSubmission.__table__.columns.keys()) == EXPECTED_BOT_SUBMISSION_COLUMNS
+
+    assert BotSubmission.__table__.c.bot_id.nullable is False
+    assert BotSubmission.__table__.c.version.nullable is False
+    assert BotSubmission.__table__.c.language.nullable is False
+    assert BotSubmission.__table__.c.source_code.nullable is False
+    assert BotSubmission.__table__.c.created_at.nullable is False
+    assert {
+        foreign_key.target_fullname
+        for foreign_key in BotSubmission.__table__.c.bot_id.foreign_keys
+    } == {"bots.id"}
+
+    constraints = {
+        constraint.name: constraint for constraint in BotSubmission.__table__.constraints
+    }
+    assert constraints["uq_bot_submissions_bot_id_version"].columns.keys() == [
+        "bot_id",
+        "version",
+    ]
+
+
 def test_bot_table_applies_defaults_and_unique_names_within_game():
     engine = sa.create_engine("sqlite:///:memory:")
     User.__table__.create(engine)
@@ -204,6 +257,38 @@ def test_bot_table_applies_defaults_and_unique_names_within_game():
         assert bot.draws == 0
 
         session.add(Bot(name="random", game_id="tictactoe"))
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+
+def test_bot_submission_table_rejects_duplicate_bot_versions():
+    engine = sa.create_engine("sqlite:///:memory:")
+    User.__table__.create(engine)
+    Bot.__table__.create(engine)
+    BotSubmission.__table__.create(engine)
+
+    with Session(engine) as session:
+        bot = Bot(name="random", game_id="tictactoe")
+        session.add(bot)
+        session.flush()
+
+        session.add_all(
+            [
+                BotSubmission(
+                    bot_id=bot.id,
+                    version=1,
+                    language="python",
+                    source_code="print(1)",
+                ),
+                BotSubmission(
+                    bot_id=bot.id,
+                    version=1,
+                    language="python",
+                    source_code="print(2)",
+                ),
+            ]
+        )
+
         with pytest.raises(IntegrityError):
             session.commit()
 
@@ -586,13 +671,70 @@ def test_bot_owner_migration_replaces_created_by_with_nullable_owner_id(monkeypa
         bot_columns = {column["name"]: column for column in inspector.get_columns("bots")}
         bot_foreign_keys = inspector.get_foreign_keys("bots")
 
-        assert set(bot_columns) == EXPECTED_BOT_COLUMNS
+        assert set(bot_columns) == EXPECTED_BOT_OWNER_MIGRATION_BOT_COLUMNS
         assert bot_columns["owner_id"]["nullable"] is True
         assert any(
             foreign_key["constrained_columns"] == ["owner_id"]
             and foreign_key["referred_table"] == "users"
             and foreign_key["referred_columns"] == ["id"]
             for foreign_key in bot_foreign_keys
+        )
+
+
+def test_bot_submissions_migration_adds_submissions_and_active_pointer(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        operations = Operations(context)
+        monkeypatch.setattr(baseline_schema, "op", operations)
+        monkeypatch.setattr(auth_schema, "op", operations)
+        monkeypatch.setattr(bot_owner_schema, "op", operations)
+        monkeypatch.setattr(username_schema, "op", operations)
+        monkeypatch.setattr(cleanup_indexes_schema, "op", operations)
+        monkeypatch.setattr(bot_submissions_schema, "op", operations)
+
+        baseline_schema.upgrade()
+        auth_schema.upgrade()
+        bot_owner_schema.upgrade()
+        username_schema.upgrade()
+        cleanup_indexes_schema.upgrade()
+        bot_submissions_schema.upgrade()
+
+        inspector = sa.inspect(connection)
+        bot_columns = {column["name"]: column for column in inspector.get_columns("bots")}
+        submission_columns = {
+            column["name"]: column
+            for column in inspector.get_columns("bot_submissions")
+        }
+        bot_foreign_keys = inspector.get_foreign_keys("bots")
+        submission_foreign_keys = inspector.get_foreign_keys("bot_submissions")
+        submission_unique_constraints = inspector.get_unique_constraints(
+            "bot_submissions"
+        )
+
+        assert set(bot_columns) == EXPECTED_BOT_COLUMNS
+        assert bot_columns["active_submission_id"]["nullable"] is True
+        assert set(submission_columns) == EXPECTED_BOT_SUBMISSION_COLUMNS
+        assert submission_columns["bot_id"]["nullable"] is False
+        assert submission_columns["version"]["nullable"] is False
+        assert submission_columns["language"]["nullable"] is False
+        assert submission_columns["source_code"]["nullable"] is False
+        assert any(
+            foreign_key["constrained_columns"] == ["active_submission_id"]
+            and foreign_key["referred_table"] == "bot_submissions"
+            and foreign_key["referred_columns"] == ["id"]
+            for foreign_key in bot_foreign_keys
+        )
+        assert any(
+            foreign_key["constrained_columns"] == ["bot_id"]
+            and foreign_key["referred_table"] == "bots"
+            and foreign_key["referred_columns"] == ["id"]
+            for foreign_key in submission_foreign_keys
+        )
+        assert any(
+            constraint["column_names"] == ["bot_id", "version"]
+            for constraint in submission_unique_constraints
         )
 
 
