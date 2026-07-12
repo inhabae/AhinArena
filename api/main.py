@@ -278,6 +278,21 @@ def resolve_bot_command(bot: Bot) -> list[str]:
     return [sys.executable, source_path]
 
 
+def cleanup_bot_command_temp_source(command: list[str]) -> None:
+    if len(command) < 2:
+        return
+
+    source_path = Path(command[1])
+    if (
+        source_path.parent != Path(tempfile.gettempdir())
+        or source_path.suffix != ".py"
+        or not source_path.name.startswith("ahinarena_bot_")
+    ):
+        return
+
+    source_path.unlink(missing_ok=True)
+
+
 def score_for_bot_one_or_error(
     winner_bot_id: int | None,
     bot_one_id: int,
@@ -616,23 +631,29 @@ def create_match(
     if bot_one.id == bot_two.id:
         api_error(400, "duplicate_bot_match", "A bot cannot play against itself")
 
-    p1_command = resolve_bot_command(bot_one)
-    p2_command = resolve_bot_command(bot_two)
-
+    p1_command = []
+    p2_command = []
     try:
-        moves = []
+        p1_command = resolve_bot_command(bot_one)
+        p2_command = resolve_bot_command(bot_two)
 
-        def record_move(player, move, board):
-            bot_id = bot_one.id if player == "p1" else bot_two.id
-            moves.append((bot_id, move))
+        try:
+            moves = []
 
-        result = runners[request.game](
-            p1_command=p1_command,
-            p2_command=p2_command,
-            on_move=record_move,
-        )
-    except Exception as error:
-        api_error(500, "match_execution_failed", str(error))
+            def record_move(player, move, board):
+                bot_id = bot_one.id if player == "p1" else bot_two.id
+                moves.append((bot_id, move))
+
+            result = runners[request.game](
+                p1_command=p1_command,
+                p2_command=p2_command,
+                on_move=record_move,
+            )
+        except Exception as error:
+            api_error(500, "match_execution_failed", str(error))
+    finally:
+        cleanup_bot_command_temp_source(p1_command)
+        cleanup_bot_command_temp_source(p2_command)
 
     bot_one_rating_before = bot_one.rating
     bot_two_rating_before = bot_two.rating
