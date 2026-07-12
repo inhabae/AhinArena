@@ -46,9 +46,10 @@ The system consists of a web frontend, backend services, persistent storage, and
   backend errors.
 - **Backend API** — FastAPI application logic for health checks, registration,
   login/logout, current-user lookup, bot lookup and creation, match creation,
-  match history, match detail, and leaderboard data.
+  bot source submission, match history, match detail, and leaderboard data.
 - **PostgreSQL** — Persistent data for bots, completed matches, ordered moves,
-  ratings, records, users, sessions, and per-match rating snapshots.
+  ratings, records, users, sessions, bot submissions, active bot submission
+  pointers, and per-match rating snapshots.
 - **Session Storage** — Server-side auth sessions stored in the PostgreSQL
   `sessions` table and referenced by the browser's HTTP-only
   `ahin_arena_session` cookie. Expired sessions are removed when encountered.
@@ -70,7 +71,7 @@ The main routes are:
 - `/` — Home page for selecting a supported game, choosing two registered bots,
   starting a match, and viewing recent matches for the selected game.
 - `/bots/new` — Authenticated bot registration page for adding a bot name to a
-  supported game.
+  supported game and submitting Python source code for that bot.
 - `/matches` — Match history page with all-game or per-game filtering and
   limit/offset-backed pagination.
 - `/leaderboard` — Leaderboard page with per-game rankings, configurable row
@@ -89,5 +90,18 @@ Known frontend gap: replay rendering currently supports `tictactoe` and
 message that replay is not supported yet.
 
 Known auth gap: sessions are durable and cookie-backed, but account management
-is intentionally minimal. Password reset, email verification, role-based access,
-and custom bot code upload are not implemented yet.
+is intentionally minimal. Password reset, email verification, and role-based
+access are not implemented yet.
+
+## Bot Submission Flow
+
+Users create bot records through `POST /bots`, then upload source code through
+`POST /bots/{bot_id}/submission`. The submission endpoint requires the current
+session user to own the bot, accepts only Python, stores a new versioned
+`bot_submissions` row, and points `bots.active_submission_id` at the newest
+accepted version.
+
+Match creation resolves each bot's active submission and starts that source as a
+temporary Python subprocess under the shared referee protocol. This is the
+milestone 8 execution path only; Docker sandboxing remains a planned milestone,
+so submitted code is not isolated from the host process environment yet.
