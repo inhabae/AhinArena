@@ -42,6 +42,18 @@ def sleeping_bot_command():
     return [sys.executable, "-c", code]
 
 
+def partial_line_bot_command():
+    code = (
+        "import sys, time\n"
+        "for line in sys.stdin:\n"
+        "    sys.stdout.write('{\"row\":')\n"
+        "    sys.stdout.flush()\n"
+        "    time.sleep(10)\n"
+    )
+
+    return [sys.executable, "-c", code]
+
+
 def test_referee_runs_match_and_reports_x_win():
     observed_moves = []
 
@@ -217,6 +229,23 @@ def test_referee_handles_bot_timeout():
     referee = Referee(
         {
             "X": sleeping_bot_command(),
+            "O": scripted_bot_command([]),
+        },
+        TicTacToeGame(),
+        timeout=0.1,
+    )
+
+    result = referee.run_match()
+
+    assert result["winner"] == "O"
+    assert result["reason"] == "timeout"
+    assert result["player"] == "X"
+
+
+def test_referee_handles_partial_line_bot_timeout():
+    referee = Referee(
+        {
+            "X": partial_line_bot_command(),
             "O": scripted_bot_command([]),
         },
         TicTacToeGame(),
