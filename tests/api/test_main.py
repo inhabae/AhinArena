@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import sys
 
 import pytest
 from fastapi import HTTPException, Response
@@ -10,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api.auth import hash_password, verify_password
+import api.bot_sandbox as bot_sandbox
 from api.database import Base, get_db
 from api.models import Bot, BotSubmission, Match, Move, Session as AuthSession, User
 from api.schemas import UserRegisterRequest
@@ -91,6 +91,102 @@ def test_score_for_bot_one_or_error_maps_unknown_winner_to_api_error():
     }
 
 
+def test_build_bot_sandbox_creates_locked_down_docker_command(monkeypatch):
+    bot = Bot(id=42, name="sandboxed", game_id="tictactoe")
+    submission = BotSubmission(
+        id=7,
+        bot_id=42,
+        version=1,
+        language="python",
+        source_code="print('move')\n",
+    )
+    bot.active_submission_id = submission.id
+    bot.active_submission = submission
+    monkeypatch.setenv("DOCKER_BINARY", "podman")
+    monkeypatch.setenv("BOT_SANDBOX_IMAGE", "custom-runner:latest")
+    monkeypatch.setenv("BOT_SANDBOX_MEMORY_LIMIT", "64m")
+    monkeypatch.setenv("BOT_SANDBOX_CPU_LIMIT", "0.25")
+    monkeypatch.setenv("BOT_SANDBOX_PIDS_LIMIT", "32")
+    monkeypatch.setenv("BOT_SANDBOX_TMPFS_SIZE", "8m")
+
+    sandbox = api_main.build_bot_sandbox(bot)
+
+    try:
+        command = sandbox.command
+        assert command[:3] == ["podman", "run", "--rm"]
+        assert "-i" in command
+        assert "--init" in command
+        assert command[command.index("--network") + 1] == "none"
+        assert command[command.index("--cap-drop") + 1] == "ALL"
+        assert command[command.index("--security-opt") + 1] == "no-new-privileges"
+        assert "--read-only" in command
+        assert command[command.index("--tmpfs") + 1] == (
+            "/tmp:rw,noexec,nosuid,nodev,size=8m"
+        )
+        assert command[command.index("--memory") + 1] == "64m"
+        assert command[command.index("--cpus") + 1] == "0.25"
+        assert command[command.index("--pids-limit") + 1] == "32"
+        assert command[command.index("--name") + 1] == sandbox.container_name
+        assert command[-1] == "custom-runner:latest"
+        assert command[command.index("--mount") + 1] == (
+            f"type=bind,src={sandbox.source_path},dst=/bot/source.py,readonly"
+        )
+        assert sandbox.container_name.startswith("ahinarena-bot-42-")
+        assert sandbox.source_path.read_text(encoding="utf-8") == "print('move')\n"
+    finally:
+        sandbox.cleanup()
+
+
+def test_build_bot_sandbox_raises_existing_no_submission_error():
+    bot = Bot(id=42, name="empty", game_id="tictactoe")
+
+    with pytest.raises(HTTPException) as error:
+        api_main.build_bot_sandbox(bot)
+
+    assert error.value.status_code == 400
+    assert error.value.detail == {
+        "code": "bot_has_no_submission",
+        "message": "Bot has no active submission: empty",
+    }
+
+
+def test_cleanup_bot_sandbox_force_removes_container_and_deletes_temp_file(
+    monkeypatch,
+):
+    bot = Bot(id=42, name="sandboxed", game_id="tictactoe")
+    submission = BotSubmission(
+        id=7,
+        bot_id=42,
+        version=1,
+        language="python",
+        source_code="print('move')\n",
+    )
+    bot.active_submission_id = submission.id
+    bot.active_submission = submission
+    sandbox = api_main.build_bot_sandbox(bot)
+    calls = []
+
+    def fake_run(command, stdout, stderr, check):
+        calls.append(
+            {
+                "command": command,
+                "stdout": stdout,
+                "stderr": stderr,
+                "check": check,
+            }
+        )
+        raise OSError("docker unavailable")
+
+    monkeypatch.setattr(bot_sandbox.subprocess, "run", fake_run)
+
+    sandbox.cleanup()
+
+    assert calls[0]["command"] == ["docker", "rm", "--force", sandbox.container_name]
+    assert calls[0]["check"] is False
+    assert not sandbox.source_path.exists()
+    assert not sandbox.temp_dir.exists()
+
+
 def seed_bot(session, *, name="random", game_id="tictactoe"):
     bot = Bot(name=name, game_id=game_id)
     session.add(bot)
@@ -112,6 +208,17 @@ def seed_submission(session, bot, *, source_code="print('ok')\n", version=1):
     session.commit()
     session.refresh(bot)
     return submission
+
+
+def mounted_source_path(command):
+    mount_index = command.index("--mount") + 1
+    mount = command[mount_index]
+    parts = dict(
+        part.split("=", maxsplit=1)
+        for part in mount.split(",")
+        if "=" in part
+    )
+    return Path(parts["src"])
 
 
 def login_user(session, *, email="player@example.com", password="correct"):
@@ -1348,8 +1455,10 @@ def test_create_match_runs_tictactoe_match_successfully(
     def fake_run_tictactoe_match(p1_command, p2_command, on_move):
         observed["p1_command"] = p1_command
         observed["p2_command"] = p2_command
-        observed["p1_source"] = Path(p1_command[1]).read_text(encoding="utf-8")
-        observed["p2_source"] = Path(p2_command[1]).read_text(encoding="utf-8")
+        observed["p1_source_path"] = mounted_source_path(p1_command)
+        observed["p2_source_path"] = mounted_source_path(p2_command)
+        observed["p1_source"] = observed["p1_source_path"].read_text(encoding="utf-8")
+        observed["p2_source"] = observed["p2_source_path"].read_text(encoding="utf-8")
         for player, move in [
             ("p1", (0, 0)),
             ("p2", (1, 0)),
@@ -1370,14 +1479,18 @@ def test_create_match_runs_tictactoe_match_successfully(
     assert response.status_code == 201
     match = sqlite_database_dependency.query(Match).one()
     assert response.headers["location"] == f"/matches/{match.id}"
-    assert observed["p1_command"][0] == sys.executable
-    assert observed["p2_command"][0] == sys.executable
-    assert observed["p1_command"][1].endswith(".py")
-    assert observed["p2_command"][1].endswith(".py")
+    assert observed["p1_command"][:2] == ["docker", "run"]
+    assert observed["p2_command"][:2] == ["docker", "run"]
+    assert "/bot/source.py" in observed["p1_command"][
+        observed["p1_command"].index("--mount") + 1
+    ]
+    assert "/bot/source.py" in observed["p2_command"][
+        observed["p2_command"].index("--mount") + 1
+    ]
     assert "engine.tictactoe" in observed["p1_source"]
     assert "engine.tictactoe" in observed["p2_source"]
-    assert not Path(observed["p1_command"][1]).exists()
-    assert not Path(observed["p2_command"][1]).exists()
+    assert not observed["p1_source_path"].exists()
+    assert not observed["p2_source_path"].exists()
     assert response.json() == {
         "match_id": match.id,
         "game": "tictactoe",
@@ -1602,8 +1715,10 @@ def test_create_match_runs_connectfour_match_successfully(
     def fake_run_connectfour_match(p1_command, p2_command, on_move):
         observed["p1_command"] = p1_command
         observed["p2_command"] = p2_command
-        observed["p1_source"] = Path(p1_command[1]).read_text(encoding="utf-8")
-        observed["p2_source"] = Path(p2_command[1]).read_text(encoding="utf-8")
+        observed["p1_source_path"] = mounted_source_path(p1_command)
+        observed["p2_source_path"] = mounted_source_path(p2_command)
+        observed["p1_source"] = observed["p1_source_path"].read_text(encoding="utf-8")
+        observed["p2_source"] = observed["p2_source_path"].read_text(encoding="utf-8")
         for player, move in [
             ("p1", 0),
             ("p2", 1),
@@ -1626,14 +1741,12 @@ def test_create_match_runs_connectfour_match_successfully(
     assert response.status_code == 201
     match = sqlite_database_dependency.query(Match).one()
     assert response.headers["location"] == f"/matches/{match.id}"
-    assert observed["p1_command"][0] == sys.executable
-    assert observed["p2_command"][0] == sys.executable
-    assert observed["p1_command"][1].endswith(".py")
-    assert observed["p2_command"][1].endswith(".py")
+    assert observed["p1_command"][:2] == ["docker", "run"]
+    assert observed["p2_command"][:2] == ["docker", "run"]
     assert "engine.connectfour" in observed["p1_source"]
     assert "engine.connectfour" in observed["p2_source"]
-    assert not Path(observed["p1_command"][1]).exists()
-    assert not Path(observed["p2_command"][1]).exists()
+    assert not observed["p1_source_path"].exists()
+    assert not observed["p2_source_path"].exists()
     assert response.json() == {
         "match_id": match.id,
         "game": "connect-four",
@@ -1666,9 +1779,20 @@ def test_create_match_runs_connectfour_match_successfully(
     ]
 
 
-def test_create_match_runs_real_random_bot_match_end_to_end(sqlite_database_dependency):
+def test_create_match_runs_random_bot_match_end_to_end(
+    sqlite_database_dependency,
+    monkeypatch,
+):
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
+
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+        return {
+            "winner": "p1",
+            "reason": "win",
+        }
+
+    monkeypatch.setattr(api_main, "run_tictactoe_match", fake_run_tictactoe_match)
 
     response = client.post("/matches", json=valid_match_request())
 
@@ -1686,9 +1810,20 @@ def test_create_match_runs_real_random_bot_match_end_to_end(sqlite_database_depe
     assert match.bot_two_rating_before == 1200
 
 
-def test_create_match_runs_seeded_random_bot_aliases(sqlite_database_dependency):
+def test_create_match_runs_seeded_random_bot_aliases(
+    sqlite_database_dependency,
+    monkeypatch,
+):
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
+
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+        return {
+            "winner": None,
+            "reason": "draw",
+        }
+
+    monkeypatch.setattr(api_main, "run_tictactoe_match", fake_run_tictactoe_match)
 
     response = client.post(
         "/matches",
@@ -1708,7 +1843,10 @@ def test_create_match_runs_seeded_random_bot_aliases(sqlite_database_dependency)
     assert {match.bot_one.name, match.bot_two.name} == {"randombot1", "randombot2"}
 
 
-def test_create_match_runs_active_submission_version(sqlite_database_dependency):
+def test_create_match_runs_active_submission_version(
+    sqlite_database_dependency,
+    monkeypatch,
+):
     user = login_user(sqlite_database_dependency)
     bot_one = Bot(name="versioned", game_id="tictactoe", owner_id=user.id)
     bot_two = Bot(name="opponent", game_id="tictactoe", owner_id=user.id)
@@ -1746,6 +1884,20 @@ def test_create_match_runs_active_submission_version(sqlite_database_dependency)
         json={"source_code": opponent_source},
     ).status_code == 201
 
+    observed = {}
+
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+        observed["p1_source"] = mounted_source_path(p1_command).read_text(
+            encoding="utf-8"
+        )
+        on_move("p1", (2, 2), [])
+        return {
+            "winner": "p1",
+            "reason": "win",
+        }
+
+    monkeypatch.setattr(api_main, "run_tictactoe_match", fake_run_tictactoe_match)
+
     response = client.post(
         "/matches",
         json={
@@ -1758,6 +1910,7 @@ def test_create_match_runs_active_submission_version(sqlite_database_dependency)
     match = sqlite_database_dependency.query(Match).one()
     assert match.moves[0].bot_id == bot_one.id
     assert match.moves[0].move == [2, 2]
+    assert observed["p1_source"] == second_source
 
 
 def test_create_match_rejects_bot_missing_from_database(sqlite_database_dependency):
@@ -1873,11 +2026,20 @@ def test_create_match_rejects_wrong_payload_types():
     assert body["error"]["details"]
 
 
-def test_create_match_runs_real_random_connectfour_bot_match_end_to_end(
+def test_create_match_runs_random_connectfour_bot_match_end_to_end(
     sqlite_database_dependency,
+    monkeypatch,
 ):
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
+
+    def fake_run_connectfour_match(p1_command, p2_command, on_move):
+        return {
+            "winner": "p2",
+            "reason": "win",
+        }
+
+    monkeypatch.setattr(api_main, "run_connectfour_match", fake_run_connectfour_match)
 
     payload = valid_match_request()
     payload["game"] = "connect-four"
@@ -1995,8 +2157,8 @@ def test_create_match_returns_error_when_match_execution_fails(
             "message": "runner failed",
         }
     }
-    assert not Path(observed["p1_command"][1]).exists()
-    assert not Path(observed["p2_command"][1]).exists()
+    assert not mounted_source_path(observed["p1_command"]).exists()
+    assert not mounted_source_path(observed["p2_command"]).exists()
 
 
 def test_unknown_route_returns_standard_http_error():
