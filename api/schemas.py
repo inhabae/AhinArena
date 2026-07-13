@@ -58,6 +58,10 @@ class MatchCreateResponse(BaseModel):
     winner_bot_id: int | None
     result_reason: str
 
+class MatchJobCreateResponse(BaseModel):
+    job_id: int
+    status: str
+
 class MatchSummary(BaseModel):
     match_id: int
     game: str

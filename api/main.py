@@ -8,7 +8,7 @@ from pathlib import Path
 from api.auth import hash_password, verify_password
 from api.bot_sandbox import BotSandbox, build_bot_sandbox
 from api.database import get_db, get_sessionmaker
-from api.models import Bot, BotSubmission, Match, Move, Session as AuthSession, User
+from api.models import Bot, BotSubmission, Match, MatchJob, Move, Session as AuthSession, User
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
 from api.ratings import score_for_bot_one as calculate_score_for_bot_one
 from engine.connectfour.runner import run_connectfour_match
@@ -16,6 +16,7 @@ from engine.tictactoe.runner import run_tictactoe_match
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -28,7 +29,7 @@ from api.errors import (
 )
 
 from api.schemas import (
-    MatchCreateResponse,
+    MatchJobCreateResponse,
     MatchRequest,
     MatchSummary,
     MatchDetail,
@@ -275,6 +276,15 @@ def resolve_bot(db: Session, *, game_id: str, bot_name: str) -> Bot:
         api_error(404, "bot_not_found", f"Bot not found: {bot_name}")
 
     return bot
+
+
+def require_active_submission(bot: Bot) -> None:
+    if bot.active_submission_id is None:
+        api_error(
+            400,
+            "bot_has_no_submission",
+            f"Bot has no active submission: {bot.name}",
+        )
 
 
 def score_for_bot_one_or_error(
@@ -593,8 +603,8 @@ def submit_bot_source(
 
 @app.post(
     "/matches",
-    status_code=status.HTTP_201_CREATED,
-    response_model=MatchCreateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=MatchJobCreateResponse,
 )
 def create_match(
     request: MatchRequest,
@@ -602,12 +612,7 @@ def create_match(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    runners = {
-        "tictactoe": run_tictactoe_match,
-        "connect-four": run_connectfour_match,
-    }
-
-    if request.game not in runners:
+    if request.game not in SUPPORTED_GAMES:
         api_error(400, "unsupported_game", f"Unsupported game: {request.game}")
 
     if len(request.players) != 2:
@@ -619,94 +624,30 @@ def create_match(
 
     bot_one = resolve_bot(db, game_id=request.game, bot_name=request.players[0].bot)
     bot_two = resolve_bot(db, game_id=request.game, bot_name=request.players[1].bot)
+    require_active_submission(bot_one)
+    require_active_submission(bot_two)
 
     if bot_one.id == bot_two.id:
         api_error(400, "duplicate_bot_match", "A bot cannot play against itself")
 
-    p1_sandbox: BotSandbox | None = None
-    p2_sandbox: BotSandbox | None = None
-    try:
-        p1_sandbox = build_bot_sandbox(bot_one)
-        p2_sandbox = build_bot_sandbox(bot_two)
-
-        try:
-            moves = []
-
-            def record_move(player, move, board):
-                bot_id = bot_one.id if player == "p1" else bot_two.id
-                moves.append((bot_id, move))
-
-            result = runners[request.game](
-                p1_command=p1_sandbox.command,
-                p2_command=p2_sandbox.command,
-                timeout=get_bot_move_timeout_seconds(),
-                startup_timeout=get_bot_startup_timeout_seconds(),
-                on_move=record_move,
-            )
-        except Exception as error:
-            api_error(500, "match_execution_failed", str(error))
-    finally:
-        if p1_sandbox is not None:
-            p1_sandbox.cleanup()
-        if p2_sandbox is not None:
-            p2_sandbox.cleanup()
-
-    bot_one_rating_before = bot_one.rating
-    bot_two_rating_before = bot_two.rating
-    winner_bot_id = (
-        None if result["winner"] is None
-        else bot_one.id if result["winner"] == "p1"
-        else bot_two.id
-    )
-    rating_change = calculate_elo_rating_change(
-        bot_one_rating=bot_one_rating_before,
-        bot_two_rating=bot_two_rating_before,
-        bot_one_score=score_for_bot_one_or_error(
-            winner_bot_id,
-            bot_one.id,
-            bot_two.id,
-        ),
-        k_factor=DEFAULT_ELO_K_FACTOR,
-    )
-    bot_one_rating_delta = rating_change.bot_one_rating - bot_one_rating_before
-    bot_two_rating_delta = rating_change.bot_two_rating - bot_two_rating_before
-
-    match = Match(
+    job = MatchJob(
         game_id=request.game,
         bot_one_id=bot_one.id,
         bot_two_id=bot_two.id,
-        bot_one_rating_before=bot_one_rating_before,
-        bot_two_rating_before=bot_two_rating_before,
-        bot_one_rating_after=rating_change.bot_one_rating,
-        bot_two_rating_after=rating_change.bot_two_rating,
-        bot_one_rating_delta=bot_one_rating_delta,
-        bot_two_rating_delta=bot_two_rating_delta,
-        winner_bot_id=winner_bot_id,
-        result_reason=result["reason"],
-        moves=[
-            Move(move_number=index, bot_id=bot_id, move=move)
-            for index, (bot_id, move) in enumerate(moves, start=1)
-        ],
+        status="queued",
     )
-    apply_match_record_updates(
-        bot_one=bot_one,
-        bot_two=bot_two,
-        winner_bot_id=winner_bot_id,
-        bot_one_rating_after=rating_change.bot_one_rating,
-        bot_two_rating_after=rating_change.bot_two_rating,
-    )
-    db.add(match)
+    db.add(job)
     db.commit()
-    db.refresh(match)
+    db.refresh(job)
 
-    response.headers["Location"] = f"/matches/{match.id}"
+    bind = db.get_bind()
+    if bind is not None and bind.dialect.name == "postgresql":
+        db.execute(text("NOTIFY match_jobs_channel"))
+        db.commit()
 
-    return MatchCreateResponse(
-        match_id=match.id,
-        game=match.game_id,
-        winner_bot_id=match.winner_bot_id,
-        result_reason=match.result_reason,
-    )
+    response.headers["Location"] = f"/match-jobs/{job.id}"
+
+    return MatchJobCreateResponse(job_id=job.id, status=job.status)
 
 @app.get("/matches", response_model=MatchListResponse)
 def list_matches(

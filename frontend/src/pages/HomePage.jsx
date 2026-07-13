@@ -59,6 +59,7 @@ export default function HomePage() {
   const [submitState, setSubmitState] = useState({
     loading: false,
     error: null,
+    job: null,
   });
 
   useEffect(() => {
@@ -67,7 +68,7 @@ export default function HomePage() {
     setBotsState({ loading: true, items: [], error: null });
     setBotOne("");
     setBotTwo("");
-    setSubmitState({ loading: false, error: null });
+    setSubmitState({ loading: false, error: null, job: null });
 
     getBots({ game_id: selectedGame })
       .then((items) => {
@@ -132,6 +133,11 @@ export default function HomePage() {
         className: "error",
         message: errorMessageFor(submitState.error),
       }
+    : submitState.job
+      ? {
+          className: "success",
+          message: `Match queued as job #${submitState.job.job_id}.`,
+        }
     : hasDuplicateBots
       ? {
           className: "error",
@@ -156,22 +162,22 @@ export default function HomePage() {
       return;
     }
 
-    setSubmitState({ loading: true, error: null });
+    setSubmitState({ loading: true, error: null, job: null });
 
     try {
-      const match = await createMatch({
+      const job = await createMatch({
         game: selectedGame,
         players: [{ bot: botOne }, { bot: botTwo }],
       });
 
-      navigate(`/matches/${match.match_id}`);
+      setSubmitState({ loading: false, error: null, job });
     } catch (error) {
       if (error.status === 401) {
         navigate("/login");
         return;
       }
 
-      setSubmitState({ loading: false, error });
+      setSubmitState({ loading: false, error, job: null });
     }
   }
 
@@ -259,7 +265,7 @@ export default function HomePage() {
               </label>
 
               <button type="submit" disabled={!canSubmit}>
-                {submitState.loading ? "Running..." : "Run match"}
+                {submitState.loading ? "Queueing..." : "Queue match"}
               </button>
             </form>
           )}
