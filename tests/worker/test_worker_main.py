@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -177,3 +178,141 @@ def test_run_once_marks_job_failed_when_match_execution_raises(monkeypatch):
     assert failed.error_message == "match exploded"
     assert failed.attempts == 1
     assert db.query(Match).count() == 0
+
+
+def test_get_poll_interval_seconds_defaults_to_five(monkeypatch):
+    monkeypatch.delenv("WORKER_POLL_INTERVAL_SECONDS", raising=False)
+
+    assert worker_main.get_poll_interval_seconds() == 5.0
+
+
+def test_get_poll_interval_seconds_uses_environment(monkeypatch):
+    monkeypatch.setenv("WORKER_POLL_INTERVAL_SECONDS", "0.25")
+
+    assert worker_main.get_poll_interval_seconds() == 0.25
+
+
+def test_create_job_notifier_uses_postgres_listener_for_postgres(monkeypatch):
+    created = []
+
+    class FakeDialect:
+        name = "postgresql"
+
+    class FakeEngine:
+        dialect = FakeDialect()
+
+    class FakePostgresJobNotifier:
+        def __init__(self, database_url):
+            created.append(database_url)
+
+    monkeypatch.setattr(worker_main, "get_engine", lambda: FakeEngine())
+    monkeypatch.setattr(worker_main, "get_database_url", lambda: "postgresql://db")
+    monkeypatch.setattr(
+        worker_main,
+        "PostgresJobNotifier",
+        FakePostgresJobNotifier,
+    )
+
+    notifier = worker_main.create_job_notifier()
+
+    assert isinstance(notifier, FakePostgresJobNotifier)
+    assert created == ["postgresql://db"]
+
+
+def test_create_job_notifier_falls_back_to_polling_for_non_postgres(monkeypatch):
+    class FakeDialect:
+        name = "sqlite"
+
+    class FakeEngine:
+        dialect = FakeDialect()
+
+    monkeypatch.setattr(worker_main, "get_engine", lambda: FakeEngine())
+
+    notifier = worker_main.create_job_notifier()
+
+    assert isinstance(notifier, worker_main.PollingJobNotifier)
+
+
+def test_postgres_job_notifier_listens_and_waits_for_notifications(monkeypatch):
+    calls = []
+
+    class FakeConnection:
+        def execute(self, sql):
+            calls.append(("execute", sql))
+
+        def notifies(self, *, timeout, stop_after):
+            calls.append(("notifies", timeout, stop_after))
+            yield object()
+
+        def close(self):
+            calls.append(("close",))
+
+    class FakePsycopg:
+        @staticmethod
+        def connect(database_url, autocommit):
+            calls.append(("connect", database_url, autocommit))
+            return FakeConnection()
+
+    monkeypatch.setattr(worker_main, "psycopg", FakePsycopg)
+
+    notifier = worker_main.PostgresJobNotifier("postgresql://db")
+    notifier.wait(3.5)
+    notifier.close()
+
+    assert calls == [
+        ("connect", "postgresql://db", True),
+        ("execute", "LISTEN match_jobs_channel"),
+        ("notifies", 3.5, 1),
+        ("close",),
+    ]
+
+
+def test_run_loop_waits_on_notifier_after_empty_claim(monkeypatch):
+    wait_calls = []
+
+    class StopLoop(Exception):
+        pass
+
+    class FakeNotifier:
+        def wait(self, timeout_seconds):
+            wait_calls.append(timeout_seconds)
+            raise StopLoop
+
+        def close(self):
+            wait_calls.append("closed")
+
+    monkeypatch.setattr(worker_main, "run_once", lambda: False)
+
+    with pytest.raises(StopLoop):
+        worker_main.run_loop(poll_interval_seconds=7.0, notifier=FakeNotifier())
+
+    assert wait_calls == [7.0, "closed"]
+
+
+def test_run_loop_retries_immediately_after_processed_job(monkeypatch):
+    run_results = iter([True, False])
+    run_calls = []
+    wait_calls = []
+
+    class StopLoop(Exception):
+        pass
+
+    class FakeNotifier:
+        def wait(self, timeout_seconds):
+            wait_calls.append(timeout_seconds)
+            raise StopLoop
+
+        def close(self):
+            wait_calls.append("closed")
+
+    def fake_run_once():
+        run_calls.append("run")
+        return next(run_results)
+
+    monkeypatch.setattr(worker_main, "run_once", fake_run_once)
+
+    with pytest.raises(StopLoop):
+        worker_main.run_loop(poll_interval_seconds=5.0, notifier=FakeNotifier())
+
+    assert run_calls == ["run", "run"]
+    assert wait_calls == [5.0, "closed"]
