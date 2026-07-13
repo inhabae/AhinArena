@@ -1482,6 +1482,102 @@ def test_create_match_enqueues_match_job(
     assert sqlite_database_dependency.query(Match).count() == 0
 
 
+def test_get_match_job_returns_queued_job(sqlite_database_dependency):
+    bot_one = seed_bot(sqlite_database_dependency, name="alpha")
+    bot_two = seed_bot(sqlite_database_dependency, name="beta")
+    job = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        status="queued",
+    )
+    sqlite_database_dependency.add(job)
+    sqlite_database_dependency.commit()
+
+    response = client.get(f"/match-jobs/{job.id}")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "job_id": job.id,
+        "status": "queued",
+        "match_id": None,
+        "error_message": None,
+    }
+
+
+def test_get_match_job_returns_completed_job_with_resolvable_match(
+    sqlite_database_dependency,
+):
+    bot_one = seed_bot(sqlite_database_dependency, name="alpha")
+    bot_two = seed_bot(sqlite_database_dependency, name="beta")
+    match = make_persisted_match(
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        winner_bot_id=bot_one.id,
+    )
+    sqlite_database_dependency.add(match)
+    sqlite_database_dependency.commit()
+    job = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        status="completed",
+        match_id=match.id,
+    )
+    sqlite_database_dependency.add(job)
+    sqlite_database_dependency.commit()
+
+    response = client.get(f"/match-jobs/{job.id}")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "job_id": job.id,
+        "status": "completed",
+        "match_id": match.id,
+        "error_message": None,
+    }
+
+    match_response = client.get(f"/matches/{match.id}")
+    assert match_response.status_code == 200
+    assert match_response.json()["match_id"] == match.id
+
+
+def test_get_match_job_returns_failed_job_error_message(sqlite_database_dependency):
+    bot_one = seed_bot(sqlite_database_dependency, name="alpha")
+    bot_two = seed_bot(sqlite_database_dependency, name="beta")
+    job = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        status="failed",
+        error_message="bot timed out",
+    )
+    sqlite_database_dependency.add(job)
+    sqlite_database_dependency.commit()
+
+    response = client.get(f"/match-jobs/{job.id}")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "job_id": job.id,
+        "status": "failed",
+        "match_id": None,
+        "error_message": "bot timed out",
+    }
+
+
+def test_get_match_job_returns_404_for_unknown_job_id(sqlite_database_dependency):
+    response = client.get("/match-jobs/999")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "match_job_not_found",
+            "message": "Match job not found: 999",
+        }
+    }
+
+
 def test_create_match_rejects_same_bot_for_both_players(
     sqlite_database_dependency,
     monkeypatch,
