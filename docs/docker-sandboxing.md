@@ -100,6 +100,8 @@ The sandbox command can be adjusted with environment variables:
 | `BOT_SANDBOX_CPU_LIMIT` | `0.5` | Docker CPU quota. |
 | `BOT_SANDBOX_PIDS_LIMIT` | `64` | Maximum process count inside the container. |
 | `BOT_SANDBOX_TMPFS_SIZE` | `16m` | Size of the writable `/tmp` tmpfs. |
+| `BOT_MOVE_TIMEOUT_SECONDS` | `2.0` | Per-move response timeout after a bot has started. |
+| `BOT_STARTUP_TIMEOUT_SECONDS` | `10.0` | First-response timeout that includes container startup and Python imports. |
 
 Empty environment variable values are ignored and fall back to the defaults.
 

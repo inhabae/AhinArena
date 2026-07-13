@@ -23,6 +23,7 @@ def run_match(
     p1_command=None,
     p2_command=None,
     timeout=2.0,
+    startup_timeout=None,
     on_move=None,
 ):
     p1_command = p1_command or default_bot_command
@@ -43,6 +44,7 @@ def run_match(
         },
         game_cls(),
         timeout=timeout,
+        startup_timeout=startup_timeout,
         on_move=translated_on_move,
     )
 

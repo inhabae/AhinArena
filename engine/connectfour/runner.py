@@ -11,6 +11,7 @@ def run_connectfour_match(
     p1_command=None,
     p2_command=None,
     timeout=2.0,
+    startup_timeout=None,
     on_move=None,
 ):
     return run_match(
@@ -19,5 +20,6 @@ def run_connectfour_match(
         p1_command=p1_command,
         p2_command=p2_command,
         timeout=timeout,
+        startup_timeout=startup_timeout,
         on_move=on_move,
     )
