@@ -174,6 +174,21 @@ Allow developers to upload custom AI agents.
 
 Execute uploaded AI agents securely inside isolated Docker containers.
 
+**Deliverables**
+
+- Dedicated Python bot runner image in `docker/bot_runner/Dockerfile`
+- Non-root sandbox user inside the runner image
+- Submitted source mounted read-only at `/bot/source.py`
+- Per-bot temporary source files created from active submissions
+- Per-bot named containers for match execution
+- Container networking disabled with `--network none`
+- Linux capabilities dropped and `no-new-privileges` enabled
+- Read-only container root filesystem with constrained `/tmp` tmpfs
+- Memory, CPU, and PID limits configurable through environment variables
+- Sandbox cleanup that force-removes containers and deletes temporary source
+  directories after match execution
+- Docker sandboxing documentation in `docs/docker-sandboxing.md`
+
 ---
 
 ## Milestone 10 — Queue & Workers
