@@ -2,7 +2,9 @@ import os
 import time
 from datetime import datetime, timezone
 
-from api.database import get_sessionmaker
+import psycopg
+from api.config import get_database_url
+from api.database import get_engine, get_sessionmaker
 from api.match_execution import (
     execute_match,
     get_bot_move_timeout_seconds,
@@ -13,7 +15,47 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 
-DEFAULT_POLL_INTERVAL_SECONDS = 1.0
+MATCH_JOBS_CHANNEL = "match_jobs_channel"
+DEFAULT_POLL_INTERVAL_SECONDS = 5.0
+
+
+class PollingJobNotifier:
+    def wait(self, timeout_seconds: float) -> None:
+        time.sleep(timeout_seconds)
+
+    def close(self) -> None:
+        pass
+
+
+class PostgresJobNotifier:
+    def __init__(self, database_url: str, channel: str = MATCH_JOBS_CHANNEL):
+        self.connection = psycopg.connect(database_url, autocommit=True)
+        self.connection.execute(f"LISTEN {channel}")
+
+    def wait(self, timeout_seconds: float) -> None:
+        next(
+            self.connection.notifies(timeout=timeout_seconds, stop_after=1),
+            None,
+        )
+
+    def close(self) -> None:
+        self.connection.close()
+
+
+def get_poll_interval_seconds() -> float:
+    return float(
+        os.environ.get("WORKER_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS)
+    )
+
+
+def create_job_notifier():
+    if get_engine().dialect.name != "postgresql":
+        return PollingJobNotifier()
+
+    try:
+        return PostgresJobNotifier(get_database_url())
+    except Exception:
+        return PollingJobNotifier()
 
 
 def claim_next_job(db: Session) -> MatchJob | None:
@@ -99,18 +141,22 @@ def run_once() -> bool:
         db.close()
 
 
-def run_loop(poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS) -> None:
-    while True:
-        processed = run_once()
-        if not processed:
-            time.sleep(poll_interval_seconds)
+def run_loop(
+    poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
+    notifier=None,
+) -> None:
+    job_notifier = notifier or create_job_notifier()
+    try:
+        while True:
+            processed = run_once()
+            if not processed:
+                job_notifier.wait(poll_interval_seconds)
+    finally:
+        job_notifier.close()
 
 
 def main() -> None:
-    poll_interval = float(
-        os.environ.get("WORKER_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS)
-    )
-    run_loop(poll_interval_seconds=poll_interval)
+    run_loop(poll_interval_seconds=get_poll_interval_seconds())
 
 
 if __name__ == "__main__":
