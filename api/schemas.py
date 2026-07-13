@@ -62,6 +62,12 @@ class MatchJobCreateResponse(BaseModel):
     job_id: int
     status: str
 
+class MatchJobDetail(BaseModel):
+    job_id: int
+    status: str
+    match_id: int | None
+    error_message: str | None
+
 class MatchSummary(BaseModel):
     match_id: int
     game: str

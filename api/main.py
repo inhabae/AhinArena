@@ -29,6 +29,7 @@ from api.errors import (
 )
 
 from api.schemas import (
+    MatchJobDetail,
     MatchJobCreateResponse,
     MatchRequest,
     MatchSummary,
@@ -648,6 +649,20 @@ def create_match(
     response.headers["Location"] = f"/match-jobs/{job.id}"
 
     return MatchJobCreateResponse(job_id=job.id, status=job.status)
+
+@app.get("/match-jobs/{job_id}", response_model=MatchJobDetail)
+def get_match_job(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(MatchJob).filter(MatchJob.id == job_id).first()
+
+    if job is None:
+        api_error(404, "match_job_not_found", f"Match job not found: {job_id}")
+
+    return MatchJobDetail(
+        job_id=job.id,
+        status=job.status,
+        match_id=job.match_id,
+        error_message=job.error_message,
+    )
 
 @app.get("/matches", response_model=MatchListResponse)
 def list_matches(
