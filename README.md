@@ -26,7 +26,7 @@ Frontend (React)
 Backend API (FastAPI)
         │
         ├── PostgreSQL
-        ├── Redis
+        ├── Job Queue (Postgres match_jobs)
         └── Game Runner
                 │
                 ▼
@@ -50,7 +50,7 @@ Backend API (FastAPI)
 - [x] Milestone 7 — User Accounts
 - [x] Milestone 8 — Bot Submission
 - [x] Milestone 9 — Docker Sandboxing
-- [ ] Milestone 10 — Queue & Workers
+- [x] Milestone 10 — Queue & Workers
 - [ ] Milestone 11 — Real-Time Games
 - [ ] Milestone 12 — Production Deployment
 
@@ -226,10 +226,9 @@ inside a locked-down Docker container. See `docs/bot-submission.md` and
 
 ## Match API
 
-`POST /matches` runs a match, persists the completed match and move history to
-PostgreSQL, and returns a compact `201 Created` response with the persisted
-`match_id`. The request requires an authenticated session cookie. PostgreSQL is
-required for API persistence.
+`POST /matches` enqueues a match job and returns `202 Accepted` with a `job_id`.
+The request requires an authenticated session cookie. PostgreSQL is required for
+API persistence and queueing.
 
 Tic-Tac-Toe:
 
@@ -255,19 +254,47 @@ Connect Four:
 }
 ```
 
-Successful responses include a `Location: /matches/{match_id}` header and a
-compact result summary:
+Successful responses include a `Location: /match-jobs/{job_id}` header and a
+compact job summary:
 
 ```json
 {
-  "match_id": 42,
-  "game": "tictactoe",
-  "winner_bot_id": 1,
-  "result_reason": "win"
+  "job_id": 17,
+  "status": "queued"
 }
 ```
 
 Unsupported games return a `400` response with error code `unsupported_game`.
+
+Check a match job:
+
+```http
+GET /match-jobs/17
+```
+
+Queued or running jobs return a null `match_id`:
+
+```json
+{
+  "job_id": 17,
+  "status": "running",
+  "match_id": null,
+  "error_message": null
+}
+```
+
+Completed jobs include the match ID for the existing match detail endpoint:
+
+```json
+{
+  "job_id": 17,
+  "status": "completed",
+  "match_id": 42,
+  "error_message": null
+}
+```
+
+Failed jobs return `status: "failed"` with an `error_message`.
 
 ### Ratings and leaderboard
 

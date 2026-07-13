@@ -195,7 +195,22 @@ Execute uploaded AI agents securely inside isolated Docker containers.
 
 **Goal**
 
-Support asynchronous match execution using Redis.
+Support asynchronous match execution through a PostgreSQL-backed job queue and
+separate worker processes.
+
+**Deliverables**
+
+- PostgreSQL-backed `match_jobs` table for queued match requests
+- `POST /matches` enqueue flow returning `202 Accepted`, `job_id`, and a
+  `Location: /match-jobs/{job_id}` header
+- Job status lookup through `GET /match-jobs/{job_id}`
+- Worker process entry point through `python3 -m worker.main`
+- Worker job claiming with `SELECT ... FOR UPDATE SKIP LOCKED`
+- Existing referee, Docker sandboxing, match persistence, move persistence, and
+  Elo rating updates executed from workers
+- PostgreSQL `LISTEN`/`NOTIFY` wakeups with polling fallback
+- Stalled `running` job recovery with attempt limits
+- Frontend match creation polling until completion or failure
 
 ---
 

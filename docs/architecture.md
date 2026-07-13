@@ -18,10 +18,14 @@ The system consists of a web frontend, backend services, persistent storage, and
                         ▼
               Backend API (FastAPI)
                         │
-        ┌───────────────┼───────────────┬───────────────┐
-        │               │               │               │
-        ▼               ▼               ▼               ▼
-   PostgreSQL    Session Storage      Redis        Matchmaker
+        ┌───────────────┼───────────────┐
+        │               │               │
+        ▼               ▼               ▼
+   PostgreSQL    Session Storage   Job Queue
+                                  (Postgres match_jobs)
+                                        │
+                                        ▼
+                                  Worker Pool
                                         │
                                         ▼
                                   Game Runner
@@ -49,17 +53,34 @@ The system consists of a web frontend, backend services, persistent storage, and
   bot source submission, match history, match detail, and leaderboard data.
 - **PostgreSQL** — Persistent data for bots, completed matches, ordered moves,
   ratings, records, users, sessions, bot submissions, active bot submission
-  pointers, and per-match rating snapshots.
+  pointers, queued match jobs, and per-match rating snapshots.
 - **Session Storage** — Server-side auth sessions stored in the PostgreSQL
   `sessions` table and referenced by the browser's HTTP-only
   `ahin_arena_session` cookie. Expired sessions are removed when encountered.
-- **Redis** — Planned cache and queue layer.
-- **Matchmaker** — Planned opponent selection service.
+- **Job Queue** — PostgreSQL `match_jobs` rows used to track queued, running,
+  completed, and failed asynchronous match requests. Workers claim queued jobs
+  with `SELECT ... FOR UPDATE SKIP LOCKED`.
+- **Worker Pool** — One or more `python3 -m worker.main` processes that claim
+  queued match jobs, run matches, persist results, and update ratings.
 - **Game Runner** — Executes matches through the registered game engines.
 - **Docker** — Secure execution boundary for submitted bot source. Each active
   submission is written to a temporary source file and run in a locked-down
   container with no network access, dropped capabilities, a read-only root
   filesystem, and resource limits.
+
+## Asynchronous Match Execution
+
+`POST /matches` validates the requested game and bots, inserts a `match_jobs`
+row, sends `NOTIFY match_jobs_channel`, and returns `202 Accepted` with a
+`job_id` and `Location: /match-jobs/{job_id}`. The API no longer runs the match
+inside the request cycle.
+
+Worker processes listen for notifications and also poll as a fallback. A worker
+claims a queued job with `SELECT ... FOR UPDATE SKIP LOCKED`, marks it running,
+then runs the existing match execution path. On success, it persists the
+completed match, ordered moves, and Elo updates, stores the resulting
+`match_id` on the job, and marks the job completed. Clients poll
+`GET /match-jobs/{job_id}` until the job completes or fails.
 
 ## Frontend Flow
 
