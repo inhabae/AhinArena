@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from api.auth import hash_password, verify_password
-from api.bot_sandbox import BotSandbox, build_bot_sandbox, cleanup_bot_sandbox
+from api.bot_sandbox import BotSandbox, build_bot_sandbox
 from api.database import get_db, get_sessionmaker
 from api.models import Bot, BotSubmission, Match, Move, Session as AuthSession, User
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
@@ -615,8 +615,10 @@ def create_match(
         except Exception as error:
             api_error(500, "match_execution_failed", str(error))
     finally:
-        cleanup_bot_sandbox(p1_sandbox)
-        cleanup_bot_sandbox(p2_sandbox)
+        if p1_sandbox is not None:
+            p1_sandbox.cleanup()
+        if p2_sandbox is not None:
+            p2_sandbox.cleanup()
 
     bot_one_rating_before = bot_one.rating
     bot_two_rating_before = bot_two.rating

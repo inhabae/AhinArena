@@ -26,6 +26,9 @@ class BotSandbox:
     temp_dir: Path
     source_path: Path
 
+    def cleanup(self) -> None:
+        cleanup_bot_sandbox(self)
+
 
 def _env_setting(name: str, default: str) -> str:
     return os.environ.get(name, default).strip() or default

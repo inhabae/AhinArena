@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api.auth import hash_password, verify_password
+import api.bot_sandbox as bot_sandbox
 from api.database import Base, get_db
 from api.models import Bot, BotSubmission, Match, Move, Session as AuthSession, User
 from api.schemas import UserRegisterRequest
@@ -133,7 +134,7 @@ def test_build_bot_sandbox_creates_locked_down_docker_command(monkeypatch):
         assert sandbox.container_name.startswith("ahinarena-bot-42-")
         assert sandbox.source_path.read_text(encoding="utf-8") == "print('move')\n"
     finally:
-        api_main.cleanup_bot_sandbox(sandbox)
+        sandbox.cleanup()
 
 
 def test_build_bot_sandbox_raises_existing_no_submission_error():
@@ -176,13 +177,9 @@ def test_cleanup_bot_sandbox_force_removes_container_and_deletes_temp_file(
         )
         raise OSError("docker unavailable")
 
-    monkeypatch.setattr(
-        api_main.cleanup_bot_sandbox.__globals__["subprocess"],
-        "run",
-        fake_run,
-    )
+    monkeypatch.setattr(bot_sandbox.subprocess, "run", fake_run)
 
-    api_main.cleanup_bot_sandbox(sandbox)
+    sandbox.cleanup()
 
     assert calls[0]["command"] == ["docker", "rm", "--force", sandbox.container_name]
     assert calls[0]["check"] is False
