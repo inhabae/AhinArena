@@ -6,11 +6,17 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from api.auth import hash_password, verify_password
-from api.bot_sandbox import BotSandbox, build_bot_sandbox
+from api.bot_sandbox import build_bot_sandbox
 from api.database import get_db, get_sessionmaker
 from api.models import Bot, BotSubmission, Match, MatchJob, Move, Session as AuthSession, User
-from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
-from api.ratings import score_for_bot_one as calculate_score_for_bot_one
+from api.match_execution import (
+    DEFAULT_BOT_MOVE_TIMEOUT_SECONDS,
+    DEFAULT_BOT_STARTUP_TIMEOUT_SECONDS,
+    apply_match_record_updates,
+    get_bot_move_timeout_seconds,
+    get_bot_startup_timeout_seconds,
+)
+from api.match_execution import score_for_bot_one_or_error as _score_for_bot_one_or_error
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
@@ -60,8 +66,6 @@ SESSION_COOKIE_NAME = "ahin_arena_session"
 SESSION_ID_BYTES = 48
 SESSION_TTL = timedelta(days=14)
 MAX_BOT_SUBMISSION_SOURCE_BYTES = 100_000
-DEFAULT_BOT_MOVE_TIMEOUT_SECONDS = 2.0
-DEFAULT_BOT_STARTUP_TIMEOUT_SECONDS = 10.0
 
 DEFAULT_BOT_SOURCE_PATHS = {
     "tictactoe": Path(__file__).resolve().parent.parent / "engine" / "tictactoe" / "random_bot.py",
@@ -99,33 +103,6 @@ def should_secure_auth_cookie() -> bool:
         or "development"
     )
     return environment.lower() in {"production", "prod"}
-
-
-def _float_env_setting(name: str, default: float) -> float:
-    value = os.environ.get(name, "").strip()
-    if not value:
-        return default
-
-    try:
-        parsed = float(value)
-    except ValueError:
-        return default
-
-    return parsed if parsed > 0 else default
-
-
-def get_bot_move_timeout_seconds() -> float:
-    return _float_env_setting(
-        "BOT_MOVE_TIMEOUT_SECONDS",
-        DEFAULT_BOT_MOVE_TIMEOUT_SECONDS,
-    )
-
-
-def get_bot_startup_timeout_seconds() -> float:
-    return _float_env_setting(
-        "BOT_STARTUP_TIMEOUT_SECONDS",
-        DEFAULT_BOT_STARTUP_TIMEOUT_SECONDS,
-    )
 
 
 def set_session_cookie(response: Response, session_id: str, expires_at: datetime) -> None:
@@ -294,40 +271,13 @@ def score_for_bot_one_or_error(
     bot_two_id: int,
 ) -> float:
     try:
-        return calculate_score_for_bot_one(
+        return _score_for_bot_one_or_error(
             winner_bot_id=winner_bot_id,
             bot_one_id=bot_one_id,
             bot_two_id=bot_two_id,
         )
     except ValueError:
         api_error(500, "unknown_winner_bot", f"Unknown winner bot: {winner_bot_id}")
-
-
-def apply_match_record_updates(
-    *,
-    bot_one: Bot,
-    bot_two: Bot,
-    winner_bot_id: int | None,
-    bot_one_rating_after: int,
-    bot_two_rating_after: int,
-) -> None:
-    assert bot_one.id != bot_two.id
-    assert winner_bot_id in {bot_one.id, bot_two.id, None}
-
-    bot_one.rating = bot_one_rating_after
-    bot_two.rating = bot_two_rating_after
-    bot_one.games_played += 1
-    bot_two.games_played += 1
-
-    if winner_bot_id is None:
-        bot_one.draws += 1
-        bot_two.draws += 1
-    elif winner_bot_id == bot_one.id:
-        bot_one.wins += 1
-        bot_two.losses += 1
-    elif winner_bot_id == bot_two.id:
-        bot_two.wins += 1
-        bot_one.losses += 1
 
 
 @asynccontextmanager
