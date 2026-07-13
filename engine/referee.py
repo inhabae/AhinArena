@@ -13,8 +13,10 @@ class BotTimeoutError(RuntimeError):
 
 
 class BotProcess:
-    def __init__(self, command, timeout=1.0):
+    def __init__(self, command, timeout=1.0, startup_timeout=None):
         self.timeout = timeout
+        self.startup_timeout = startup_timeout if startup_timeout is not None else timeout
+        self._has_returned_move = False
         self._stdout_buffer = b""
         self.process = subprocess.Popen(
             command,
@@ -28,16 +30,20 @@ class BotProcess:
         self.process.stdin.write(json.dumps(state) + "\n")
         self.process.stdin.flush()
 
-        response = self._read_response_line()
+        response_timeout = (
+            self.timeout if self._has_returned_move else self.startup_timeout
+        )
+        response = self._read_response_line(response_timeout)
 
         if not response:
             stderr = self.process.stderr.read()
             raise RuntimeError(f"Bot did not return a move. stderr: {stderr}")
 
+        self._has_returned_move = True
         return json.loads(response)
 
-    def _read_response_line(self):
-        deadline = time.monotonic() + self.timeout
+    def _read_response_line(self, timeout):
+        deadline = time.monotonic() + timeout
         stdout_fd = self.process.stdout.fileno()
         os.set_blocking(stdout_fd, False)
 
@@ -56,14 +62,14 @@ class BotProcess:
                 if remaining <= 0:
                     self._kill_and_wait()
                     raise BotTimeoutError(
-                        f"Bot timed out after {self.timeout} seconds"
+                        f"Bot timed out after {timeout} seconds"
                     )
 
                 events = selector.select(timeout=remaining)
                 if not events:
                     self._kill_and_wait()
                     raise BotTimeoutError(
-                        f"Bot timed out after {self.timeout} seconds"
+                        f"Bot timed out after {timeout} seconds"
                     )
 
                 while True:
@@ -125,6 +131,7 @@ class Referee:
         player_commands,
         game_rules: GameRules,
         timeout=2.0,
+        startup_timeout=None,
         on_move=None,
     ):
         self.game = game_rules
@@ -136,7 +143,7 @@ class Referee:
             )
 
         self.bot_processes = {
-            player: BotProcess(player_commands[player], timeout)
+            player: BotProcess(player_commands[player], timeout, startup_timeout)
             for player in self.player_ids
         }
         self.on_move = on_move

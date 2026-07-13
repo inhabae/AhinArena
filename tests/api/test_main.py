@@ -1441,7 +1441,7 @@ def test_create_match_uses_overridden_database_session(
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
 
-    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         return {
             "winner": None,
             "reason": "draw",
@@ -1463,7 +1463,7 @@ def test_create_match_runs_tictactoe_match_successfully(
     api_main.seed_default_bots(sqlite_database_dependency)
     observed = {}
 
-    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         observed["p1_command"] = p1_command
         observed["p2_command"] = p2_command
         observed["p1_source_path"] = mounted_source_path(p1_command)
@@ -1514,7 +1514,7 @@ def test_create_match_persists_completed_match(sqlite_database_dependency, monke
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
 
-    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         on_move("p1", (0, 0), [])
         on_move("p2", (1, 0), [])
         return {
@@ -1569,7 +1569,7 @@ def test_create_match_rejects_same_bot_for_both_players(
     authenticate_request_dependency()
     seed_bot(sqlite_database_dependency)
 
-    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         raise AssertionError("runner should not be called")
 
     monkeypatch.setattr(api_main, "run_tictactoe_match", fake_run_tictactoe_match)
@@ -1620,7 +1620,7 @@ def test_create_match_updates_distinct_bot_ratings_and_records(
     seed_submission(sqlite_database_dependency, bot_one)
     seed_submission(sqlite_database_dependency, bot_two)
 
-    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         return {
             "winner": "p2",
             "reason": "win",
@@ -1678,7 +1678,7 @@ def test_create_match_updates_ratings_and_records_for_draw(
     seed_submission(sqlite_database_dependency, bot_one)
     seed_submission(sqlite_database_dependency, bot_two)
 
-    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         return {
             "winner": None,
             "reason": "draw",
@@ -1723,7 +1723,7 @@ def test_create_match_runs_connectfour_match_successfully(
     api_main.seed_default_bots(sqlite_database_dependency)
     observed = {}
 
-    def fake_run_connectfour_match(p1_command, p2_command, on_move):
+    def fake_run_connectfour_match(p1_command, p2_command, on_move, **_kwargs):
         observed["p1_command"] = p1_command
         observed["p2_command"] = p2_command
         observed["p1_source_path"] = mounted_source_path(p1_command)
@@ -1797,7 +1797,7 @@ def test_create_match_runs_random_bot_match_end_to_end(
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
 
-    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         return {
             "winner": "p1",
             "reason": "win",
@@ -1828,7 +1828,7 @@ def test_create_match_runs_seeded_random_bot_aliases(
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
 
-    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         return {
             "winner": None,
             "reason": "draw",
@@ -1897,7 +1897,7 @@ def test_create_match_runs_active_submission_version(
 
     observed = {}
 
-    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         observed["p1_source"] = mounted_source_path(p1_command).read_text(
             encoding="utf-8"
         )
@@ -2044,7 +2044,7 @@ def test_create_match_runs_random_connectfour_bot_match_end_to_end(
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
 
-    def fake_run_connectfour_match(p1_command, p2_command, on_move):
+    def fake_run_connectfour_match(p1_command, p2_command, on_move, **_kwargs):
         return {
             "winner": "p2",
             "reason": "win",
@@ -2151,7 +2151,7 @@ def test_create_match_returns_error_when_match_execution_fails(
     api_main.seed_default_bots(sqlite_database_dependency)
     observed = {}
 
-    def failing_run_tictactoe_match(p1_command, p2_command, on_move):
+    def failing_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         observed["p1_command"] = p1_command
         observed["p2_command"] = p2_command
         raise RuntimeError("runner failed")

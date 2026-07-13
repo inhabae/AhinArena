@@ -58,6 +58,8 @@ SESSION_COOKIE_NAME = "ahin_arena_session"
 SESSION_ID_BYTES = 48
 SESSION_TTL = timedelta(days=14)
 MAX_BOT_SUBMISSION_SOURCE_BYTES = 100_000
+DEFAULT_BOT_MOVE_TIMEOUT_SECONDS = 2.0
+DEFAULT_BOT_STARTUP_TIMEOUT_SECONDS = 10.0
 
 DEFAULT_BOT_SOURCE_PATHS = {
     "tictactoe": Path(__file__).resolve().parent.parent / "engine" / "tictactoe" / "random_bot.py",
@@ -95,6 +97,33 @@ def should_secure_auth_cookie() -> bool:
         or "development"
     )
     return environment.lower() in {"production", "prod"}
+
+
+def _float_env_setting(name: str, default: float) -> float:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return default
+
+    try:
+        parsed = float(value)
+    except ValueError:
+        return default
+
+    return parsed if parsed > 0 else default
+
+
+def get_bot_move_timeout_seconds() -> float:
+    return _float_env_setting(
+        "BOT_MOVE_TIMEOUT_SECONDS",
+        DEFAULT_BOT_MOVE_TIMEOUT_SECONDS,
+    )
+
+
+def get_bot_startup_timeout_seconds() -> float:
+    return _float_env_setting(
+        "BOT_STARTUP_TIMEOUT_SECONDS",
+        DEFAULT_BOT_STARTUP_TIMEOUT_SECONDS,
+    )
 
 
 def set_session_cookie(response: Response, session_id: str, expires_at: datetime) -> None:
@@ -610,6 +639,8 @@ def create_match(
             result = runners[request.game](
                 p1_command=p1_sandbox.command,
                 p2_command=p2_sandbox.command,
+                timeout=get_bot_move_timeout_seconds(),
+                startup_timeout=get_bot_startup_timeout_seconds(),
                 on_move=record_move,
             )
         except Exception as error:
