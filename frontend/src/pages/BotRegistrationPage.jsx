@@ -5,6 +5,39 @@ import { createBot, submitBotCode } from "../api/client";
 import { defaultGameId, supportedGames } from "../games";
 import { useAuth } from "../useAuth";
 
+const sourceCodePlaceholders = {
+  "connect-four": [
+    "import json",
+    "import random",
+    "import sys",
+    "",
+    "for line in sys.stdin:",
+    "    state = json.loads(line)",
+    "    legal_cols = [",
+    "        col",
+    "        for col in range(7)",
+    "        if state[\"board\"][0][col] == \" \"",
+    "    ]",
+    "    print(json.dumps({\"col\": random.choice(legal_cols)}), flush=True)",
+  ].join("\n"),
+  tictactoe: [
+    "import json",
+    "import random",
+    "import sys",
+    "",
+    "for line in sys.stdin:",
+    "    state = json.loads(line)",
+    "    legal_moves = [",
+    "        (row, col)",
+    "        for row in range(3)",
+    "        for col in range(3)",
+    "        if state[\"board\"][row][col] == \" \"",
+    "    ]",
+    "    row, col = random.choice(legal_moves)",
+    "    print(json.dumps({\"row\": row, \"col\": col}), flush=True)",
+  ].join("\n"),
+};
+
 function errorMessageFor(error) {
   if (error.code === "unsupported_game") {
     return "This game is not supported yet.";
@@ -220,7 +253,10 @@ export default function BotRegistrationPage() {
                 <textarea
                   value={sourceCode}
                   onChange={(event) => setSourceCode(event.target.value)}
-                  placeholder="def choose_move(board):&#10;    return 0"
+                  placeholder={
+                    sourceCodePlaceholders[selectedGame] ??
+                    sourceCodePlaceholders.tictactoe
+                  }
                   spellCheck="false"
                   required
                 />
