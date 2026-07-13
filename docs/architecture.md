@@ -56,7 +56,10 @@ The system consists of a web frontend, backend services, persistent storage, and
 - **Redis** — Planned cache and queue layer.
 - **Matchmaker** — Planned opponent selection service.
 - **Game Runner** — Executes matches through the registered game engines.
-- **Docker** — Planned secure AI execution boundary.
+- **Docker** — Secure execution boundary for submitted bot source. Each active
+  submission is written to a temporary source file and run in a locked-down
+  container with no network access, dropped capabilities, a read-only root
+  filesystem, and resource limits.
 
 ## Frontend Flow
 
@@ -107,3 +110,6 @@ under the shared referee protocol. The command bind-mounts the source read-only
 at `/bot/source.py`, disables networking, drops Linux capabilities, runs the
 container read-only with a small `/tmp` tmpfs, and applies memory, CPU, and PID
 limits.
+
+See `docs/docker-sandboxing.md` for the runner image, configurable limits, and
+cleanup behavior.

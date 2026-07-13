@@ -49,7 +49,7 @@ Backend API (FastAPI)
 - [x] Milestone 6 — Web Interface
 - [x] Milestone 7 — User Accounts
 - [x] Milestone 8 — Bot Submission
-- [ ] Milestone 9 — Docker Sandboxing
+- [x] Milestone 9 — Docker Sandboxing
 - [ ] Milestone 10 — Queue & Workers
 - [ ] Milestone 11 — Real-Time Games
 - [ ] Milestone 12 — Production Deployment
@@ -82,6 +82,7 @@ Both local runners print each move, the board after that move, and the final mat
 - `docs/connectfour-engine-referee.md` documents Connect Four bot/referee communication.
 - `docs/frontend.md` documents the React web interface routes, replay behavior, and API client conventions.
 - `docs/bot-submission.md` documents uploaded bot source storage, validation, and match execution.
+- `docs/docker-sandboxing.md` documents the Docker runner image, container restrictions, configuration, and cleanup behavior.
 
 ---
 
@@ -216,8 +217,10 @@ Unsupported games return `400` with `unsupported_game`; duplicate bot names
 within the same game return `409` with `bot_name_taken`; unauthenticated
 requests return `401` with `unauthorized`.
 
-Known gap: bot creation currently registers metadata and ownership only. Custom
-bot code upload and sandboxed execution remain planned work.
+After creating a bot, authenticated owners can upload Python source with
+`POST /bots/{bot_id}/submission`. New matches run each bot's active submission
+inside a locked-down Docker container. See `docs/bot-submission.md` and
+`docs/docker-sandboxing.md` for details.
 
 ---
 

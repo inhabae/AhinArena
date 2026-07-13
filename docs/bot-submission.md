@@ -13,11 +13,10 @@ Bot submission currently covers:
 - Python-only submission validation;
 - monotonically increasing per-bot submission versions;
 - an active submission pointer on each bot;
-- match execution from the active submitted source;
+- match execution from the active submitted source through Docker sandboxing;
 - default source submissions for the built-in random bots.
 
-Docker isolation, asynchronous queues, and multi-language execution are still
-future milestones.
+Asynchronous queues and multi-language execution are still future milestones.
 
 ## Data Model
 
@@ -100,6 +99,9 @@ The sandbox image and limits can be changed without code changes:
 - `BOT_SANDBOX_PIDS_LIMIT`
 - `BOT_SANDBOX_TMPFS_SIZE`
 - `DOCKER_BINARY`
+
+See `docs/docker-sandboxing.md` for the full Milestone 9 sandbox behavior,
+runner image, default limits, and cleanup guarantees.
 
 The existing referee still owns the game protocol. It starts each bot as a
 persistent subprocess, sends line-delimited JSON states on `stdin`, and expects
