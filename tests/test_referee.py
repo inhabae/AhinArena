@@ -42,6 +42,36 @@ def sleeping_bot_command():
     return [sys.executable, "-c", code]
 
 
+def delayed_first_move_bot_command():
+    code = (
+        "import json, sys, time\n"
+        "moves = [(0, 0), (0, 1), (0, 2)]\n"
+        "for index, line in enumerate(sys.stdin):\n"
+        "    json.loads(line)\n"
+        "    if index == 0:\n"
+        "        time.sleep(0.2)\n"
+        "    row, col = moves[index]\n"
+        "    print(json.dumps({'row': row, 'col': col}), flush=True)\n"
+    )
+
+    return [sys.executable, "-c", code]
+
+
+def delayed_second_move_bot_command():
+    code = (
+        "import json, sys, time\n"
+        "moves = [(0, 0), (0, 1)]\n"
+        "for index, line in enumerate(sys.stdin):\n"
+        "    json.loads(line)\n"
+        "    if index == 1:\n"
+        "        time.sleep(0.2)\n"
+        "    row, col = moves[index]\n"
+        "    print(json.dumps({'row': row, 'col': col}), flush=True)\n"
+    )
+
+    return [sys.executable, "-c", code]
+
+
 def partial_line_bot_command():
     code = (
         "import sys, time\n"
@@ -233,6 +263,43 @@ def test_referee_handles_bot_timeout():
         },
         TicTacToeGame(),
         timeout=0.1,
+    )
+
+    result = referee.run_match()
+
+    assert result["winner"] == "O"
+    assert result["reason"] == "timeout"
+    assert result["player"] == "X"
+
+
+def test_referee_allows_separate_startup_timeout_for_first_move():
+    observed_moves = []
+    referee = Referee(
+        {
+            "X": delayed_first_move_bot_command(),
+            "O": scripted_bot_command([[1, 0], [1, 1]]),
+        },
+        TicTacToeGame(),
+        timeout=0.1,
+        startup_timeout=1.0,
+        on_move=lambda player, move, board: observed_moves.append((player, move)),
+    )
+
+    result = referee.run_match()
+
+    assert result["reason"] == "win"
+    assert observed_moves[0] == ("X", (0, 0))
+
+
+def test_referee_keeps_normal_timeout_after_first_move():
+    referee = Referee(
+        {
+            "X": delayed_second_move_bot_command(),
+            "O": scripted_bot_command([[1, 0], [1, 1]]),
+        },
+        TicTacToeGame(),
+        timeout=0.1,
+        startup_timeout=1.0,
     )
 
     result = referee.run_match()

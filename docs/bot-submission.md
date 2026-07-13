@@ -91,6 +91,11 @@ a read-only root filesystem, a small `/tmp` tmpfs, and memory, CPU, and PID
 limits. Cleanup force-removes the named container and deletes the temporary
 source directory, even if match execution fails.
 
+The default runner image also bundles the shared `engine/` package at
+`/app/engine` and sets `PYTHONPATH=/app`. This is why the seeded random bot
+submissions can import helpers such as `from engine.tictactoe import Board`
+even though only the submitted source file is mounted at `/bot/source.py`.
+
 The sandbox image and limits can be changed without code changes:
 
 - `BOT_SANDBOX_IMAGE`
@@ -99,6 +104,8 @@ The sandbox image and limits can be changed without code changes:
 - `BOT_SANDBOX_PIDS_LIMIT`
 - `BOT_SANDBOX_TMPFS_SIZE`
 - `DOCKER_BINARY`
+- `BOT_MOVE_TIMEOUT_SECONDS`
+- `BOT_STARTUP_TIMEOUT_SECONDS`
 
 See `docs/docker-sandboxing.md` for the full Milestone 9 sandbox behavior,
 runner image, default limits, and cleanup guarantees.
