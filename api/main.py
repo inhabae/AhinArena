@@ -1,13 +1,12 @@
 import ast
 import os
 import secrets
-import sys
-import tempfile
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from api.auth import hash_password, verify_password
+from api.bot_sandbox import BotSandbox, build_bot_sandbox, cleanup_bot_sandbox
 from api.database import get_db, get_sessionmaker
 from api.models import Bot, BotSubmission, Match, Move, Session as AuthSession, User
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
@@ -247,50 +246,6 @@ def resolve_bot(db: Session, *, game_id: str, bot_name: str) -> Bot:
         api_error(404, "bot_not_found", f"Bot not found: {bot_name}")
 
     return bot
-
-
-def resolve_bot_command(bot: Bot) -> list[str]:
-    if bot.active_submission_id is None or bot.active_submission is None:
-        api_error(
-            400,
-            "bot_has_no_submission",
-            f"Bot has no active submission: {bot.name}",
-        )
-
-    project_root = Path(__file__).resolve().parent.parent
-    source_code = bot.active_submission.source_code
-    bootstrapped_source = (
-        "import sys\n"
-        f"sys.path.insert(0, {str(project_root)!r})\n"
-        f"exec(compile({source_code!r}, __file__, 'exec'))\n"
-    )
-
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        suffix=".py",
-        prefix=f"ahinarena_bot_{bot.id}_",
-        encoding="utf-8",
-        delete=False,
-    ) as source_file:
-        source_file.write(bootstrapped_source)
-        source_path = source_file.name
-
-    return [sys.executable, source_path]
-
-
-def cleanup_bot_command_temp_source(command: list[str]) -> None:
-    if len(command) < 2:
-        return
-
-    source_path = Path(command[1])
-    if (
-        source_path.parent != Path(tempfile.gettempdir())
-        or source_path.suffix != ".py"
-        or not source_path.name.startswith("ahinarena_bot_")
-    ):
-        return
-
-    source_path.unlink(missing_ok=True)
 
 
 def score_for_bot_one_or_error(
@@ -625,9 +580,13 @@ def create_match(
 
     if request.game not in runners:
         api_error(400, "unsupported_game", f"Unsupported game: {request.game}")
-    
+
     if len(request.players) != 2:
-        api_error(400, "invalid_player_count", f"{request.game} requires exactly 2 players")
+        api_error(
+            400,
+            "invalid_player_count",
+            f"{request.game} requires exactly 2 players",
+        )
 
     bot_one = resolve_bot(db, game_id=request.game, bot_name=request.players[0].bot)
     bot_two = resolve_bot(db, game_id=request.game, bot_name=request.players[1].bot)
@@ -635,11 +594,11 @@ def create_match(
     if bot_one.id == bot_two.id:
         api_error(400, "duplicate_bot_match", "A bot cannot play against itself")
 
-    p1_command = []
-    p2_command = []
+    p1_sandbox: BotSandbox | None = None
+    p2_sandbox: BotSandbox | None = None
     try:
-        p1_command = resolve_bot_command(bot_one)
-        p2_command = resolve_bot_command(bot_two)
+        p1_sandbox = build_bot_sandbox(bot_one)
+        p2_sandbox = build_bot_sandbox(bot_two)
 
         try:
             moves = []
@@ -649,15 +608,15 @@ def create_match(
                 moves.append((bot_id, move))
 
             result = runners[request.game](
-                p1_command=p1_command,
-                p2_command=p2_command,
+                p1_command=p1_sandbox.command,
+                p2_command=p2_sandbox.command,
                 on_move=record_move,
             )
         except Exception as error:
             api_error(500, "match_execution_failed", str(error))
     finally:
-        cleanup_bot_command_temp_source(p1_command)
-        cleanup_bot_command_temp_source(p2_command)
+        cleanup_bot_sandbox(p1_sandbox)
+        cleanup_bot_sandbox(p2_sandbox)
 
     bot_one_rating_before = bot_one.rating
     bot_two_rating_before = bot_two.rating
