@@ -84,12 +84,22 @@ that the bot follows the game protocol or behaves safely at runtime.
 When `POST /matches` resolves each named bot, the backend requires an active
 submission. A bot without one is rejected with `bot_has_no_submission`.
 
-For a bot with an active submission, the backend writes a temporary Python file
-that:
+For a bot with an active submission, the backend writes the source to a private
+temporary file and starts a `docker run` command that bind-mounts that file
+read-only at `/bot/source.py`. Each bot container is started with `--rm -i
+--init`, no network access, all Linux capabilities dropped, `no-new-privileges`,
+a read-only root filesystem, a small `/tmp` tmpfs, and memory, CPU, and PID
+limits. Cleanup force-removes the named container and deletes the temporary
+source directory, even if match execution fails.
 
-1. adds the project root to `sys.path`;
-2. executes the stored source code with `compile(..., __file__, "exec")`;
-3. runs under the same Python interpreter as the API process.
+The sandbox image and limits can be changed without code changes:
+
+- `BOT_SANDBOX_IMAGE`
+- `BOT_SANDBOX_MEMORY_LIMIT`
+- `BOT_SANDBOX_CPU_LIMIT`
+- `BOT_SANDBOX_PIDS_LIMIT`
+- `BOT_SANDBOX_TMPFS_SIZE`
+- `DOCKER_BINARY`
 
 The existing referee still owns the game protocol. It starts each bot as a
 persistent subprocess, sends line-delimited JSON states on `stdin`, and expects
@@ -105,9 +115,6 @@ form messages.
 
 ## Current Limitations
 
-- Submitted code is executed as a local subprocess, not in Docker.
-- There is no network, filesystem, CPU, or memory isolation beyond the current
-referee timeout.
 - Only Python is accepted.
 - The UI supports initial source submission after bot creation, but it does not
 yet provide a full submission history or rollback screen.

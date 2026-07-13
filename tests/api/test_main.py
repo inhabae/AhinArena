@@ -1434,9 +1434,20 @@ def test_create_match_requires_authentication(sqlite_database_dependency):
     assert sqlite_database_dependency.query(Match).count() == 0
 
 
-def test_create_match_uses_overridden_database_session(sqlite_database_dependency):
+def test_create_match_uses_overridden_database_session(
+    sqlite_database_dependency,
+    monkeypatch,
+):
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
+
+    def fake_run_tictactoe_match(p1_command, p2_command, on_move):
+        return {
+            "winner": None,
+            "reason": "draw",
+        }
+
+    monkeypatch.setattr(api_main, "run_tictactoe_match", fake_run_tictactoe_match)
 
     response = client.post("/matches", json=valid_match_request())
 

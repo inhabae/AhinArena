@@ -101,7 +101,9 @@ session user to own the bot, accepts only Python, stores a new versioned
 `bot_submissions` row, and points `bots.active_submission_id` at the newest
 accepted version.
 
-Match creation resolves each bot's active submission and starts that source as a
-temporary Python subprocess under the shared referee protocol. This is the
-milestone 8 execution path only; Docker sandboxing remains a planned milestone,
-so submitted code is not isolated from the host process environment yet.
+Match creation resolves each bot's active submission, writes the source to a
+private temporary file, and starts it through a locked-down `docker run` command
+under the shared referee protocol. The command bind-mounts the source read-only
+at `/bot/source.py`, disables networking, drops Linux capabilities, runs the
+container read-only with a small `/tmp` tmpfs, and applies memory, CPU, and PID
+limits.

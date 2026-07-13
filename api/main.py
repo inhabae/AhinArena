@@ -580,9 +580,13 @@ def create_match(
 
     if request.game not in runners:
         api_error(400, "unsupported_game", f"Unsupported game: {request.game}")
-    
+
     if len(request.players) != 2:
-        api_error(400, "invalid_player_count", f"{request.game} requires exactly 2 players")
+        api_error(
+            400,
+            "invalid_player_count",
+            f"{request.game} requires exactly 2 players",
+        )
 
     bot_one = resolve_bot(db, game_id=request.game, bot_name=request.players[0].bot)
     bot_two = resolve_bot(db, game_id=request.game, bot_name=request.players[1].bot)

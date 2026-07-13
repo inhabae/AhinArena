@@ -159,7 +159,8 @@ Allow developers to upload custom AI agents.
 - Bot ownership enforcement for source uploads
 - Python-only submission validation for non-empty source, 100 KB maximum size,
   and parseable syntax
-- Submitted source execution through the existing referee subprocess protocol
+- Submitted source execution through Docker sandbox commands under the existing
+  referee subprocess protocol
 - Match creation rejection for bots without an active submission
 - Default random bot submissions seeded for supported games
 - Frontend source-code submission flow on `/bots/new`
