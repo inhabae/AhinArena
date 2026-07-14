@@ -538,32 +538,77 @@ select:disabled {
   padding: 20px;
 }
 
+.queue-summary {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.queue-position {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .queue-list {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 .queue-job {
-  align-items: start;
-  display: grid;
+  align-items: center;
+  display: flex;
   gap: 10px;
+  min-width: 0;
 }
 
-.queue-job strong {
+.queue-job-details {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.queue-matchup {
   color: var(--text-primary);
-  display: block;
+  flex: 0 1 auto;
   font-size: 14px;
   font-weight: 600;
-  margin-bottom: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.queue-job p {
-  color: var(--text-muted);
+.queue-job-meta strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.queue-job-meta {
+  align-items: center;
+  color: var(--text-secondary);
+  display: inline-flex;
+  flex: 1 0 auto;
   font-size: 13px;
-  margin: 0;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.queue-job-meta span {
+  color: var(--text-secondary);
+}
+
+.queue-job-summary {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  padding-top: 2px;
 }
 
 .job-status {
@@ -571,6 +616,7 @@ select:disabled {
   border-radius: 999px;
   color: var(--text-secondary);
   font-size: 12px;
+  flex: 0 0 auto;
   font-weight: 600;
   justify-self: start;
   padding: 4px 9px;
