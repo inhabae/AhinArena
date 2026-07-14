@@ -216,15 +216,7 @@ separate worker processes.
 
 ---
 
-## Milestone 11 — Real-Time Games
-
-**Goal**
-
-Allow users to spectate matches live through WebSockets.
-
----
-
-## Milestone 12 — Production Deployment
+## Milestone 11 — Production Deployment
 
 **Goal**
 
