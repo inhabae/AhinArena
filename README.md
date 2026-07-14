@@ -51,8 +51,7 @@ Backend API (FastAPI)
 - [x] Milestone 8 — Bot Submission
 - [x] Milestone 9 — Docker Sandboxing
 - [x] Milestone 10 — Queue & Workers
-- [ ] Milestone 11 — Real-Time Games
-- [ ] Milestone 12 — Production Deployment
+- [ ] Milestone 11 — Production Deployment
 
 See `docs/roadmap.md` for more details.
 
