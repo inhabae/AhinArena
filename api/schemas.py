@@ -68,6 +68,20 @@ class MatchJobDetail(BaseModel):
     match_id: int | None
     error_message: str | None
 
+class MatchJobSummary(MatchJobDetail):
+    game: str
+    bot_one_name: str
+    bot_two_name: str
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+class MatchJobListResponse(BaseModel):
+    items: list[MatchJobSummary]
+    limit: int
+    offset: int
+    total: int
+
 class MatchSummary(BaseModel):
     match_id: int
     game: str

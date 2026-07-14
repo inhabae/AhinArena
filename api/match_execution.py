@@ -9,8 +9,8 @@ from engine.tictactoe.runner import run_tictactoe_match
 from sqlalchemy.orm import Session, selectinload
 
 
-PLAYER_ONE_MARKER = "X"
-PLAYER_TWO_MARKER = "O"
+PLAYER_ONE_MARKER = "p1"
+PLAYER_TWO_MARKER = "p2"
 DEFAULT_BOT_MOVE_TIMEOUT_SECONDS = 2.0
 DEFAULT_BOT_STARTUP_TIMEOUT_SECONDS = 10.0
 
