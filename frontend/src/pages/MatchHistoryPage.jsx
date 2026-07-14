@@ -266,8 +266,8 @@ export default function MatchHistoryPage() {
                     <td>{formatGame(match.game)}</td>
                     <td>
                       <span className="players-cell">
-                        <span className="player-name">
-                          {match.bot_one_name}{" "}
+                        <span className="player-name player-matchup-name">
+                          <span>{match.bot_one_name}</span>
                           <PlayerRating
                             match={match}
                             rating={match.bot_one_rating_before}
@@ -275,8 +275,8 @@ export default function MatchHistoryPage() {
                           />
                         </span>
                         <span aria-hidden="true">vs</span>
-                        <span className="player-name">
-                          {match.bot_two_name}{" "}
+                        <span className="player-name player-matchup-name">
+                          <span>{match.bot_two_name}</span>
                           <PlayerRating
                             match={match}
                             rating={match.bot_two_rating_before}
