@@ -34,6 +34,11 @@ def _env_setting(name: str, default: str) -> str:
     return os.environ.get(name, default).strip() or default
 
 
+def _remove_readonly(_func, path, _exc_info) -> None:
+    os.chmod(path, 0o666)
+    os.remove(path)
+
+
 def build_bot_sandbox(bot: Bot) -> BotSandbox:
     if bot.active_submission_id is None or bot.active_submission is None:
         api_error(
@@ -121,4 +126,4 @@ def cleanup_bot_sandbox(sandbox: BotSandbox | None) -> None:
     except OSError:
         pass
 
-    shutil.rmtree(sandbox.temp_dir, ignore_errors=True)
+    shutil.rmtree(sandbox.temp_dir, onerror=_remove_readonly)

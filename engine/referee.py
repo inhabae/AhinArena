@@ -1,7 +1,7 @@
 import json
-import os
-import selectors
+import queue
 import subprocess
+import threading
 import time
 from typing import Any, Protocol
 
@@ -17,7 +17,7 @@ class BotProcess:
         self.timeout = timeout
         self.startup_timeout = startup_timeout if startup_timeout is not None else timeout
         self._has_returned_move = False
-        self._stdout_buffer = b""
+        self._stdout_queue: queue.Queue[str | None] = queue.Queue()
         self.process = subprocess.Popen(
             command,
             stdin=subprocess.PIPE,
@@ -25,6 +25,12 @@ class BotProcess:
             stderr=subprocess.PIPE,
             text=True,
         )
+        self._stdout_thread = threading.Thread(
+            target=self._pump_stdout,
+            name="bot-stdout-reader",
+            daemon=True,
+        )
+        self._stdout_thread.start()
 
     def request_move(self, state):
         self.process.stdin.write(json.dumps(state) + "\n")
@@ -44,46 +50,32 @@ class BotProcess:
 
     def _read_response_line(self, timeout):
         deadline = time.monotonic() + timeout
-        stdout_fd = self.process.stdout.fileno()
-        os.set_blocking(stdout_fd, False)
 
-        with selectors.DefaultSelector() as selector:
-            selector.register(stdout_fd, selectors.EVENT_READ)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._kill_and_wait()
+                raise BotTimeoutError(f"Bot timed out after {timeout} seconds")
 
-            while True:
-                if b"\n" in self._stdout_buffer:
-                    line, self._stdout_buffer = self._stdout_buffer.split(
-                        b"\n",
-                        1,
-                    )
-                    return line.decode()
+            try:
+                line = self._stdout_queue.get(timeout=remaining)
+            except queue.Empty:
+                self._kill_and_wait()
+                raise BotTimeoutError(f"Bot timed out after {timeout} seconds")
 
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    self._kill_and_wait()
-                    raise BotTimeoutError(
-                        f"Bot timed out after {timeout} seconds"
-                    )
+            if line is None:
+                return ""
 
-                events = selector.select(timeout=remaining)
-                if not events:
-                    self._kill_and_wait()
-                    raise BotTimeoutError(
-                        f"Bot timed out after {timeout} seconds"
-                    )
+            return line
 
-                while True:
-                    try:
-                        chunk = os.read(stdout_fd, 4096)
-                    except BlockingIOError:
-                        break
+    def _pump_stdout(self):
+        while True:
+            line = self.process.stdout.readline()
+            if line == "":
+                self._stdout_queue.put(None)
+                return
 
-                    if not chunk:
-                        response = self._stdout_buffer.decode()
-                        self._stdout_buffer = b""
-                        return response
-
-                    self._stdout_buffer += chunk
+            self._stdout_queue.put(line.rstrip("\r\n"))
 
     def close(self):
         if self.process.poll() is None:
