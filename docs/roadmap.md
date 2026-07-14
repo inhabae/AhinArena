@@ -193,6 +193,8 @@ Execute uploaded AI agents securely inside isolated Docker containers.
 
 ## Milestone 10 — Queue & Workers
 
+**Status: Done**
+
 **Goal**
 
 Support asynchronous match execution through a PostgreSQL-backed job queue and

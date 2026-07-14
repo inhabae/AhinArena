@@ -121,8 +121,7 @@ are ignored so temporary files can still be removed.
 ## Limitations
 
 - Only Python submissions are supported.
-- Docker or a compatible `DOCKER_BINARY` must be available where the API runs.
+- Docker or a compatible `DOCKER_BINARY` must be available where workers run.
 - The sandbox limits reduce risk but are not a complete defense for every
   container escape or host misconfiguration scenario.
-- Matches still run synchronously inside the API request cycle. Queue-backed
-  workers are planned for Milestone 10.
+- Matches run asynchronously through queue-backed workers.

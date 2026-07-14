@@ -82,6 +82,10 @@ completed match, ordered moves, and Elo updates, stores the resulting
 `match_id` on the job, and marks the job completed. Clients poll
 `GET /match-jobs/{job_id}` until the job completes or fails.
 
+See `docs/queue-and-workers.md` for the `match_jobs` schema, worker loop,
+LISTEN/NOTIFY behavior, stalled-job recovery, API shapes, configuration, and
+local development workflow.
+
 ## Frontend Flow
 
 The frontend runs as a Vite development server during local development. Vite
