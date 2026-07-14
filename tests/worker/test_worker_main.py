@@ -60,9 +60,9 @@ def test_execute_match_persists_match_moves_and_ratings(monkeypatch):
     def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         assert p1_command == ["alpha"]
         assert p2_command == ["beta"]
-        on_move("X", (0, 0), [])
-        on_move("O", (1, 1), [])
-        return {"winner": "X", "reason": "win"}
+        on_move("p1", (0, 0), [])
+        on_move("p2", (1, 1), [])
+        return {"winner": "p1", "reason": "win"}
 
     monkeypatch.setattr(match_execution, "build_bot_sandbox", fake_build_bot_sandbox)
     monkeypatch.setattr(

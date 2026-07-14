@@ -1505,6 +1505,111 @@ def test_get_match_job_returns_queued_job(sqlite_database_dependency):
     }
 
 
+def test_list_match_jobs_returns_recent_jobs_for_game(sqlite_database_dependency):
+    bot_one = seed_bot(sqlite_database_dependency, name="alpha")
+    bot_two = seed_bot(sqlite_database_dependency, name="beta")
+    other_bot_one = seed_bot(
+        sqlite_database_dependency,
+        name="gamma",
+        game_id="connect-four",
+    )
+    other_bot_two = seed_bot(
+        sqlite_database_dependency,
+        name="delta",
+        game_id="connect-four",
+    )
+    older = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    newer = datetime(2024, 1, 2, tzinfo=timezone.utc)
+    queued = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        status="queued",
+        created_at=older,
+    )
+    running = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_two.id,
+        bot_two_id=bot_one.id,
+        status="running",
+        created_at=newer,
+        started_at=newer,
+    )
+    other_game = MatchJob(
+        game_id="connect-four",
+        bot_one_id=other_bot_one.id,
+        bot_two_id=other_bot_two.id,
+        status="queued",
+        created_at=newer,
+    )
+    sqlite_database_dependency.add_all([queued, running, other_game])
+    sqlite_database_dependency.commit()
+
+    response = client.get("/match-jobs?game_id=tictactoe")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "job_id": running.id,
+                "status": "running",
+                "match_id": None,
+                "error_message": None,
+                "game": "tictactoe",
+                "bot_one_name": "beta",
+                "bot_two_name": "alpha",
+                "created_at": newer.replace(tzinfo=None).isoformat(),
+                "started_at": newer.replace(tzinfo=None).isoformat(),
+                "completed_at": None,
+            },
+            {
+                "job_id": queued.id,
+                "status": "queued",
+                "match_id": None,
+                "error_message": None,
+                "game": "tictactoe",
+                "bot_one_name": "alpha",
+                "bot_two_name": "beta",
+                "created_at": older.replace(tzinfo=None).isoformat(),
+                "started_at": None,
+                "completed_at": None,
+            },
+        ],
+        "limit": 20,
+        "offset": 0,
+        "total": 2,
+    }
+
+
+def test_list_match_jobs_filters_by_status(sqlite_database_dependency):
+    bot_one = seed_bot(sqlite_database_dependency, name="alpha")
+    bot_two = seed_bot(sqlite_database_dependency, name="beta")
+    queued = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        status="queued",
+    )
+    failed = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        status="failed",
+        error_message="bot timed out",
+    )
+    sqlite_database_dependency.add_all([queued, failed])
+    sqlite_database_dependency.commit()
+
+    response = client.get("/match-jobs?status=failed")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["job_id"] == failed.id
+    assert body["items"][0]["status"] == "failed"
+    assert body["items"][0]["error_message"] == "bot timed out"
+
+
 def test_get_match_job_returns_completed_job_with_resolvable_match(
     sqlite_database_dependency,
 ):

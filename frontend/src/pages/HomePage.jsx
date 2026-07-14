@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { createMatch, getBots, getMatches } from "../api/client";
+import { createMatch, getBots, getMatchJobs, getMatches } from "../api/client";
 import { formatGame, supportedGames } from "../games";
 import { useAuth } from "../useAuth";
 
 const recentMatchLimit = 5;
+const matchJobLimit = 5;
+const matchJobPollIntervalMs = 1500;
 
 function errorMessageFor(error) {
   if (error.code === "unsupported_game") {
@@ -39,6 +41,22 @@ function formatBotOption(bot) {
   return bot.owner_name ? `${bot.name} (${bot.owner_name})` : bot.name;
 }
 
+function formatJobStatus(status) {
+  if (status === "running") {
+    return "Running";
+  }
+
+  if (status === "completed") {
+    return "Completed";
+  }
+
+  if (status === "failed") {
+    return "Failed";
+  }
+
+  return "Queued";
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -54,13 +72,41 @@ export default function HomePage() {
     total: 0,
     error: null,
   });
+  const [jobsState, setJobsState] = useState({
+    loading: true,
+    items: [],
+    total: 0,
+    error: null,
+  });
   const [botOne, setBotOne] = useState("");
   const [botTwo, setBotTwo] = useState("");
   const [submitState, setSubmitState] = useState({
     loading: false,
     error: null,
-    job: null,
+    jobId: null,
   });
+
+  const loadJobs = useCallback(
+    async ({ showLoading = false } = {}) => {
+      if (showLoading) {
+        setJobsState((current) => ({ ...current, loading: true, error: null }));
+      }
+
+      try {
+        const data = await getMatchJobs({ game_id: selectedGame, limit: matchJobLimit });
+
+        setJobsState({
+          loading: false,
+          items: data.items,
+          total: data.total,
+          error: null,
+        });
+      } catch (error) {
+        setJobsState({ loading: false, items: [], total: 0, error });
+      }
+    },
+    [selectedGame],
+  );
 
   useEffect(() => {
     let ignore = false;
@@ -68,7 +114,7 @@ export default function HomePage() {
     setBotsState({ loading: true, items: [], error: null });
     setBotOne("");
     setBotTwo("");
-    setSubmitState({ loading: false, error: null, job: null });
+    setSubmitState({ loading: false, error: null, jobId: null });
 
     getBots({ game_id: selectedGame })
       .then((items) => {
@@ -116,6 +162,60 @@ export default function HomePage() {
     };
   }, [selectedGame]);
 
+  useEffect(() => {
+    setJobsState({ loading: true, items: [], total: 0, error: null });
+    loadJobs({ showLoading: false });
+  }, [loadJobs]);
+
+  const hasActiveJobs = jobsState.items.some(
+    (job) => job.status === "queued" || job.status === "running",
+  );
+
+  useEffect(() => {
+    if (!hasActiveJobs) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(loadJobs, matchJobPollIntervalMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [hasActiveJobs, loadJobs]);
+
+  const submittedJob = submitState.jobId
+    ? jobsState.items.find((job) => job.job_id === submitState.jobId) ?? null
+    : null;
+
+  useEffect(() => {
+    if (!submittedJob) {
+      return;
+    }
+
+    if (submittedJob.status === "completed") {
+      if (submittedJob.match_id) {
+        setSubmitState({ loading: false, error: null, jobId: null });
+        navigate(`/matches/${submittedJob.match_id}`);
+      } else {
+        setSubmitState({
+          loading: false,
+          error: new Error("The match job completed without a match id."),
+          jobId: null,
+        });
+      }
+      return;
+    }
+
+    if (submittedJob.status === "failed") {
+      setSubmitState({ loading: false, error: null, jobId: submittedJob.job_id });
+      return;
+    }
+
+    if (!submitState.loading) {
+      setSubmitState({ loading: true, error: null, jobId: submittedJob.job_id });
+    }
+  }, [navigate, submitState.loading, submittedJob]);
+
   const canSubmit = useMemo(
     () =>
       Boolean(
@@ -133,10 +233,15 @@ export default function HomePage() {
         className: "error",
         message: errorMessageFor(submitState.error),
       }
-    : submitState.job
+    : submittedJob?.status === "failed"
+      ? {
+          className: "error",
+          message: submittedJob.error_message || "The queued match failed.",
+        }
+    : submittedJob
       ? {
           className: "success",
-          message: `Match queued as job #${submitState.job.job_id}.`,
+          message: `Match job #${submittedJob.job_id} is ${submittedJob.status}.`,
         }
     : hasDuplicateBots
       ? {
@@ -162,7 +267,7 @@ export default function HomePage() {
       return;
     }
 
-    setSubmitState({ loading: true, error: null, job: null });
+    setSubmitState({ loading: true, error: null, jobId: null });
 
     try {
       const job = await createMatch({
@@ -170,14 +275,32 @@ export default function HomePage() {
         players: [{ bot: botOne }, { bot: botTwo }],
       });
 
-      setSubmitState({ loading: false, error: null, job });
+      setSubmitState({ loading: true, error: null, jobId: job.job_id });
+      setJobsState((current) => ({
+        ...current,
+        items: [
+          {
+            ...job,
+            game: selectedGame,
+            bot_one_name: botOne,
+            bot_two_name: botTwo,
+            match_id: null,
+            error_message: null,
+            created_at: new Date().toISOString(),
+            started_at: null,
+            completed_at: null,
+          },
+          ...current.items.filter((item) => item.job_id !== job.job_id),
+        ].slice(0, matchJobLimit),
+        total: Math.max(current.total, current.items.length + 1),
+      }));
     } catch (error) {
       if (error.status === 401) {
         navigate("/login");
         return;
       }
 
-      setSubmitState({ loading: false, error, job: null });
+      setSubmitState({ loading: false, error, jobId: null });
     }
   }
 
@@ -265,7 +388,7 @@ export default function HomePage() {
               </label>
 
               <button type="submit" disabled={!canSubmit}>
-                {submitState.loading ? "Queueing..." : "Queue match"}
+                {submitState.loading ? "Waiting..." : "Queue match"}
               </button>
             </form>
           )}
@@ -279,7 +402,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <div className="stats-row" aria-label={`${formatGame(selectedGame)} stats`}>
+        <div className="stats-row" aria-label={`${formatGame(selectedGame)} stats and queue`}>
           <div className="stat-card">
             <span>Matches played</span>
             <strong>{matchesState.loading ? "..." : matchesState.total}</strong>
@@ -287,6 +410,47 @@ export default function HomePage() {
           <div className="stat-card">
             <span>Bots registered</span>
             <strong>{botsState.loading ? "..." : botsState.items.length}</strong>
+          </div>
+          <div className="queue-card">
+            <div className="section-heading">
+              <h2>Queue</h2>
+              <span>{jobsState.loading ? "Loading" : `${jobsState.total} jobs`}</span>
+            </div>
+
+            {jobsState.error && (
+              <p className="error">Could not load queue: {jobsState.error.message}</p>
+            )}
+
+            {jobsState.loading && <p className="empty-state">Loading queue...</p>}
+
+            {!jobsState.loading && !jobsState.error && jobsState.items.length === 0 && (
+              <p className="empty-state">No match jobs for this game.</p>
+            )}
+
+            {jobsState.items.length > 0 && (
+              <ul className="queue-list">
+                {jobsState.items.map((job) => (
+                  <li key={job.job_id} className="queue-job">
+                    <span className={`job-status ${job.status}`}>
+                      {formatJobStatus(job.status)}
+                    </span>
+                    <div>
+                      <strong>
+                        {job.bot_one_name || "Bot one"} vs {job.bot_two_name || "Bot two"}
+                      </strong>
+                      <p>
+                        #{job.job_id} -{" "}
+                        {job.status === "failed"
+                          ? job.error_message || "The queued match failed."
+                          : job.status === "completed"
+                            ? "Match completed."
+                            : "Waiting for the worker to finish this match."}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </section>

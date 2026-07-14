@@ -86,6 +86,14 @@ export function createMatch(match) {
   });
 }
 
+export function getMatchJob(jobId) {
+  return request(`/match-jobs/${jobId}`);
+}
+
+export function getMatchJobs(params) {
+  return request("/match-jobs", { params });
+}
+
 export function createBot(bot) {
   return request("/bots", {
     method: "POST",

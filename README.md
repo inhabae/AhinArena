@@ -97,17 +97,37 @@ The React/Vite frontend lives in `frontend/`. It provides:
 - a Leaderboard page with per-game rankings, configurable row count, and pagination;
 - a Match Detail page with rating summaries, ordered move history, and replay controls.
 
-Run the FastAPI backend locally on `http://127.0.0.1:8000`, then start the web app:
+Install frontend dependencies once:
 
 ```sh
 cd frontend
 npm install
-npm run dev
+cd ..
+```
+
+Run the FastAPI backend locally on `http://127.0.0.1:8000`, run a worker so
+queued matches are executed, then start the web app. Use one terminal for each
+long-running process:
+
+```sh
+make api
+```
+
+```sh
+make worker
+```
+
+```sh
+make frontend
 ```
 
 Vite serves the frontend, usually at `http://localhost:5173`, and proxies
 `/api/*` requests to the local backend. See `docs/frontend.md` for the route map
 and implementation details.
+
+The API only enqueues match jobs. The worker claims rows from `match_jobs` and
+runs the Docker-sandboxed matches. If the worker is not running, new matches
+will stay queued on the home page.
 
 Known gap: replay rendering currently supports Tic-Tac-Toe and Connect Four.
 Matches for unsupported game IDs fall back to a summary view without a board
@@ -430,11 +450,15 @@ createdb ahin_arena --owner ahin_arena
 ```
 
 The API reads its database connection from the `DATABASE_URL` environment
-variable. Export a URL using the psycopg SQLAlchemy driver:
+variable. Copy the example environment file and edit the database user/password
+if needed:
 
 ```sh
-export DATABASE_URL="postgresql+psycopg://ahin_arena:ahin_arena@localhost:5432/ahin_arena"
+cp .env.example .env
 ```
+
+The local `Makefile` loads `.env` automatically for `make api`, `make worker`,
+and `make migrate`.
 
 The API also reads allowed browser origins for CORS from
 `CORS_ALLOWED_ORIGINS`. Use a comma-separated list when the frontend runs on a
@@ -455,7 +479,7 @@ explicit origins and cannot be `*`.
 Run database migrations with Alembic:
 
 ```sh
-alembic upgrade head
+make migrate
 ```
 
 Tests override the API database dependency and do not require a local

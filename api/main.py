@@ -37,6 +37,8 @@ from api.errors import (
 from api.schemas import (
     MatchJobDetail,
     MatchJobCreateResponse,
+    MatchJobListResponse,
+    MatchJobSummary,
     MatchRequest,
     MatchSummary,
     MatchDetail,
@@ -241,6 +243,20 @@ def serialize_match_detail(match: Match) -> MatchDetail:
             )
             for move in match.moves
         ],
+    )
+
+def serialize_match_job_summary(job: MatchJob) -> MatchJobSummary:
+    return MatchJobSummary(
+        job_id=job.id,
+        status=job.status,
+        match_id=job.match_id,
+        error_message=job.error_message,
+        game=job.game_id,
+        bot_one_name=job.bot_one.name,
+        bot_two_name=job.bot_two.name,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
     )
 
 def resolve_bot(db: Session, *, game_id: str, bot_name: str) -> Bot:
@@ -599,6 +615,40 @@ def create_match(
     response.headers["Location"] = f"/match-jobs/{job.id}"
 
     return MatchJobCreateResponse(job_id=job.id, status=job.status)
+
+@app.get("/match-jobs", response_model=MatchJobListResponse)
+def list_match_jobs(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    game_id: str = Query(default=""),
+    status_filter: str = Query(default="", alias="status"),
+    db: Session = Depends(get_db),
+):
+    query = db.query(MatchJob)
+
+    if game_id:
+        query = query.filter(MatchJob.game_id == game_id)
+
+    if status_filter:
+        query = query.filter(MatchJob.status == status_filter)
+
+    total = query.count()
+
+    jobs = (
+        query
+        .options(selectinload(MatchJob.bot_one), selectinload(MatchJob.bot_two))
+        .order_by(MatchJob.created_at.desc(), MatchJob.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return MatchJobListResponse(
+        items=[serialize_match_job_summary(job) for job in jobs],
+        limit=limit,
+        offset=offset,
+        total=total,
+    )
 
 @app.get("/match-jobs/{job_id}", response_model=MatchJobDetail)
 def get_match_job(job_id: int, db: Session = Depends(get_db)):
