@@ -5,6 +5,7 @@ import {
   IconLogout,
   IconPlus,
   IconTrophy,
+  IconUser,
   IconUserPlus,
 } from "@tabler/icons-react";
 import { NavLink, Outlet } from "react-router-dom";
@@ -48,7 +49,16 @@ export default function AppLayout() {
         <div className="auth-nav">
           {!loading && isAuthenticated && (
             <>
-              <span title={user.email}>{user.username}</span>
+              <NavLink
+                to={`/players/${encodeURIComponent(user.username)}`}
+                className={({ isActive }) =>
+                  isActive ? "nav-link nav-link-active" : "nav-link"
+                }
+                title={user.email}
+              >
+                <IconUser size={17} stroke={1.75} aria-hidden="true" />
+                <span>{user.username}</span>
+              </NavLink>
               <button type="button" className="nav-link auth-button" onClick={logout}>
                 <IconLogout size={17} stroke={1.75} aria-hidden="true" />
                 <span>Log out</span>

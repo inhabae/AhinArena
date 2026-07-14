@@ -122,7 +122,8 @@ textarea:focus-visible {
   min-width: 0;
 }
 
-.auth-nav > span {
+.auth-nav > span,
+.auth-nav > .nav-link span {
   color: var(--text-muted);
   font-size: 13px;
   overflow: hidden;
@@ -633,6 +634,37 @@ select:disabled {
   min-width: 820px;
 }
 
+.player-page {
+  display: grid;
+  gap: 24px;
+}
+
+.player-header {
+  align-items: end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.player-stats {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.player-section-heading {
+  align-items: end;
+}
+
+.player-section-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.player-bot-table {
+  min-width: 760px;
+}
+
 .match-replay-panel {
   gap: 22px;
 }
@@ -923,14 +955,18 @@ select:disabled {
 .match-history-table th:first-child,
 .match-history-table td:first-child,
 .leaderboard-table th:first-child,
-.leaderboard-table td:first-child {
+.leaderboard-table td:first-child,
+.player-bot-table th:first-child,
+.player-bot-table td:first-child {
   padding-left: 14px;
 }
 
 .match-history-table th:last-child,
 .match-history-table td:last-child,
 .leaderboard-table th:last-child,
-.leaderboard-table td:last-child {
+.leaderboard-table td:last-child,
+.player-bot-table th:last-child,
+.player-bot-table td:last-child {
   padding-right: 14px;
 }
 
@@ -1063,9 +1099,15 @@ code {
     justify-content: space-between;
   }
 
-  .leaderboard-heading {
+  .leaderboard-heading,
+  .player-header,
+  .player-section-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .player-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .page-size-control {
