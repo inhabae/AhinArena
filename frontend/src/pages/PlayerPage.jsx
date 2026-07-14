@@ -15,11 +15,11 @@ import { useAuth } from "../useAuth";
 const leaderboardLimit = 500;
 const playerBotsPageSize = 10;
 
-function formatPercent(value) {
+export function formatPercent(value) {
   return `${value.toFixed(1)}%`;
 }
 
-function getWinRate(bot) {
+export function getWinRate(bot) {
   if (bot.games_played === 0) {
     return 0;
   }
@@ -27,7 +27,7 @@ function getWinRate(bot) {
   return (bot.wins / bot.games_played) * 100;
 }
 
-function getRecord(bot) {
+export function getRecord(bot) {
   return [
     { className: "record-win", label: "wins", value: bot.wins },
     { className: "record-loss", label: "losses", value: bot.losses },
@@ -267,7 +267,11 @@ export default function PlayerPage() {
 
                       return (
                         <tr key={`${bot.game_id}-${bot.bot_id}`}>
-                          <td className="player-name">{bot.name}</td>
+                          <td className="player-name">
+                            <Link className="bot-name-link" to={`/bots/${bot.bot_id}`}>
+                              {bot.name}
+                            </Link>
+                          </td>
                           <td>{bot.game_label}</td>
                           <td>{bot.rating}</td>
                           <td>#{bot.rank}</td>

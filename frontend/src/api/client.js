@@ -76,6 +76,10 @@ export function getMatch(matchId) {
   return request(`/matches/${matchId}`);
 }
 
+export function getBot(botId) {
+  return request(`/bots/${botId}`);
+}
+
 export function createMatch(match) {
   return request("/matches", {
     method: "POST",

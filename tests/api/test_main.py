@@ -781,6 +781,41 @@ def test_list_matches_filters_by_game_id(sqlite_database_dependency):
     assert body["items"][0]["game"] == "connect-four"
 
 
+def test_list_matches_filters_by_bot_id(sqlite_database_dependency):
+    alpha = seed_bot(sqlite_database_dependency, name="alpha")
+    beta = seed_bot(sqlite_database_dependency, name="beta")
+    gamma = seed_bot(sqlite_database_dependency, name="gamma")
+    alpha_as_bot_one = make_persisted_match(
+        bot_one_id=alpha.id,
+        bot_two_id=beta.id,
+        winner_bot_id=alpha.id,
+        completed_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
+    )
+    alpha_as_bot_two = make_persisted_match(
+        bot_one_id=beta.id,
+        bot_two_id=alpha.id,
+        winner_bot_id=beta.id,
+        completed_at=datetime(2026, 1, 2, 0, 0, 1, tzinfo=timezone.utc),
+    )
+    unrelated = make_persisted_match(
+        bot_one_id=beta.id,
+        bot_two_id=gamma.id,
+        winner_bot_id=gamma.id,
+        completed_at=datetime(2026, 1, 3, 0, 0, 1, tzinfo=timezone.utc),
+    )
+    sqlite_database_dependency.add_all([alpha_as_bot_one, alpha_as_bot_two, unrelated])
+    sqlite_database_dependency.commit()
+
+    response = client.get(f"/matches?bot_id={alpha.id}&limit=1&offset=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["limit"] == 1
+    assert body["offset"] == 1
+    assert body["total"] == 2
+    assert [item["match_id"] for item in body["items"]] == [alpha_as_bot_one.id]
+
+
 @pytest.mark.parametrize("query", ["limit=0", "limit=101", "offset=-1"])
 def test_list_matches_validates_pagination_parameters(query):
     response = client.get(f"/matches?{query}")
@@ -1007,6 +1042,62 @@ def test_list_bots_returns_user_and_system_bot_owners(sqlite_database_dependency
         {"bot_id": system_bot.id, "name": "alpha", "owner_name": None},
         {"bot_id": user_bot.id, "name": "beta", "owner_name": "owner"},
     ]
+
+
+def test_get_bot_returns_bot_detail(sqlite_database_dependency):
+    user = User(
+        username="owner",
+        email="owner@example.com",
+        password_hash=hash_password("password"),
+    )
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.flush()
+    bot = Bot(
+        name="alpha",
+        game_id="tictactoe",
+        owner_id=user.id,
+        rating=1337,
+        games_played=5,
+        wins=3,
+        losses=1,
+        draws=1,
+    )
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+
+    response = client.get(f"/bots/{bot.id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bot_id"] == bot.id
+    assert body["name"] == "alpha"
+    assert body["game_id"] == "tictactoe"
+    assert body["owner_name"] == "owner"
+    assert body["rating"] == 1337
+    assert body["games_played"] == 5
+    assert body["wins"] == 3
+    assert body["losses"] == 1
+    assert body["draws"] == 1
+    assert body["created_at"]
+
+
+def test_get_bot_returns_system_owner_for_default_bot(sqlite_database_dependency):
+    bot = seed_bot(sqlite_database_dependency, name="system")
+
+    response = client.get(f"/bots/{bot.id}")
+
+    assert response.status_code == 200
+    assert response.json()["owner_name"] == "System"
+
+
+def test_get_bot_returns_not_found(sqlite_database_dependency):
+    response = client.get("/bots/999")
+
+    assert response.status_code == 404
+    assert response.json()["error"] == {
+        "code": "bot_not_found",
+        "message": "Bot not found: 999",
+    }
 
 
 def test_create_bot_requires_authentication(sqlite_database_dependency):

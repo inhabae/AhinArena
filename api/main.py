@@ -22,7 +22,7 @@ from engine.tictactoe.runner import run_tictactoe_match
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -45,6 +45,7 @@ from api.schemas import (
     MatchListResponse,
     MoveEntry,
     LeaderboardEntry,
+    BotDetail,
     BotSummary,
     BotCreateRequest,
     BotCreateResponse,
@@ -669,12 +670,16 @@ def list_matches(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     game_id: str = Query(default=""),
+    bot_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     query = db.query(Match)
 
     if game_id:
         query = query.filter(Match.game_id == game_id)
+
+    if bot_id is not None:
+        query = query.filter(or_(Match.bot_one_id == bot_id, Match.bot_two_id == bot_id))
 
     total = query.count()
 
@@ -771,3 +776,28 @@ def list_bots(
         )
         for bot in bots
     ]
+
+@app.get("/bots/{bot_id}", response_model=BotDetail)
+def get_bot(bot_id: int, db: Session = Depends(get_db)):
+    bot = (
+        db.query(Bot)
+        .options(selectinload(Bot.owner))
+        .filter(Bot.id == bot_id)
+        .first()
+    )
+
+    if bot is None:
+        api_error(404, "bot_not_found", f"Bot not found: {bot_id}")
+
+    return BotDetail(
+        bot_id=bot.id,
+        name=bot.name,
+        game_id=bot.game_id,
+        owner_name=get_bot_owner_name(bot),
+        rating=bot.rating,
+        games_played=bot.games_played,
+        wins=bot.wins,
+        losses=bot.losses,
+        draws=bot.draws,
+        created_at=bot.created_at,
+    )

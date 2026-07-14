@@ -1,6 +1,6 @@
 import { IconTrophyFilled } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { getLeaderboard } from "../api/client";
 import { defaultGameId, isSupportedGame, supportedGames } from "../games";
@@ -258,7 +258,11 @@ export default function LeaderboardPage() {
                           <span>{rank}</span>
                         </span>
                       </td>
-                      <td className="player-name">{bot.name}</td>
+                      <td className="player-name">
+                        <Link className="bot-name-link" to={`/bots/${bot.bot_id}`}>
+                          {bot.name}
+                        </Link>
+                      </td>
                       <td>{bot.owner_name}</td>
                       <td>{bot.rating}</td>
                       <td>{bot.games_played}</td>

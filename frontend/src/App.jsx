@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 
 import AppLayout from "./components/AppLayout";
 import { AuthProvider } from "./auth";
+import BotPage from "./pages/BotPage";
 import BotRegistrationPage from "./pages/BotRegistrationPage";
 import HomePage from "./pages/HomePage";
 import MatchHistoryPage from "./pages/MatchHistoryPage";
@@ -31,6 +32,11 @@ function App() {
           <Route
             path="/bots/new"
             element={<BotRegistrationPage />}
+          />
+
+          <Route
+            path="/bots/:botId"
+            element={<BotPage />}
           />
 
           <Route
