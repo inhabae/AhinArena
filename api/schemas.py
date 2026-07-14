@@ -106,6 +106,31 @@ class MoveEntry(BaseModel):
     bot_id: int
     move: int | list[int]
 
+class LiveMoveEntry(MoveEntry):
+    board_state: list[list[str | None]]
+
+class LiveMatchDetail(BaseModel):
+    job_id: int
+    status: str
+    match_id: int | None
+    error_message: str | None
+    game: str
+    bot_one_id: int
+    bot_two_id: int
+    bot_one_name: str
+    bot_two_name: str
+    winner_bot_id: int | None = None
+    winner_bot_name: str | None = None
+    result_reason: str | None = None
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    board_state: list[list[str | None]]
+    moves: list[LiveMoveEntry]
+
+class FeaturedGamesResponse(BaseModel):
+    items: list[LiveMatchDetail]
+
 class MatchDetail(MatchSummary):
     moves: list[MoveEntry]
 

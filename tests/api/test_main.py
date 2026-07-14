@@ -11,7 +11,16 @@ from sqlalchemy.pool import StaticPool
 from api.auth import hash_password, verify_password
 import api.bot_sandbox as bot_sandbox
 from api.database import Base, get_db
-from api.models import Bot, BotSubmission, Match, MatchJob, Move, Session as AuthSession, User
+from api.models import (
+    Bot,
+    BotSubmission,
+    Match,
+    MatchJob,
+    MatchJobMove,
+    Move,
+    Session as AuthSession,
+    User,
+)
 from api.schemas import UserRegisterRequest
 import api.main as api_main
 
@@ -1594,6 +1603,140 @@ def test_get_match_job_returns_queued_job(sqlite_database_dependency):
         "match_id": None,
         "error_message": None,
     }
+
+
+def test_get_live_match_job_returns_running_moves_and_board(sqlite_database_dependency):
+    bot_one = seed_bot(sqlite_database_dependency, name="alpha")
+    bot_two = seed_bot(sqlite_database_dependency, name="beta")
+    job = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        status="running",
+    )
+    sqlite_database_dependency.add(job)
+    sqlite_database_dependency.commit()
+    sqlite_database_dependency.add_all(
+        [
+            MatchJobMove(
+                job_id=job.id,
+                move_number=1,
+                bot_id=bot_one.id,
+                move=[0, 0],
+                board_state=[
+                    ["X", None, None],
+                    [None, None, None],
+                    [None, None, None],
+                ],
+            ),
+            MatchJobMove(
+                job_id=job.id,
+                move_number=2,
+                bot_id=bot_two.id,
+                move=[1, 1],
+                board_state=[
+                    ["X", None, None],
+                    [None, "O", None],
+                    [None, None, None],
+                ],
+            ),
+        ]
+    )
+    sqlite_database_dependency.commit()
+
+    response = client.get(f"/match-jobs/{job.id}/live")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["job_id"] == job.id
+    assert body["status"] == "running"
+    assert body["match_id"] is None
+    assert body["game"] == "tictactoe"
+    assert body["bot_one_name"] == "alpha"
+    assert body["bot_two_name"] == "beta"
+    assert body["board_state"] == [
+        ["X", None, None],
+        [None, "O", None],
+        [None, None, None],
+    ]
+    assert body["moves"] == [
+        {
+            "move_number": 1,
+            "bot_id": bot_one.id,
+            "move": [0, 0],
+            "board_state": [
+                ["X", None, None],
+                [None, None, None],
+                [None, None, None],
+            ],
+        },
+        {
+            "move_number": 2,
+            "bot_id": bot_two.id,
+            "move": [1, 1],
+            "board_state": [
+                ["X", None, None],
+                [None, "O", None],
+                [None, None, None],
+            ],
+        },
+    ]
+
+
+def test_featured_games_returns_up_to_three_jobs_by_placeholder_heuristic(
+    sqlite_database_dependency,
+):
+    bot_one = seed_bot(sqlite_database_dependency, name="alpha")
+    bot_two = seed_bot(sqlite_database_dependency, name="beta")
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    jobs = [
+        MatchJob(
+            game_id="tictactoe",
+            bot_one_id=bot_one.id,
+            bot_two_id=bot_two.id,
+            status="queued",
+            created_at=base_time + timedelta(minutes=1),
+        ),
+        MatchJob(
+            game_id="tictactoe",
+            bot_one_id=bot_one.id,
+            bot_two_id=bot_two.id,
+            status="running",
+            created_at=base_time,
+            started_at=base_time,
+        ),
+        MatchJob(
+            game_id="tictactoe",
+            bot_one_id=bot_two.id,
+            bot_two_id=bot_one.id,
+            status="running",
+            created_at=base_time + timedelta(minutes=2),
+            started_at=base_time + timedelta(minutes=2),
+        ),
+        MatchJob(
+            game_id="tictactoe",
+            bot_one_id=bot_one.id,
+            bot_two_id=bot_two.id,
+            status="failed",
+            created_at=base_time + timedelta(minutes=3),
+        ),
+    ]
+    sqlite_database_dependency.add_all(jobs)
+    sqlite_database_dependency.commit()
+
+    response = client.get("/featured-games")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["job_id"] for item in body["items"]] == [
+        jobs[2].id,
+        jobs[1].id,
+    ]
+    assert body["items"][0]["board_state"] == [
+        [None, None, None],
+        [None, None, None],
+        [None, None, None],
+    ]
 
 
 def test_list_match_jobs_returns_recent_jobs_for_game(sqlite_database_dependency):

@@ -76,6 +76,10 @@ export function getMatch(matchId) {
   return request(`/matches/${matchId}`);
 }
 
+export function getFeaturedGames() {
+  return request("/featured-games");
+}
+
 export function getBot(botId) {
   return request(`/bots/${botId}`);
 }
@@ -92,6 +96,10 @@ export function createMatch(match) {
 
 export function getMatchJob(jobId) {
   return request(`/match-jobs/${jobId}`);
+}
+
+export function getLiveMatchJob(jobId) {
+  return request(`/match-jobs/${jobId}/live`);
 }
 
 export function getMatchJobs(params) {

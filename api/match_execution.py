@@ -89,6 +89,7 @@ def execute_match(
     bot_two_id: int,
     move_timeout_seconds: float,
     startup_timeout_seconds: float,
+    on_live_move=None,
 ) -> Match:
     bot_one = _load_bot_for_match(db, bot_one_id)
     bot_two = _load_bot_for_match(db, bot_two_id)
@@ -104,8 +105,15 @@ def execute_match(
     bot_one_sandbox: BotSandbox | None = None
     bot_two_sandbox: BotSandbox | None = None
 
-    def record_move(player: str, move, _board_state) -> None:
+    def record_move(player: str, move, board_state) -> None:
         moves.append((player, move))
+        if on_live_move is not None:
+            on_live_move(
+                move_number=len(moves),
+                bot_id=bot_one.id if player == PLAYER_ONE_MARKER else bot_two.id,
+                move=_json_move(move),
+                board_state=_json_board_state(board_state),
+            )
 
     try:
         bot_one_sandbox = build_bot_sandbox(bot_one)
@@ -223,3 +231,10 @@ def _json_move(move):
     if isinstance(move, tuple):
         return list(move)
     return move
+
+
+def _json_board_state(board_state):
+    return [
+        [None if cell == " " else cell for cell in row]
+        for row in board_state
+    ]
