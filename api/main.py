@@ -8,6 +8,7 @@ from pathlib import Path
 from api.auth import hash_password, verify_password
 from api.bot_sandbox import build_bot_sandbox
 from api.database import get_db, get_sessionmaker
+from api.featured_games import select_featured_match_jobs
 from api.models import Bot, BotSubmission, Match, MatchJob, Move, Session as AuthSession, User
 from api.match_execution import (
     DEFAULT_BOT_MOVE_TIMEOUT_SECONDS,
@@ -37,6 +38,9 @@ from api.errors import (
 from api.schemas import (
     MatchJobDetail,
     MatchJobCreateResponse,
+    FeaturedGamesResponse,
+    LiveMatchDetail,
+    LiveMoveEntry,
     MatchJobListResponse,
     MatchJobSummary,
     MatchRequest,
@@ -244,6 +248,109 @@ def serialize_match_detail(match: Match) -> MatchDetail:
             )
             for move in match.moves
         ],
+    )
+
+def empty_board_state(game_id: str) -> list[list[str | None]]:
+    if game_id == "connect-four":
+        return [[None for _ in range(7)] for _ in range(6)]
+
+    return [[None for _ in range(3)] for _ in range(3)]
+
+def normalize_board_state(board_state) -> list[list[str | None]]:
+    return [
+        [None if cell in (None, " ") else cell for cell in row]
+        for row in board_state
+    ]
+
+def apply_move_to_board(game_id: str, board, move, marker: str):
+    next_board = [row.copy() for row in board]
+
+    if game_id == "connect-four":
+        column = move if isinstance(move, int) else move[1] if isinstance(move, list) else move["col"]
+        for row_index in range(len(next_board) - 1, -1, -1):
+            if next_board[row_index][column] is None:
+                next_board[row_index][column] = marker
+                return next_board
+        return next_board
+
+    row = move[0] if isinstance(move, list) else move["row"]
+    col = move[1] if isinstance(move, list) else move["col"]
+    next_board[row][col] = marker
+    return next_board
+
+def live_moves_from_completed_match(match: Match) -> list[LiveMoveEntry]:
+    board_state = empty_board_state(match.game_id)
+    live_moves: list[LiveMoveEntry] = []
+
+    for index, move in enumerate(match.moves):
+        marker = "X" if index % 2 == 0 else "O"
+        board_state = apply_move_to_board(match.game_id, board_state, move.move, marker)
+        live_moves.append(
+            LiveMoveEntry(
+                move_number=move.move_number,
+                bot_id=move.bot_id,
+                move=move.move,
+                board_state=board_state,
+            )
+        )
+
+    return live_moves
+
+def serialize_live_match_job(job: MatchJob) -> LiveMatchDetail:
+    match = job.match
+    if match is not None:
+        moves = live_moves_from_completed_match(match)
+        winner_bot_name = None
+        if match.winner_bot_id == match.bot_one_id:
+            winner_bot_name = match.bot_one.name
+        elif match.winner_bot_id == match.bot_two_id:
+            winner_bot_name = match.bot_two.name
+
+        return LiveMatchDetail(
+            job_id=job.id,
+            status=job.status,
+            match_id=job.match_id,
+            error_message=job.error_message,
+            game=match.game_id,
+            bot_one_id=match.bot_one_id,
+            bot_two_id=match.bot_two_id,
+            bot_one_name=match.bot_one.name,
+            bot_two_name=match.bot_two.name,
+            winner_bot_id=match.winner_bot_id,
+            winner_bot_name=winner_bot_name,
+            result_reason=match.result_reason,
+            created_at=job.created_at,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            board_state=moves[-1].board_state if moves else empty_board_state(match.game_id),
+            moves=moves,
+        )
+
+    moves = [
+        LiveMoveEntry(
+            move_number=move.move_number,
+            bot_id=move.bot_id,
+            move=move.move,
+            board_state=normalize_board_state(move.board_state),
+        )
+        for move in job.moves
+    ]
+
+    return LiveMatchDetail(
+        job_id=job.id,
+        status=job.status,
+        match_id=job.match_id,
+        error_message=job.error_message,
+        game=job.game_id,
+        bot_one_id=job.bot_one_id,
+        bot_two_id=job.bot_two_id,
+        bot_one_name=job.bot_one.name,
+        bot_two_name=job.bot_two.name,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+        board_state=moves[-1].board_state if moves else empty_board_state(job.game_id),
+        moves=moves,
     )
 
 def serialize_match_job_summary(job: MatchJob) -> MatchJobSummary:
@@ -651,6 +758,15 @@ def list_match_jobs(
         total=total,
     )
 
+@app.get("/featured-games", response_model=FeaturedGamesResponse)
+def get_featured_games(db: Session = Depends(get_db)):
+    return FeaturedGamesResponse(
+        items=[
+            serialize_live_match_job(job)
+            for job in select_featured_match_jobs(db, limit=3)
+        ]
+    )
+
 @app.get("/match-jobs/{job_id}", response_model=MatchJobDetail)
 def get_match_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(MatchJob).filter(MatchJob.id == job_id).first()
@@ -664,6 +780,27 @@ def get_match_job(job_id: int, db: Session = Depends(get_db)):
         match_id=job.match_id,
         error_message=job.error_message,
     )
+
+@app.get("/match-jobs/{job_id}/live", response_model=LiveMatchDetail)
+def get_live_match_job(job_id: int, db: Session = Depends(get_db)):
+    job = (
+        db.query(MatchJob)
+        .options(
+            selectinload(MatchJob.bot_one),
+            selectinload(MatchJob.bot_two),
+            selectinload(MatchJob.moves),
+            selectinload(MatchJob.match).selectinload(Match.moves),
+            selectinload(MatchJob.match).selectinload(Match.bot_one),
+            selectinload(MatchJob.match).selectinload(Match.bot_two),
+        )
+        .filter(MatchJob.id == job_id)
+        .first()
+    )
+
+    if job is None:
+        api_error(404, "match_job_not_found", f"Match job not found: {job_id}")
+
+    return serialize_live_match_job(job)
 
 @app.get("/matches", response_model=MatchListResponse)
 def list_matches(

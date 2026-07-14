@@ -58,6 +58,11 @@ function App() {
             path="/matches/:matchId"
             element={<MatchDetailPage />}
           />
+
+          <Route
+            path="/match-jobs/:jobId"
+            element={<MatchDetailPage />}
+          />
         </Route>
       </Routes>
     </AuthProvider>

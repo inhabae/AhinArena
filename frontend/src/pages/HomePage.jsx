@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { createMatch, getBots, getMatchJob, getMatchJobs, getMatches } from "../api/client";
-import { formatGame, supportedGames } from "../games";
+import { createMatch, getBots, getFeaturedGames, getMatchJob, getMatchJobs } from "../api/client";
+import { supportedGames } from "../games";
 import { useAuth } from "../useAuth";
+import { MatchBoard } from "./MatchDetailPage";
+import {
+  buildConnectFourReplay,
+  buildTicTacToeReplay,
+} from "./matchReplay";
 
-const recentMatchLimit = 5;
 const matchJobLimit = 100;
 const testMatchSubmitCount = 10;
 const matchJobPollIntervalMs = 1500;
+const featuredGamesPollIntervalMs = 750;
 
 function errorMessageFor(error) {
   if (error.code === "unsupported_game") {
@@ -30,12 +35,172 @@ function errorMessageFor(error) {
   return error.message || "The match could not be started.";
 }
 
-function formatResult(match) {
-  if (match.winner_bot_name) {
-    return `${match.winner_bot_name} won`;
+function getFeaturedLastMove(game) {
+  if (game.game === "tictactoe") {
+    const replay = buildTicTacToeReplay(game.moves ?? []);
+    return replay.lastMoves[replay.lastMoves.length - 1];
   }
 
-  return match.result_reason === "draw" ? "Draw" : match.result_reason;
+  if (game.game === "connect-four") {
+    const replay = buildConnectFourReplay(game.moves ?? []);
+    return replay.lastMoves[replay.lastMoves.length - 1];
+  }
+
+  return null;
+}
+
+function FeaturedPlayerMarker({ gameId, player }) {
+  const marker = player === "p1" ? "X" : "O";
+
+  return (
+    <span
+      className={`featured-player-marker featured-player-marker-${gameId} featured-player-marker-${player}`}
+      aria-hidden="true"
+    >
+      {gameId === "tictactoe" ? marker : null}
+    </span>
+  );
+}
+
+function FeaturedResultBadge({ result }) {
+  if (!result) {
+    return null;
+  }
+
+  const resultClass = result === "D" ? "draw" : result.toLowerCase();
+
+  return (
+    <span
+      className={`featured-result-badge featured-result-badge-${resultClass}`}
+      aria-label={result === "W" ? "Winner" : result === "L" ? "Loser" : "Draw"}
+      title={result === "W" ? "Winner" : result === "L" ? "Loser" : "Draw"}
+    >
+      {result}
+    </span>
+  );
+}
+
+function FeaturedDrawBadge({ show }) {
+  if (!show) {
+    return null;
+  }
+
+  return <span className="featured-draw-badge">Draw</span>;
+}
+
+function FeaturedLiveBadge({ show }) {
+  if (!show) {
+    return null;
+  }
+
+  return (
+    <span className="featured-live-badge" aria-label="Live">
+      <span className="featured-live-badge-dot" aria-hidden="true" />
+      LIVE
+    </span>
+  );
+}
+
+function FeaturedMatchup({ game }) {
+  const botOneWon = game.winner_bot_id === game.bot_one_id;
+  const botTwoWon = game.winner_bot_id === game.bot_two_id;
+  const hasWinner = botOneWon || botTwoWon;
+  const isDraw = game.status === "completed" && !game.winner_bot_id;
+  const botOneResult = !isDraw && hasWinner ? (botOneWon ? "W" : "L") : null;
+  const botTwoResult = !isDraw && hasWinner ? (botTwoWon ? "W" : "L") : null;
+
+  return (
+    <strong className="featured-matchup">
+      <span className="featured-player-name">
+        <FeaturedPlayerMarker gameId={game.game} player="p1" />
+        <span className="featured-player-name-text" title={game.bot_one_name}>
+          {game.bot_one_name}
+        </span>
+        <FeaturedResultBadge result={botOneResult} />
+      </span>
+      <span className="featured-player-name">
+        <FeaturedPlayerMarker gameId={game.game} player="p2" />
+        <span className="featured-player-name-text" title={game.bot_two_name}>
+          {game.bot_two_name}
+        </span>
+        <FeaturedResultBadge result={botTwoResult} />
+      </span>
+    </strong>
+  );
+}
+
+function FeaturedGamesSection() {
+  const [featuredState, setFeaturedState] = useState({
+    loading: true,
+    items: [],
+    error: null,
+  });
+
+  const loadFeaturedGames = useCallback(async () => {
+    try {
+      const data = await getFeaturedGames();
+      setFeaturedState({ loading: false, items: data.items, error: null });
+    } catch (error) {
+      setFeaturedState({ loading: false, items: [], error });
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFeaturedGames();
+    const intervalId = window.setInterval(loadFeaturedGames, featuredGamesPollIntervalMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [loadFeaturedGames]);
+
+  return (
+    <section className="featured-panel">
+      <div className="section-heading">
+        <h2>Featured Games</h2>
+      </div>
+
+      {featuredState.error && (
+        <p className="error">Could not load featured games: {featuredState.error.message}</p>
+      )}
+
+      {featuredState.loading && <p className="empty-state">Loading featured games...</p>}
+
+      {!featuredState.loading && !featuredState.error && featuredState.items.length === 0 && (
+        <p className="empty-state">No live or notable games are available right now.</p>
+      )}
+
+      {featuredState.items.length > 0 && (
+        <div className="featured-games-grid">
+          {featuredState.items.map((game) => (
+            <Link
+              className="featured-game-card"
+              key={game.job_id}
+              to={`/match-jobs/${game.job_id}`}
+            >
+              <div className="featured-game-card-header">
+                <FeaturedMatchup game={game} />
+                <FeaturedDrawBadge
+                  show={game.status === "completed" && !game.winner_bot_id}
+                />
+                <FeaturedLiveBadge show={game.status === "running"} />
+              </div>
+              <div className="featured-board-wrap">
+                <MatchBoard
+                  game={game.game}
+                  board={game.board_state}
+                  lastMove={getFeaturedLastMove(game)}
+                />
+              </div>
+              <span className="featured-card-affordance">
+                {game.status === "running" ? "Watch live" : "View replay"} &rarr;
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function formatBotOption(bot) {
@@ -53,12 +218,6 @@ export default function HomePage() {
   const [botsState, setBotsState] = useState({
     loading: false,
     items: [],
-    error: null,
-  });
-  const [matchesState, setMatchesState] = useState({
-    loading: false,
-    items: [],
-    total: 0,
     error: null,
   });
   const [jobsState, setJobsState] = useState({
@@ -137,33 +296,6 @@ export default function HomePage() {
       ignore = true;
     };
   }, [selectedGame]);
-
-  useEffect(() => {
-    let ignore = false;
-
-    setMatchesState({ loading: true, items: [], total: 0, error: null });
-
-    getMatches({ limit: recentMatchLimit })
-      .then((data) => {
-        if (!ignore) {
-          setMatchesState({
-            loading: false,
-            items: data.items,
-            total: data.total,
-            error: null,
-          });
-        }
-      })
-      .catch((error) => {
-        if (!ignore) {
-          setMatchesState({ loading: false, items: [], total: 0, error });
-        }
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
 
   useEffect(() => {
     setJobsState({ loading: true, items: [], total: 0, error: null });
@@ -477,40 +609,7 @@ export default function HomePage() {
         )}
       </section>
 
-      <section className="recent-panel">
-        <div className="section-heading">
-          <h2>Recent matches</h2>
-          <Link to="/matches">View all</Link>
-        </div>
-
-        {matchesState.error && (
-          <p className="error">Could not load recent matches: {matchesState.error.message}</p>
-        )}
-
-        {matchesState.loading && <p className="empty-state">Loading matches...</p>}
-
-        {!matchesState.loading && matchesState.items.length === 0 && (
-          <p className="empty-state">No matches have been played yet.</p>
-        )}
-
-        {matchesState.items.length > 0 && (
-          <ul className="recent-match-list">
-            {matchesState.items.map((match) => (
-              <li key={match.match_id}>
-                <Link to={`/matches/${match.match_id}`}>
-                  <span>
-                    <strong>{match.bot_one_name}</strong> vs{" "}
-                    <strong>{match.bot_two_name}</strong>
-                  </span>
-                  <span>
-                    {formatGame(match.game)} - {formatResult(match)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <FeaturedGamesSection />
     </main>
   );
 }

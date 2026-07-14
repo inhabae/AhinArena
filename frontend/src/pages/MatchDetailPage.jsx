@@ -5,7 +5,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { getMatch } from "../api/client";
+import { getLiveMatchJob, getMatch } from "../api/client";
 import { formatGame, isSupportedGame } from "../games";
 import {
   buildConnectFourReplay,
@@ -27,6 +27,14 @@ function formatResult(match) {
     return `${match.winner_bot_name} won`;
   }
 
+  if (!match.result_reason) {
+    if (match.status === "failed") {
+      return "Failed";
+    }
+
+    return match.status === "queued" ? "Queued" : "Live";
+  }
+
   return match.result_reason === "draw" ? "Draw" : match.result_reason;
 }
 
@@ -35,6 +43,10 @@ function formatReason(reason) {
 }
 
 function getErrorMessage(error) {
+  if (error.status === 404 || error.code === "match_job_not_found") {
+    return "Match job not found.";
+  }
+
   if (error.status === 404 || error.code === "match_not_found") {
     return "Match not found.";
   }
@@ -70,6 +82,10 @@ function getDeltaClassName(match, delta) {
 }
 
 function RatingLine({ label, before, after, delta, deltaClassName }) {
+  if (before === undefined || after === undefined || delta === undefined) {
+    return null;
+  }
+
   return (
     <div className="match-rating-line">
       <span>{label}</span>
@@ -112,7 +128,7 @@ function PlayerSummary({
   );
 }
 
-function TicTacToeBoard({ board, lastMove }) {
+export function TicTacToeBoard({ board, lastMove }) {
   return (
     <div className="tictactoe-board" role="grid" aria-label="Tic Tac Toe board">
       {board.map((row, rowIndex) =>
@@ -142,7 +158,7 @@ function TicTacToeBoard({ board, lastMove }) {
   );
 }
 
-function ConnectFourBoard({ board, lastMove }) {
+export function ConnectFourBoard({ board, lastMove }) {
   return (
     <div className="connect-four-board" role="grid" aria-label="Connect Four board">
       {board.map((row, rowIndex) =>
@@ -172,7 +188,7 @@ function ConnectFourBoard({ board, lastMove }) {
   );
 }
 
-function MatchBoard({ game, board, lastMove }) {
+export function MatchBoard({ game, board, lastMove }) {
   if (game === "connect-four") {
     return <ConnectFourBoard board={board} lastMove={lastMove} />;
   }
@@ -193,7 +209,8 @@ function formatMove(game, move) {
 }
 
 export default function MatchDetailPage() {
-  const { matchId } = useParams();
+  const { jobId, matchId } = useParams();
+  const isLiveJob = Boolean(jobId);
   const [matchState, setMatchState] = useState({
     loading: true,
     data: null,
@@ -209,7 +226,9 @@ export default function MatchDetailPage() {
     setStep(0);
     setIsPlaying(false);
 
-    getMatch(matchId)
+    const loadMatch = isLiveJob ? getLiveMatchJob(jobId) : getMatch(matchId);
+
+    loadMatch
       .then((data) => {
         if (!ignore) {
           setMatchState({ loading: false, data, error: null });
@@ -224,7 +243,40 @@ export default function MatchDetailPage() {
     return () => {
       ignore = true;
     };
-  }, [matchId]);
+  }, [isLiveJob, jobId, matchId]);
+
+  useEffect(() => {
+    if (
+      !isLiveJob ||
+      !matchState.data ||
+      !["queued", "running"].includes(matchState.data.status)
+    ) {
+      return undefined;
+    }
+
+    let ignore = false;
+
+    async function pollLiveJob() {
+      try {
+        const data = await getLiveMatchJob(jobId);
+
+        if (!ignore) {
+          setMatchState({ loading: false, data, error: null });
+        }
+      } catch (error) {
+        if (!ignore) {
+          setMatchState((current) => ({ ...current, error }));
+        }
+      }
+    }
+
+    const intervalId = window.setInterval(pollLiveJob, 1500);
+
+    return () => {
+      ignore = true;
+      window.clearInterval(intervalId);
+    };
+  }, [isLiveJob, jobId, matchState.data]);
 
   const match = matchState.data;
   const moves = match?.moves;
@@ -240,6 +292,12 @@ export default function MatchDetailPage() {
     return { boards: [], lastMoves: [] };
   }, [match?.game, match?.moves]);
   const maxStep = moves?.length ?? 0;
+
+  useEffect(() => {
+    if (isLiveJob) {
+      setStep(maxStep);
+    }
+  }, [isLiveJob, maxStep]);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -325,7 +383,7 @@ export default function MatchDetailPage() {
   const board = boards[step];
   const lastMove = lastMoves[step];
   const showEndingBanner =
-    step === maxStep && nonStandardEndings.has(match.result_reason);
+    step === maxStep && match.result_reason && nonStandardEndings.has(match.result_reason);
 
   return (
     <main className="match-detail-page">
@@ -339,7 +397,9 @@ export default function MatchDetailPage() {
             {match.bot_two_name}
           </Link>
         </h1>
-        <p>{formatGame(match.game)} match #{match.match_id}</p>
+        <p>
+          {formatGame(match.game)} {isLiveJob ? `job #${match.job_id}` : `match #${match.match_id}`}
+        </p>
       </div>
 
       <section className="history-panel match-replay-panel">

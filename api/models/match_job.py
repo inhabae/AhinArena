@@ -24,6 +24,12 @@ class MatchJob(Base):
     bot_one = relationship("Bot", foreign_keys=[bot_one_id])
     bot_two = relationship("Bot", foreign_keys=[bot_two_id])
     match = relationship("Match")
+    moves = relationship(
+        "MatchJobMove",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        order_by="MatchJobMove.move_number",
+    )
 
     __table_args__ = (
         CheckConstraint(

@@ -10,7 +10,7 @@ from api.match_execution import (
     get_bot_move_timeout_seconds,
     get_bot_startup_timeout_seconds,
 )
-from api.models import MatchJob
+from api.models import MatchJob, MatchJobMove
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -194,6 +194,21 @@ def run_reaper_once() -> tuple[int, int]:
 
 
 def run_job(db: Session, job: MatchJob) -> int:
+    db.query(MatchJobMove).filter(MatchJobMove.job_id == job.id).delete()
+    db.commit()
+
+    def record_live_move(*, move_number, bot_id, move, board_state):
+        db.add(
+            MatchJobMove(
+                job_id=job.id,
+                move_number=move_number,
+                bot_id=bot_id,
+                move=move,
+                board_state=board_state,
+            )
+        )
+        db.commit()
+
     match = execute_match(
         db,
         game_id=job.game_id,
@@ -201,6 +216,7 @@ def run_job(db: Session, job: MatchJob) -> int:
         bot_two_id=job.bot_two_id,
         move_timeout_seconds=get_bot_move_timeout_seconds(),
         startup_timeout_seconds=get_bot_startup_timeout_seconds(),
+        on_live_move=record_live_move,
     )
     job.status = "completed"
     job.match_id = match.id
