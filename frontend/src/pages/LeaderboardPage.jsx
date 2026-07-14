@@ -170,18 +170,23 @@ export default function LeaderboardPage() {
       </div>
 
       <div className="game-tabs" role="tablist" aria-label="Select leaderboard game">
-        {supportedGames.map((game) => (
-          <button
-            key={game.id}
-            type="button"
-            role="tab"
-            aria-selected={selectedGame === game.id}
-            className={selectedGame === game.id ? "game-tab active" : "game-tab"}
-            onClick={() => handleGameChange(game.id)}
-          >
-            {game.label}
-          </button>
-        ))}
+        {supportedGames.map((game) => {
+          const GameIcon = game.icon;
+
+          return (
+            <button
+              key={game.id}
+              type="button"
+              role="tab"
+              aria-selected={selectedGame === game.id}
+              className={selectedGame === game.id ? "game-tab active" : "game-tab"}
+              onClick={() => handleGameChange(game.id)}
+            >
+              <GameIcon size={16} aria-hidden="true" />
+              <span>{game.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       <section className="history-panel">
@@ -252,13 +257,19 @@ export default function LeaderboardPage() {
         <div className="pagination-controls" aria-label="Leaderboard pagination">
           <button
             type="button"
+            className="pagination-button previous"
             onClick={handlePreviousPage}
             disabled={isPreviousDisabled}
           >
             Previous
           </button>
           <span>Page {currentPage}</span>
-          <button type="button" onClick={handleNextPage} disabled={isNextDisabled}>
+          <button
+            type="button"
+            className="pagination-button next"
+            onClick={handleNextPage}
+            disabled={isNextDisabled}
+          >
             Next
           </button>
         </div>
