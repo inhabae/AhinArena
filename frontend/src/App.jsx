@@ -8,6 +8,7 @@ import MatchHistoryPage from "./pages/MatchHistoryPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import LoginPage from "./pages/LoginPage";
 import MatchDetailPage from "./pages/MatchDetailPage";
+import PlayerPage from "./pages/PlayerPage";
 import RegisterPage from "./pages/RegisterPage";
 
 function App() {
@@ -30,6 +31,11 @@ function App() {
           <Route
             path="/bots/new"
             element={<BotRegistrationPage />}
+          />
+
+          <Route
+            path="/players/:username"
+            element={<PlayerPage />}
           />
 
           <Route
