@@ -79,15 +79,11 @@ export default function BotRegistrationPage() {
   const { isAuthenticated, loading } = useAuth();
   const [selectedGame, setSelectedGame] = useState(defaultGameId);
   const [name, setName] = useState("");
-  const [createdBot, setCreatedBot] = useState(null);
   const [sourceCode, setSourceCode] = useState("");
   const [submitState, setSubmitState] = useState({
     loading: false,
     error: null,
-  });
-  const [submissionState, setSubmissionState] = useState({
-    loading: false,
-    error: null,
+    botName: "",
     version: null,
   });
 
@@ -99,51 +95,30 @@ export default function BotRegistrationPage() {
       return;
     }
 
-    if (!name.trim()) {
+    if (!name.trim() || !sourceCode.trim()) {
       return;
     }
 
-    setSubmitState({ loading: true, error: null });
-    setSubmissionState({ loading: false, error: null, version: null });
+    setSubmitState({
+      loading: true,
+      error: null,
+      botName: "",
+      version: null,
+    });
 
     try {
       const bot = await createBot({
         game_id: selectedGame,
         name: name.trim(),
       });
-      setCreatedBot(bot);
-      setSubmitState({ loading: false, error: null });
-    } catch (error) {
-      if (error.status === 401) {
-        navigate("/login");
-        return;
-      }
-
-      setSubmitState({ loading: false, error });
-    }
-  }
-
-  async function handleCodeSubmit(event) {
-    event.preventDefault();
-
-    if (!isAuthenticated) {
-      navigate("/login");
-      return;
-    }
-
-    if (!createdBot || !sourceCode.trim()) {
-      return;
-    }
-
-    setSubmissionState({ loading: true, error: null, version: null });
-
-    try {
-      const submission = await submitBotCode(createdBot.bot_id, {
+      const submission = await submitBotCode(bot.bot_id, {
         source_code: sourceCode,
       });
-      setSubmissionState({
+
+      setSubmitState({
         loading: false,
         error: null,
+        botName: bot.name,
         version: submission.version,
       });
     } catch (error) {
@@ -152,7 +127,12 @@ export default function BotRegistrationPage() {
         return;
       }
 
-      setSubmissionState({ loading: false, error, version: null });
+      setSubmitState({
+        loading: false,
+        error,
+        botName: "",
+        version: null,
+      });
     }
   }
 
@@ -160,7 +140,7 @@ export default function BotRegistrationPage() {
     <main className="form-page">
       <div className="page-header">
         <h1>Register a bot</h1>
-        <p>Add a named bot to a supported game, then submit its source code.</p>
+        <p>Add a named bot to a supported game with its first source submission.</p>
       </div>
 
       {loading && <p className="empty-state">Checking session...</p>}
@@ -184,16 +164,7 @@ export default function BotRegistrationPage() {
               <span>Game</span>
               <select
                 value={selectedGame}
-                onChange={(event) => {
-                  setSelectedGame(event.target.value);
-                  setCreatedBot(null);
-                  setSubmissionState({
-                    loading: false,
-                    error: null,
-                    version: null,
-                  });
-                }}
-                disabled={Boolean(createdBot)}
+                onChange={(event) => setSelectedGame(event.target.value)}
               >
                 {supportedGames.map((game) => (
                   <option key={game.id} value={game.id}>
@@ -208,25 +179,30 @@ export default function BotRegistrationPage() {
               <input
                 type="text"
                 value={name}
-                onChange={(event) => {
-                  setName(event.target.value);
-                  setCreatedBot(null);
-                  setSubmissionState({
-                    loading: false,
-                    error: null,
-                    version: null,
-                  });
-                }}
+                onChange={(event) => setName(event.target.value)}
                 maxLength={64}
                 required
-                disabled={Boolean(createdBot)}
               />
             </label>
 
-            {createdBot && (
+            <label>
+              <span>Source code</span>
+              <textarea
+                value={sourceCode}
+                onChange={(event) => setSourceCode(event.target.value)}
+                placeholder={
+                  sourceCodePlaceholders[selectedGame] ??
+                  sourceCodePlaceholders.tictactoe
+                }
+                spellCheck="false"
+                required
+              />
+            </label>
+
+            {submitState.version && (
               <p className="success" role="status">
-                {createdBot.name} is registered. Submit source code to make it
-                match-ready.
+                {submitState.botName} is registered with source version{" "}
+                {submitState.version}.
               </p>
             )}
 
@@ -236,52 +212,13 @@ export default function BotRegistrationPage() {
               </p>
             )}
 
-            {!createdBot && (
-              <button
-                type="submit"
-                disabled={submitState.loading || !name.trim()}
-              >
-                {submitState.loading ? "Registering..." : "Register bot"}
-              </button>
-            )}
+            <button
+              type="submit"
+              disabled={submitState.loading || !name.trim() || !sourceCode.trim()}
+            >
+              {submitState.loading ? "Registering..." : "Register bot"}
+            </button>
           </form>
-
-          {createdBot && (
-            <form className="form-panel" onSubmit={handleCodeSubmit}>
-              <label>
-                <span>Source code</span>
-                <textarea
-                  value={sourceCode}
-                  onChange={(event) => setSourceCode(event.target.value)}
-                  placeholder={
-                    sourceCodePlaceholders[selectedGame] ??
-                    sourceCodePlaceholders.tictactoe
-                  }
-                  spellCheck="false"
-                  required
-                />
-              </label>
-
-              {submissionState.error && (
-                <p className="error" role="alert">
-                  {errorMessageFor(submissionState.error)}
-                </p>
-              )}
-
-              {submissionState.version && (
-                <p className="success" role="status">
-                  Source code submitted as version {submissionState.version}.
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={submissionState.loading || !sourceCode.trim()}
-              >
-                {submissionState.loading ? "Submitting..." : "Submit code"}
-              </button>
-            </form>
-          )}
         </div>
       )}
     </main>

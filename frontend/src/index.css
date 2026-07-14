@@ -307,9 +307,18 @@ th {
 
 .section-heading {
   align-items: center;
+  border-bottom: 0.5px solid var(--border);
   display: flex;
   gap: 16px;
   justify-content: space-between;
+  margin: -4px 0 2px;
+  padding-bottom: 12px;
+}
+
+.section-heading h2 {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .section-heading span,
@@ -352,7 +361,7 @@ th {
   align-items: end;
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1fr) auto minmax(0, 1fr) auto;
 }
 
 .match-controls label {
@@ -527,10 +536,6 @@ select:disabled {
   display: grid;
   gap: 14px;
   padding: 20px;
-}
-
-.queue-card .section-heading h2 {
-  font-size: 16px;
 }
 
 .queue-list {
