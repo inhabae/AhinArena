@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -192,6 +194,127 @@ def test_get_poll_interval_seconds_uses_environment(monkeypatch):
     assert worker_main.get_poll_interval_seconds() == 0.25
 
 
+def test_get_match_job_stall_timeout_seconds_defaults_to_thirty(monkeypatch):
+    monkeypatch.delenv("MATCH_JOB_STALL_TIMEOUT_SECONDS", raising=False)
+
+    assert worker_main.get_match_job_stall_timeout_seconds() == 30.0
+
+
+def test_get_match_job_stall_timeout_seconds_uses_environment(monkeypatch):
+    monkeypatch.setenv("MATCH_JOB_STALL_TIMEOUT_SECONDS", "12.5")
+
+    assert worker_main.get_match_job_stall_timeout_seconds() == 12.5
+
+
+def test_get_match_job_max_attempts_defaults_to_three(monkeypatch):
+    monkeypatch.delenv("MATCH_JOB_MAX_ATTEMPTS", raising=False)
+
+    assert worker_main.get_match_job_max_attempts() == 3
+
+
+def test_get_match_job_max_attempts_uses_environment(monkeypatch):
+    monkeypatch.setenv("MATCH_JOB_MAX_ATTEMPTS", "5")
+
+    assert worker_main.get_match_job_max_attempts() == 5
+
+
+def test_reap_stalled_jobs_requeues_running_job_past_timeout():
+    SessionLocal = make_sessionmaker()
+    db = SessionLocal()
+    bot_one = seed_bot(db, name="alpha")
+    bot_two = seed_bot(db, name="beta")
+    now = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
+    job = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        status="running",
+        attempts=1,
+        started_at=now - timedelta(seconds=31),
+        error_message="old error",
+    )
+    db.add(job)
+    db.commit()
+    job_id = job.id
+
+    assert worker_main.reap_stalled_jobs(
+        db,
+        stall_timeout_seconds=30,
+        max_attempts=3,
+        now=now,
+    ) == (1, 0)
+
+    requeued = db.query(MatchJob).filter(MatchJob.id == job_id).one()
+    assert requeued.status == "queued"
+    assert requeued.attempts == 1
+    assert requeued.started_at is None
+    assert requeued.completed_at is None
+    assert requeued.error_message is None
+
+
+def test_reap_stalled_jobs_marks_job_failed_at_max_attempts():
+    SessionLocal = make_sessionmaker()
+    db = SessionLocal()
+    bot_one = seed_bot(db, name="alpha")
+    bot_two = seed_bot(db, name="beta")
+    now = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
+    job = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        status="running",
+        attempts=3,
+        started_at=now - timedelta(seconds=31),
+    )
+    db.add(job)
+    db.commit()
+    job_id = job.id
+
+    assert worker_main.reap_stalled_jobs(
+        db,
+        stall_timeout_seconds=30,
+        max_attempts=3,
+        now=now,
+    ) == (0, 1)
+
+    failed = db.query(MatchJob).filter(MatchJob.id == job_id).one()
+    assert failed.status == "failed"
+    assert failed.attempts == 3
+    assert failed.started_at is None
+    assert failed.completed_at == now.replace(tzinfo=None)
+    assert failed.error_message == "Match job stalled after maximum attempts."
+
+
+def test_reap_stalled_jobs_ignores_recent_running_job():
+    SessionLocal = make_sessionmaker()
+    db = SessionLocal()
+    bot_one = seed_bot(db, name="alpha")
+    bot_two = seed_bot(db, name="beta")
+    now = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
+    job = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        status="running",
+        attempts=1,
+        started_at=now - timedelta(seconds=29),
+    )
+    db.add(job)
+    db.commit()
+    job_id = job.id
+
+    assert worker_main.reap_stalled_jobs(
+        db,
+        stall_timeout_seconds=30,
+        max_attempts=3,
+        now=now,
+    ) == (0, 0)
+
+    running = db.query(MatchJob).filter(MatchJob.id == job_id).one()
+    assert running.status == "running"
+    assert running.started_at is not None
+
+
 def test_create_job_notifier_uses_postgres_listener_for_postgres(monkeypatch):
     created = []
 
@@ -282,6 +405,7 @@ def test_run_loop_waits_on_notifier_after_empty_claim(monkeypatch):
             wait_calls.append("closed")
 
     monkeypatch.setattr(worker_main, "run_once", lambda: False)
+    monkeypatch.setattr(worker_main, "run_reaper_once", lambda: (0, 0))
 
     with pytest.raises(StopLoop):
         worker_main.run_loop(poll_interval_seconds=7.0, notifier=FakeNotifier())
@@ -310,9 +434,46 @@ def test_run_loop_retries_immediately_after_processed_job(monkeypatch):
         return next(run_results)
 
     monkeypatch.setattr(worker_main, "run_once", fake_run_once)
+    monkeypatch.setattr(worker_main, "run_reaper_once", lambda: (0, 0))
 
     with pytest.raises(StopLoop):
         worker_main.run_loop(poll_interval_seconds=5.0, notifier=FakeNotifier())
 
     assert run_calls == ["run", "run"]
     assert wait_calls == [5.0, "closed"]
+
+
+def test_run_loop_runs_reaper_periodically(monkeypatch):
+    monotonic_values = iter([0.0, 2.0, 5.0])
+    reaper_calls = []
+    run_calls = []
+
+    class StopLoop(Exception):
+        pass
+
+    class FakeNotifier:
+        def wait(self, _timeout_seconds):
+            raise StopLoop
+
+        def close(self):
+            pass
+
+    def fake_run_reaper_once():
+        reaper_calls.append("reap")
+        return 0, 0
+
+    def fake_run_once():
+        run_calls.append("run")
+        if len(run_calls) == 3:
+            return False
+        return True
+
+    monkeypatch.setattr(worker_main.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(worker_main, "run_reaper_once", fake_run_reaper_once)
+    monkeypatch.setattr(worker_main, "run_once", fake_run_once)
+
+    with pytest.raises(StopLoop):
+        worker_main.run_loop(poll_interval_seconds=5.0, notifier=FakeNotifier())
+
+    assert reaper_calls == ["reap", "reap"]
+    assert run_calls == ["run", "run", "run"]
