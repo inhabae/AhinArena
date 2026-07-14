@@ -83,6 +83,7 @@ Both local runners print each move, the board after that move, and the final mat
 - `docs/frontend.md` documents the React web interface routes, replay behavior, and API client conventions.
 - `docs/bot-submission.md` documents uploaded bot source storage, validation, and match execution.
 - `docs/docker-sandboxing.md` documents the Docker runner image, container restrictions, configuration, and cleanup behavior.
+- `docs/queue-and-workers.md` documents asynchronous match jobs, worker execution, queue recovery, APIs, and local workflow.
 
 ---
 
