@@ -769,6 +769,11 @@ select:disabled {
   min-width: 820px;
 }
 
+.match-history-table th:nth-child(2),
+.match-history-table td:nth-child(2) {
+  width: 54%;
+}
+
 .player-page {
   display: grid;
   gap: 24px;
@@ -1173,18 +1178,33 @@ select:disabled {
 
 .players-cell {
   align-items: center;
-  display: inline-grid;
+  display: grid;
   gap: 8px;
-  grid-template-columns: 150px 20px 150px;
+  grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr);
+  width: min(100%, 560px);
   white-space: nowrap;
 }
 
 .players-cell .player-name:first-child {
-  justify-self: start;
+  justify-self: stretch;
 }
 
 .players-cell .player-name:last-child {
-  justify-self: start;
+  justify-self: stretch;
+}
+
+.player-matchup-name {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.player-matchup-name > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .data-table .completed-date,
@@ -1207,12 +1227,15 @@ select:disabled {
   border-radius: 999px;
   color: var(--text-muted);
   display: inline-flex;
+  flex: 0 0 auto;
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 400;
   gap: 3px;
+  justify-content: center;
   line-height: 1.35;
   margin-left: 2px;
+  min-width: 64px;
   padding: 2px 8px;
 }
 
