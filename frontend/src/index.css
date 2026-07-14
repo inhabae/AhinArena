@@ -17,6 +17,7 @@
   --text-danger: #b42318;
   --text-success: #047857;
   --text-warning: #92400e;
+  --rank-gold: #d4a017;
   --radius: 8px;
 
   --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
@@ -220,7 +221,7 @@ td {
 }
 
 th {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -408,11 +409,6 @@ th {
   align-items: end;
 }
 
-.leaderboard-heading > div {
-  display: grid;
-  gap: 3px;
-}
-
 .page-size-control {
   align-items: center;
   color: var(--text-muted);
@@ -422,6 +418,8 @@ th {
 }
 
 .page-size-control select {
+  color: var(--text-primary);
+  font: 13px/1.2 var(--sans);
   min-height: 34px;
   min-width: 92px;
 }
@@ -1082,14 +1080,9 @@ select:disabled {
   padding-right: 14px;
 }
 
-.bot-name-cell {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
 .data-table th {
   border-bottom: 0.5px solid var(--border-strong);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 500;
 }
@@ -1111,6 +1104,23 @@ select:disabled {
 
 .data-table .clickable-row:hover {
   background: var(--surface-1);
+}
+
+.rank-cell {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.rank-icon-slot {
+  display: inline-flex;
+  justify-content: center;
+  width: 13px;
+}
+
+.top-rank {
+  color: var(--rank-gold);
+  font-weight: 700;
 }
 
 .clickable-row:focus-visible {
@@ -1201,6 +1211,33 @@ select:disabled {
   color: var(--text-muted);
 }
 
+.record-summary {
+  display: inline-flex;
+  white-space: nowrap;
+}
+
+.record-value {
+  display: inline-flex;
+}
+
+.record-value.record-win {
+  color: var(--text-success);
+}
+
+.record-value.record-loss {
+  color: var(--text-danger);
+}
+
+.record-value.record-draw {
+  color: var(--text-warning);
+}
+
+.record-separator {
+  color: var(--text-muted);
+}
+
+.data-table .player-name,
+.data-table .winner-name,
 .player-name,
 .winner-name {
   color: var(--text-primary);
@@ -1343,7 +1380,6 @@ code {
     justify-content: space-between;
   }
 
-  .leaderboard-heading,
   .player-header,
   .player-section-heading {
     align-items: stretch;

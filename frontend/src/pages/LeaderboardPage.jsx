@@ -1,3 +1,4 @@
+import { IconTrophyFilled } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -41,7 +42,11 @@ function formatWinRate(bot) {
 }
 
 function getRecord(bot) {
-  return `${bot.wins}/${bot.losses}/${bot.draws}`;
+  return [
+    { className: "record-win", label: "wins", value: bot.wins },
+    { className: "record-loss", label: "losses", value: bot.losses },
+    { className: "record-draw", label: "draws", value: bot.draws },
+  ];
 }
 
 function getRangeText({ count, loading, offset, limit }) {
@@ -55,9 +60,11 @@ function getRangeText({ count, loading, offset, limit }) {
 
   const start = offset + 1;
   const end = offset + count;
-  const suffix = count === limit ? "+" : "";
+  if (count === limit) {
+    return `${start}-${end} of ${end}+`;
+  }
 
-  return `${start}-${end}${suffix}`;
+  return `${start}-${end} of ${end}`;
 }
 
 export default function LeaderboardPage() {
@@ -191,10 +198,6 @@ export default function LeaderboardPage() {
 
       <section className="history-panel">
         <div className="section-heading leaderboard-heading">
-          <div>
-            <h2>Bot rankings</h2>
-            <span>{rangeText}</span>
-          </div>
           <label className="page-size-control">
             <span>Rows</span>
             <select
@@ -209,6 +212,7 @@ export default function LeaderboardPage() {
               ))}
             </select>
           </label>
+          <span>{rangeText}</span>
         </div>
 
         {leaderboardState.error && (
@@ -238,17 +242,50 @@ export default function LeaderboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {leaderboardState.items.map((bot, index) => (
-                  <tr key={bot.bot_id}>
-                    <td>{offset + index + 1}</td>
-                    <td className="bot-name-cell">{bot.name}</td>
-                    <td>{bot.owner_name}</td>
-                    <td>{bot.rating}</td>
-                    <td>{bot.games_played}</td>
-                    <td>{formatWinRate(bot)}</td>
-                    <td>{getRecord(bot)}</td>
-                  </tr>
-                ))}
+                {leaderboardState.items.map((bot, index) => {
+                  const records = getRecord(bot);
+                  const rank = offset + index + 1;
+
+                  return (
+                    <tr key={bot.bot_id}>
+                      <td>
+                        <span className={rank === 1 ? "rank-cell top-rank" : "rank-cell"}>
+                          <span className="rank-icon-slot">
+                            {rank === 1 && (
+                            <IconTrophyFilled size={13} aria-hidden="true" />
+                            )}
+                          </span>
+                          <span>{rank}</span>
+                        </span>
+                      </td>
+                      <td className="player-name">{bot.name}</td>
+                      <td>{bot.owner_name}</td>
+                      <td>{bot.rating}</td>
+                      <td>{bot.games_played}</td>
+                      <td>{formatWinRate(bot)}</td>
+                      <td>
+                        <span
+                          className="record-summary"
+                          aria-label={records
+                            .map((record) => `${record.value} ${record.label}`)
+                            .join(", ")}
+                        >
+                          {records.map((record, recordIndex) => (
+                            <span
+                              key={record.label}
+                              className={`record-value ${record.className}`}
+                            >
+                              {record.value}
+                              {recordIndex < records.length - 1 && (
+                                <span className="record-separator">/</span>
+                              )}
+                            </span>
+                          ))}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
