@@ -225,7 +225,7 @@ export default function LeaderboardPage() {
 
         {leaderboardState.items.length > 0 && (
           <div className="table-scroll">
-            <table className="leaderboard-table">
+            <table className="data-table leaderboard-table">
               <thead>
                 <tr>
                   <th scope="col">Rank</th>

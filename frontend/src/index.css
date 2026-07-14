@@ -251,11 +251,7 @@ th {
   margin-bottom: 24px;
 }
 
-.page-header p {
-  max-width: 620px;
-}
-
-.match-history-page .page-header h1 {
+.page-header h1 {
   color: var(--text-primary);
   font-size: 36px;
   font-weight: 700;
@@ -263,14 +259,15 @@ th {
   margin-bottom: 12px;
 }
 
-.match-history-page .page-header {
+.page-header p {
+  font-size: 15px;
+  max-width: 620px;
+}
+
+.page-header:has(.header-stat) {
   align-items: flex-start;
   display: flex;
   justify-content: space-between;
-}
-
-.match-history-page .page-header p {
-  font-size: 15px;
 }
 
 .header-stat {
@@ -749,7 +746,7 @@ select:disabled {
   overflow-x: auto;
 }
 
-.match-history-table {
+.data-table {
   min-width: 780px;
 }
 
@@ -1075,21 +1072,13 @@ select:disabled {
   padding: 2px 6px;
 }
 
-.match-history-table th:first-child,
-.match-history-table td:first-child,
-.leaderboard-table th:first-child,
-.leaderboard-table td:first-child,
-.player-bot-table th:first-child,
-.player-bot-table td:first-child {
+.data-table th:first-child,
+.data-table td:first-child {
   padding-left: 14px;
 }
 
-.match-history-table th:last-child,
-.match-history-table td:last-child,
-.leaderboard-table th:last-child,
-.leaderboard-table td:last-child,
-.player-bot-table th:last-child,
-.player-bot-table td:last-child {
+.data-table th:last-child,
+.data-table td:last-child {
   padding-right: 14px;
 }
 
@@ -1098,29 +1087,29 @@ select:disabled {
   font-weight: 600;
 }
 
-.match-history-table th {
+.data-table th {
   border-bottom: 0.5px solid var(--border-strong);
   color: var(--text-secondary);
   font-size: 14px;
   font-weight: 500;
 }
 
-.match-history-table td {
+.data-table td {
   border-bottom: 0.5px solid var(--border);
   color: var(--text-secondary);
   font-size: 14px;
   font-weight: 500;
 }
 
-.match-history-table tbody tr:nth-child(even) {
+.data-table tbody tr:nth-child(even) {
   background: var(--surface-1);
 }
 
-.match-history-table .clickable-row {
+.data-table .clickable-row {
   cursor: pointer;
 }
 
-.match-history-table .clickable-row:hover {
+.data-table .clickable-row:hover {
   background: var(--surface-1);
 }
 
@@ -1145,8 +1134,8 @@ select:disabled {
   justify-self: start;
 }
 
-.match-history-table .completed-date,
-.match-history-table .muted-info {
+.data-table .completed-date,
+.data-table .muted-info {
   color: var(--text-muted);
   font-size: 13px;
   font-weight: 400;
@@ -1302,7 +1291,7 @@ code {
     padding: 36px 20px 56px;
   }
 
-  .match-history-page .page-header {
+  .page-header:has(.header-stat) {
     align-items: flex-start;
     flex-direction: column;
   }
