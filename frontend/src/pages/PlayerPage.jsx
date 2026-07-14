@@ -196,7 +196,7 @@ export default function PlayerPage() {
 
             {playerBots.length > 0 && (
               <div className="table-scroll">
-                <table className="player-bot-table">
+                <table className="data-table player-bot-table">
                   <thead>
                     <tr>
                       <th scope="col">Bot name</th>

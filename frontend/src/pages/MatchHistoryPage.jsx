@@ -240,7 +240,7 @@ export default function MatchHistoryPage() {
 
         {matchesState.items.length > 0 && (
           <div className="table-scroll">
-            <table className="match-history-table">
+            <table className="data-table match-history-table">
               <thead>
                 <tr>
                   <th scope="col">Game</th>
