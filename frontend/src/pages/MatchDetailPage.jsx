@@ -3,7 +3,7 @@ import {
   IconPlayerPlayFilled,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { getMatch } from "../api/client";
 import { formatGame, isSupportedGame } from "../games";
@@ -82,6 +82,7 @@ function RatingLine({ label, before, after, delta, deltaClassName }) {
 }
 
 function PlayerSummary({
+  botId,
   game,
   marker,
   name,
@@ -95,7 +96,11 @@ function PlayerSummary({
       <span className={`marker-pill ${game}-marker-${marker.toLowerCase()}`}>
         {marker}
       </span>
-      <strong>{name}</strong>
+      <strong>
+        <Link className="bot-name-link" to={`/bots/${botId}`}>
+          {name}
+        </Link>
+      </strong>
       <RatingLine
         label="Rating"
         before={before}
@@ -300,7 +305,15 @@ export default function MatchDetailPage() {
 
         <section className="history-panel">
           <div className="section-heading">
-            <h2>{match.bot_one_name} vs {match.bot_two_name}</h2>
+            <h2>
+              <Link className="bot-name-link" to={`/bots/${match.bot_one_id}`}>
+                {match.bot_one_name}
+              </Link>{" "}
+              vs{" "}
+              <Link className="bot-name-link" to={`/bots/${match.bot_two_id}`}>
+                {match.bot_two_name}
+              </Link>
+            </h2>
             <span>{formatResult(match)}</span>
           </div>
           <p className="empty-state">Replay for this game isn't supported yet.</p>
@@ -317,7 +330,15 @@ export default function MatchDetailPage() {
   return (
     <main className="match-detail-page">
       <div className="page-header">
-        <h1>{match.bot_one_name} vs {match.bot_two_name}</h1>
+        <h1>
+          <Link className="bot-name-link" to={`/bots/${match.bot_one_id}`}>
+            {match.bot_one_name}
+          </Link>{" "}
+          vs{" "}
+          <Link className="bot-name-link" to={`/bots/${match.bot_two_id}`}>
+            {match.bot_two_name}
+          </Link>
+        </h1>
         <p>{formatGame(match.game)} match #{match.match_id}</p>
       </div>
 
@@ -402,6 +423,7 @@ export default function MatchDetailPage() {
 
           <aside className="match-summary-panel">
             <PlayerSummary
+              botId={match.bot_one_id}
               game={match.game}
               marker="X"
               name={match.bot_one_name}
@@ -411,6 +433,7 @@ export default function MatchDetailPage() {
               deltaClassName={getDeltaClassName(match, match.bot_one_rating_delta)}
             />
             <PlayerSummary
+              botId={match.bot_two_id}
               game={match.game}
               marker="O"
               name={match.bot_two_name}

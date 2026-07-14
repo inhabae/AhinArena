@@ -130,6 +130,18 @@ class BotSummary(BaseModel):
     name: str
     owner_name: str | None
 
+class BotDetail(BaseModel):
+    bot_id: int
+    name: str
+    game_id: str
+    owner_name: str
+    rating: int
+    games_played: int
+    wins: int
+    losses: int
+    draws: int
+    created_at: datetime
+
 class BotCreateRequest(BaseModel):
     game_id: str
     name: str = Field(max_length=64)

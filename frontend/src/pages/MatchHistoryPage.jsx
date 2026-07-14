@@ -1,6 +1,6 @@
 import { IconTrophyFilled } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { getMatches } from "../api/client";
 import { formatGame, gameFilters } from "../games";
@@ -73,6 +73,10 @@ function PlayerRating({ match, rating, delta }) {
       <span>{formattedDelta.amount}</span>
     </span>
   );
+}
+
+function stopLinkPropagation(event) {
+  event.stopPropagation();
 }
 
 function getValidGame(gameId) {
@@ -267,7 +271,13 @@ export default function MatchHistoryPage() {
                     <td>
                       <span className="players-cell">
                         <span className="player-name player-matchup-name">
-                          <span>{match.bot_one_name}</span>
+                          <Link
+                            className="bot-name-link"
+                            to={`/bots/${match.bot_one_id}`}
+                            onClick={stopLinkPropagation}
+                          >
+                            {match.bot_one_name}
+                          </Link>
                           <PlayerRating
                             match={match}
                             rating={match.bot_one_rating_before}
@@ -276,7 +286,13 @@ export default function MatchHistoryPage() {
                         </span>
                         <span aria-hidden="true">vs</span>
                         <span className="player-name player-matchup-name">
-                          <span>{match.bot_two_name}</span>
+                          <Link
+                            className="bot-name-link"
+                            to={`/bots/${match.bot_two_id}`}
+                            onClick={stopLinkPropagation}
+                          >
+                            {match.bot_two_name}
+                          </Link>
                           <PlayerRating
                             match={match}
                             rating={match.bot_two_rating_before}
