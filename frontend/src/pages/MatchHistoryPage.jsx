@@ -1,3 +1,4 @@
+import { IconTrophyFilled } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -13,20 +14,65 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-function formatResult(match) {
+function MatchResult({ match }) {
   if (match.winner_bot_name) {
-    return `${match.winner_bot_name} won`;
+    return (
+      <span className="match-result-badge result-win">
+        <IconTrophyFilled size={13} aria-hidden="true" />
+        <span>{match.winner_bot_name}</span>
+      </span>
+    );
   }
 
-  return match.result_reason === "draw" ? "Draw" : match.result_reason;
+  if (match.result_reason === "draw") {
+    return <span className="match-result-badge result-draw">Draw</span>;
+  }
+
+  return (
+    <span className="match-result-badge result-draw">
+      {match.result_reason.replaceAll("_", " ")}
+    </span>
+  );
 }
 
 function formatDelta(value) {
   if (value > 0) {
-    return `+${value}`;
+    return { sign: "+", amount: value };
   }
 
-  return String(value);
+  if (value < 0) {
+    return { sign: "-", amount: Math.abs(value) };
+  }
+
+  return { sign: "+", amount: 0 };
+}
+
+function getRatingClassName(match, delta) {
+  if (match.result_reason === "draw") {
+    return "player-rating rating-draw";
+  }
+
+  if (delta > 0) {
+    return "player-rating rating-gain";
+  }
+
+  if (delta < 0) {
+    return "player-rating rating-loss";
+  }
+
+  return "player-rating";
+}
+
+function PlayerRating({ match, rating, delta }) {
+  const formattedDelta = formatDelta(delta);
+
+  return (
+    <span className={getRatingClassName(match, delta)}>
+      <span>{rating}</span>
+      <span>{formattedDelta.sign}</span>
+      <span>{formattedDelta.amount}</span>
+    </span>
+  );
 }
 
 function getValidGame(gameId) {
@@ -147,28 +193,38 @@ export default function MatchHistoryPage() {
   return (
     <main className="match-history-page">
       <div className="page-header">
-        <h1>Match history</h1>
-        <p>Browse completed arena matches across all supported games.</p>
+        <div>
+          <h1>Match History</h1>
+          <p>Browse completed arena matches across all supported games.</p>
+        </div>
+        <div className="header-stat" aria-label={`${matchesState.total} matches recorded`}>
+          <strong>{matchesState.total}</strong>
+          <span>matches recorded</span>
+        </div>
       </div>
 
       <div className="game-tabs" role="tablist" aria-label="Filter matches by game">
-        {gameFilters.map((game) => (
-          <button
-            key={game.label}
-            type="button"
-            role="tab"
-            aria-selected={selectedGame === game.id}
-            className={selectedGame === game.id ? "game-tab active" : "game-tab"}
-            onClick={() => handleGameChange(game.id)}
-          >
-            {game.label}
-          </button>
-        ))}
+        {gameFilters.map((game) => {
+          const GameIcon = game.icon;
+
+          return (
+            <button
+              key={game.label}
+              type="button"
+              role="tab"
+              aria-selected={selectedGame === game.id}
+              className={selectedGame === game.id ? "game-tab active" : "game-tab"}
+              onClick={() => handleGameChange(game.id)}
+            >
+              <GameIcon size={16} aria-hidden="true" />
+              <span>{game.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       <section className="history-panel">
-        <div className="section-heading">
-          <h2>Persisted matches</h2>
+        <div className="match-history-meta">
           <span>{matchesState.loading ? "Loading..." : rangeText}</span>
         </div>
 
@@ -190,7 +246,6 @@ export default function MatchHistoryPage() {
                   <th scope="col">Game</th>
                   <th scope="col">Players</th>
                   <th scope="col">Result</th>
-                  <th scope="col">Rating change</th>
                   <th scope="col">Completed date</th>
                 </tr>
               </thead>
@@ -211,35 +266,29 @@ export default function MatchHistoryPage() {
                     <td>{formatGame(match.game)}</td>
                     <td>
                       <span className="players-cell">
-                        <span
-                          className={
-                            match.winner_bot_id === match.bot_one_id
-                              ? "winner-name"
-                              : undefined
-                          }
-                        >
-                          {match.bot_one_name} ({match.bot_one_rating_before})
+                        <span className="player-name">
+                          {match.bot_one_name}{" "}
+                          <PlayerRating
+                            match={match}
+                            rating={match.bot_one_rating_before}
+                            delta={match.bot_one_rating_delta}
+                          />
                         </span>
                         <span aria-hidden="true">vs</span>
-                        <span
-                          className={
-                            match.winner_bot_id === match.bot_two_id
-                              ? "winner-name"
-                              : undefined
-                          }
-                        >
-                          {match.bot_two_name} ({match.bot_two_rating_before})
+                        <span className="player-name">
+                          {match.bot_two_name}{" "}
+                          <PlayerRating
+                            match={match}
+                            rating={match.bot_two_rating_before}
+                            delta={match.bot_two_rating_delta}
+                          />
                         </span>
                       </span>
                     </td>
-                    <td>{formatResult(match)}</td>
                     <td>
-                      <span className="rating-delta">
-                        <span>{formatDelta(match.bot_one_rating_delta)}</span>
-                        <span>{formatDelta(match.bot_two_rating_delta)}</span>
-                      </span>
+                      <MatchResult match={match} />
                     </td>
-                    <td>{formatDate(match.completed_at)}</td>
+                    <td className="completed-date">{formatDate(match.completed_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -250,6 +299,7 @@ export default function MatchHistoryPage() {
         <div className="pagination-controls" aria-label="Match history pagination">
           <button
             type="button"
+            className="pagination-button previous"
             onClick={handlePreviousPage}
             disabled={isPreviousDisabled}
           >
@@ -258,7 +308,12 @@ export default function MatchHistoryPage() {
           <span>
             Page {currentPage} of {totalPages}
           </span>
-          <button type="button" onClick={handleNextPage} disabled={isNextDisabled}>
+          <button
+            type="button"
+            className="pagination-button next"
+            onClick={handleNextPage}
+            disabled={isNextDisabled}
+          >
             Next
           </button>
         </div>

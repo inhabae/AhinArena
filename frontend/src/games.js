@@ -1,10 +1,12 @@
+import { IconApps, IconCircles, IconTicTac } from "@tabler/icons-react";
+
 export const supportedGames = [
-  { id: "tictactoe", label: "Tic Tac Toe" },
-  { id: "connect-four", label: "Connect Four" },
+  { id: "tictactoe", label: "Tic Tac Toe", icon: IconTicTac },
+  { id: "connect-four", label: "Connect Four", icon: IconCircles },
 ];
 
 export const gameFilters = [
-  { id: "", label: "All games" },
+  { id: "", label: "All games", icon: IconApps },
   ...supportedGames,
 ];
 
