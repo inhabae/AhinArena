@@ -583,13 +583,25 @@ select:disabled {
 
 .stat-card {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   padding: 20px;
 }
 
 .stat-card span {
-  color: var(--text-muted);
-  font-size: 13px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.stat-label {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.stat-label svg {
+  color: var(--accent);
+  flex: 0 0 auto;
 }
 
 .stat-card strong {
@@ -597,6 +609,11 @@ select:disabled {
   font-size: 32px;
   font-weight: 650;
   line-height: 1;
+}
+
+.stat-card strong.stat-value-muted {
+  color: var(--text-muted);
+  font-weight: 600;
 }
 
 .queue-card {
@@ -777,6 +794,32 @@ select:disabled {
 .player-section-heading > div {
   display: grid;
   gap: 3px;
+}
+
+.player-empty-state {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 22px 0 10px;
+  text-align: center;
+}
+
+.player-empty-state > svg {
+  color: var(--text-muted);
+}
+
+.empty-state-link {
+  align-items: center;
+  color: var(--accent);
+  display: inline-flex;
+  font-weight: 600;
+  gap: 5px;
+  text-decoration: none;
+}
+
+.empty-state-link:hover {
+  text-decoration: underline;
 }
 
 .player-bot-table {
