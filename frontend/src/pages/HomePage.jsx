@@ -57,23 +57,27 @@ function formatJobStatus(status) {
   return "Queued";
 }
 
+function getBotSelectDisabled({ selectedGame, botsState }) {
+  return !selectedGame || botsState.loading || botsState.items.length === 0;
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [selectedGame, setSelectedGame] = useState(supportedGames[0].id);
+  const [selectedGame, setSelectedGame] = useState("");
   const [botsState, setBotsState] = useState({
-    loading: true,
+    loading: false,
     items: [],
     error: null,
   });
   const [matchesState, setMatchesState] = useState({
-    loading: true,
+    loading: false,
     items: [],
     total: 0,
     error: null,
   });
   const [jobsState, setJobsState] = useState({
-    loading: true,
+    loading: false,
     items: [],
     total: 0,
     error: null,
@@ -93,7 +97,7 @@ export default function HomePage() {
       }
 
       try {
-        const data = await getMatchJobs({ game_id: selectedGame, limit: matchJobLimit });
+        const data = await getMatchJobs({ limit: matchJobLimit });
 
         setJobsState({
           loading: false,
@@ -105,11 +109,19 @@ export default function HomePage() {
         setJobsState({ loading: false, items: [], total: 0, error });
       }
     },
-    [selectedGame],
+    [],
   );
 
   useEffect(() => {
     let ignore = false;
+
+    if (!selectedGame) {
+      setBotsState({ loading: false, items: [], error: null });
+      setBotOne("");
+      setBotTwo("");
+      setSubmitState({ loading: false, error: null, jobId: null });
+      return undefined;
+    }
 
     setBotsState({ loading: true, items: [], error: null });
     setBotOne("");
@@ -140,7 +152,7 @@ export default function HomePage() {
 
     setMatchesState({ loading: true, items: [], total: 0, error: null });
 
-    getMatches({ game_id: selectedGame, limit: recentMatchLimit })
+    getMatches({ limit: recentMatchLimit })
       .then((data) => {
         if (!ignore) {
           setMatchesState({
@@ -160,7 +172,7 @@ export default function HomePage() {
     return () => {
       ignore = true;
     };
-  }, [selectedGame]);
+  }, []);
 
   useEffect(() => {
     setJobsState({ loading: true, items: [], total: 0, error: null });
@@ -220,14 +232,16 @@ export default function HomePage() {
     () =>
       Boolean(
         isAuthenticated &&
+          selectedGame &&
           botOne &&
           botTwo &&
           botOne !== botTwo &&
           !submitState.loading,
       ),
-    [botOne, botTwo, isAuthenticated, submitState.loading],
+    [botOne, botTwo, isAuthenticated, selectedGame, submitState.loading],
   );
   const hasDuplicateBots = Boolean(botOne && botTwo && botOne === botTwo);
+  const botSelectDisabled = getBotSelectDisabled({ selectedGame, botsState });
   const matchFeedback = submitState.error
     ? {
         className: "error",
@@ -248,6 +262,11 @@ export default function HomePage() {
           className: "error",
           message: "Choose two different bots to start a match.",
         }
+      : !selectedGame
+        ? {
+            className: "empty-state",
+            message: "Select a game to load available bots.",
+          }
       : !botsState.loading && botsState.items.length === 0
         ? {
             className: "empty-state",
@@ -306,153 +325,135 @@ export default function HomePage() {
 
   return (
     <main className="home-page">
-      <div className="page-header">
-        <h1>Start a match</h1>
-        <p>Pick a game, choose two registered bots, and run the next arena match.</p>
-      </div>
+      <section className="match-panel">
+        <div className="section-heading">
+          <h2>Start a new match</h2>
+        </div>
 
-      <div className="game-tabs" role="tablist" aria-label="Game">
-        {supportedGames.map((game) => (
-          <button
-            key={game.id}
-            type="button"
-            role="tab"
-            aria-selected={selectedGame === game.id}
-            className={selectedGame === game.id ? "game-tab active" : "game-tab"}
-            onClick={() => setSelectedGame(game.id)}
-          >
-            {game.label}
-          </button>
-        ))}
-      </div>
+        {botsState.error && (
+          <p className="error" role="alert">
+            Could not load bots: {botsState.error.message}
+          </p>
+        )}
 
-      <section className="home-grid">
-        <section className="match-panel">
-          <div className="section-heading">
-            <h2>Start a new match</h2>
-            <span>{formatGame(selectedGame)}</span>
+        {authLoading && <p className="empty-state">Checking session...</p>}
+
+        {!authLoading && !isAuthenticated && (
+          <div className="login-gate">
+            <div>
+              <h3>Log in to start a match</h3>
+              <p>Match creation is available after you log in.</p>
+            </div>
+            <Link className="button-link" to="/login">
+              Log in
+            </Link>
           </div>
+        )}
 
-          {botsState.error && (
-            <p className="error" role="alert">
-              Could not load bots: {botsState.error.message}
+        {!authLoading && isAuthenticated && (
+          <form className="match-controls" onSubmit={handleSubmit}>
+            <label>
+              <span>Select game</span>
+              <select
+                value={selectedGame}
+                onChange={(event) => setSelectedGame(event.target.value)}
+              >
+                <option value="">Select game</option>
+                {supportedGames.map((game) => (
+                  <option key={game.id} value={game.id}>
+                    {game.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Select your bot</span>
+              <select
+                value={botOne}
+                onChange={(event) => setBotOne(event.target.value)}
+                disabled={botSelectDisabled}
+              >
+                {botsState.items.map((bot) => (
+                  <option key={bot.bot_id} value={bot.name}>
+                    {formatBotOption(bot)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <span className="versus">vs</span>
+
+            <label>
+              <span>Select opponent bot</span>
+              <select
+                value={botTwo}
+                onChange={(event) => setBotTwo(event.target.value)}
+                disabled={botSelectDisabled}
+              >
+                {botsState.items.map((bot) => (
+                  <option key={bot.bot_id} value={bot.name}>
+                    {formatBotOption(bot)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button type="submit" disabled={!canSubmit}>
+              {submitState.loading ? "Waiting..." : "Queue match"}
+            </button>
+          </form>
+        )}
+
+        <div className="match-feedback" aria-live="polite">
+          {matchFeedback && (
+            <p className={matchFeedback.className} role="alert">
+              {matchFeedback.message}
             </p>
           )}
-
-          {authLoading && <p className="empty-state">Checking session...</p>}
-
-          {!authLoading && !isAuthenticated && (
-            <div className="login-gate">
-              <div>
-                <h3>Log in to start a match</h3>
-                <p>Match creation is available after you log in.</p>
-              </div>
-              <Link className="button-link" to="/login">
-                Log in
-              </Link>
-            </div>
-          )}
-
-          {!authLoading && isAuthenticated && (
-            <form className="match-controls" onSubmit={handleSubmit}>
-              <label>
-                <span>Select your bot</span>
-                <select
-                  value={botOne}
-                  onChange={(event) => setBotOne(event.target.value)}
-                  disabled={botsState.loading || botsState.items.length === 0}
-                >
-                  {botsState.items.map((bot) => (
-                    <option key={bot.bot_id} value={bot.name}>
-                      {formatBotOption(bot)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <span className="versus">vs</span>
-
-              <label>
-                <span>Select opponent bot</span>
-                <select
-                  value={botTwo}
-                  onChange={(event) => setBotTwo(event.target.value)}
-                  disabled={botsState.loading || botsState.items.length === 0}
-                >
-                  {botsState.items.map((bot) => (
-                    <option key={bot.bot_id} value={bot.name}>
-                      {formatBotOption(bot)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <button type="submit" disabled={!canSubmit}>
-                {submitState.loading ? "Waiting..." : "Queue match"}
-              </button>
-            </form>
-          )}
-
-          <div className="match-feedback" aria-live="polite">
-            {matchFeedback && (
-              <p className={matchFeedback.className} role="alert">
-                {matchFeedback.message}
-              </p>
-            )}
-          </div>
-        </section>
-
-        <div className="stats-row" aria-label={`${formatGame(selectedGame)} stats and queue`}>
-          <div className="stat-card">
-            <span>Matches played</span>
-            <strong>{matchesState.loading ? "..." : matchesState.total}</strong>
-          </div>
-          <div className="stat-card">
-            <span>Bots registered</span>
-            <strong>{botsState.loading ? "..." : botsState.items.length}</strong>
-          </div>
-          <div className="queue-card">
-            <div className="section-heading">
-              <h2>Queue</h2>
-              <span>{jobsState.loading ? "Loading" : `${jobsState.total} jobs`}</span>
-            </div>
-
-            {jobsState.error && (
-              <p className="error">Could not load queue: {jobsState.error.message}</p>
-            )}
-
-            {jobsState.loading && <p className="empty-state">Loading queue...</p>}
-
-            {!jobsState.loading && !jobsState.error && jobsState.items.length === 0 && (
-              <p className="empty-state">No match jobs for this game.</p>
-            )}
-
-            {jobsState.items.length > 0 && (
-              <ul className="queue-list">
-                {jobsState.items.map((job) => (
-                  <li key={job.job_id} className="queue-job">
-                    <span className={`job-status ${job.status}`}>
-                      {formatJobStatus(job.status)}
-                    </span>
-                    <div>
-                      <strong>
-                        {job.bot_one_name || "Bot one"} vs {job.bot_two_name || "Bot two"}
-                      </strong>
-                      <p>
-                        #{job.job_id} -{" "}
-                        {job.status === "failed"
-                          ? job.error_message || "The queued match failed."
-                          : job.status === "completed"
-                            ? "Match completed."
-                            : "Waiting for the worker to finish this match."}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
         </div>
+      </section>
+
+      <section className="queue-card">
+        <div className="section-heading">
+          <h2>Queue</h2>
+          <span>{jobsState.loading ? "Loading" : `${jobsState.total} jobs`}</span>
+        </div>
+
+        {jobsState.error && (
+          <p className="error">Could not load queue: {jobsState.error.message}</p>
+        )}
+
+        {jobsState.loading && <p className="empty-state">Loading queue...</p>}
+
+        {!jobsState.loading && !jobsState.error && jobsState.items.length === 0 && (
+          <p className="empty-state">No match jobs are queued.</p>
+        )}
+
+        {jobsState.items.length > 0 && (
+          <ul className="queue-list">
+            {jobsState.items.map((job) => (
+              <li key={job.job_id} className="queue-job">
+                <span className={`job-status ${job.status}`}>
+                  {formatJobStatus(job.status)}
+                </span>
+                <div>
+                  <strong>
+                    {job.bot_one_name || "Bot one"} vs {job.bot_two_name || "Bot two"}
+                  </strong>
+                  <p>
+                    {formatGame(job.game)} - #{job.job_id} -{" "}
+                    {job.status === "failed"
+                      ? job.error_message || "The queued match failed."
+                      : job.status === "completed"
+                        ? "Match completed."
+                        : "Waiting for the worker to finish this match."}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="recent-panel">
@@ -468,7 +469,7 @@ export default function HomePage() {
         {matchesState.loading && <p className="empty-state">Loading matches...</p>}
 
         {!matchesState.loading && matchesState.items.length === 0 && (
-          <p className="empty-state">No matches have been played for this game yet.</p>
+          <p className="empty-state">No matches have been played yet.</p>
         )}
 
         {matchesState.items.length > 0 && (
@@ -480,7 +481,9 @@ export default function HomePage() {
                     <strong>{match.bot_one_name}</strong> vs{" "}
                     <strong>{match.bot_two_name}</strong>
                   </span>
-                  <span>{formatResult(match)}</span>
+                  <span>
+                    {formatGame(match.game)} - {formatResult(match)}
+                  </span>
                 </Link>
               </li>
             ))}
