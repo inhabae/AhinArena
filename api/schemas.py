@@ -1,25 +1,41 @@
+import re
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+EMAIL_MAX_LENGTH = 254
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_MAX_LENGTH = 72
+USERNAME_MIN_LENGTH = 3
+USERNAME_MAX_LENGTH = 20
+BOT_NAME_MIN_LENGTH = 3
+BOT_NAME_MAX_LENGTH = 32
+
+EMAIL_PATTERN = re.compile(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
+USERNAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+BOT_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _-]*")
+
 
 class UserRegisterRequest(BaseModel):
-    email: str = Field(max_length=320)
-    username: str = Field(min_length=1, max_length=80)
-    password: str = Field(min_length=8, max_length=72)
+    email: str = Field(max_length=EMAIL_MAX_LENGTH)
+    username: str = Field(min_length=USERNAME_MIN_LENGTH, max_length=USERNAME_MAX_LENGTH)
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
 
     @field_validator("email")
     @classmethod
     def validate_email(cls, value):
         email = value.strip().lower()
-        if "@" not in email:
-            raise ValueError("Email must contain an @ sign.")
+        if not email.isascii():
+            raise ValueError("Email must use ASCII characters.")
+
+        if not EMAIL_PATTERN.fullmatch(email):
+            raise ValueError("Email format is invalid.")
 
         local_part, domain = email.rsplit("@", maxsplit=1)
-        if not local_part or "." not in domain:
+        if local_part.startswith(".") or local_part.endswith(".") or ".." in local_part:
             raise ValueError("Email format is invalid.")
 
         domain_parts = domain.split(".")
-        if any(part == "" for part in domain_parts):
+        if any(part.startswith("-") or part.endswith("-") for part in domain_parts):
             raise ValueError("Email format is invalid.")
 
         return email
@@ -27,10 +43,14 @@ class UserRegisterRequest(BaseModel):
     @field_validator("username")
     @classmethod
     def validate_username(cls, value):
-        if not value.strip():
+        username = value.strip()
+        if not username:
             raise ValueError("Username is required.")
 
-        return value.strip()
+        if not username.isascii() or not USERNAME_PATTERN.fullmatch(username):
+            raise ValueError("Username can only contain letters, numbers, periods, underscores, and hyphens.")
+
+        return username
 
 
 class UserLoginRequest(BaseModel):
@@ -196,9 +216,21 @@ class BotDetail(BaseModel):
 
 class BotCreateRequest(BaseModel):
     game_id: str
-    name: str = Field(max_length=64)
+    name: str = Field(min_length=BOT_NAME_MIN_LENGTH, max_length=BOT_NAME_MAX_LENGTH)
     source_code: str
     language: str = "python"
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value):
+        name = value.strip()
+        if not name:
+            raise ValueError("Bot name is required.")
+
+        if not name.isascii() or not BOT_NAME_PATTERN.fullmatch(name):
+            raise ValueError("Bot name can only contain letters, numbers, spaces, underscores, and hyphens.")
+
+        return name
 
 class BotCreateResponse(BaseModel):
     bot_id: int

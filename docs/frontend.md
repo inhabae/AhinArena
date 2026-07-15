@@ -58,6 +58,11 @@ and then sends the user to `/login`. Registration errors map backend auth error
 codes such as `email_already_registered` and `username_already_taken` to form
 messages.
 
+The registration form mirrors backend limits for email length, username length
+and characters, and password length. Login caps password length but does not
+enforce the registration minimum so existing credentials can still reach normal
+credential verification.
+
 ### Bot Registration
 
 `frontend/src/pages/BotRegistrationPage.jsx` requires an authenticated session.
@@ -66,6 +71,9 @@ current user and selected supported game. After the bot is created, the page
 shows a source-code textarea and submits Python code through
 `submitBotCode`, which calls `POST /bots/{bot_id}/submission`. Users without a
 valid session are sent to `/login`.
+
+The bot-name input mirrors the backend's 3-32 character ASCII letters, numbers,
+spaces, underscores, and hyphens rule.
 
 The page reports the accepted submission version and maps backend submission
 errors such as `submission_too_large`, `invalid_syntax`, `unsupported_language`,

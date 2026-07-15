@@ -70,6 +70,28 @@ function errorMessageFor(error) {
   return error.message || "The bot could not be registered.";
 }
 
+function botNameErrorFor(name) {
+  const trimmedName = name.trim();
+
+  if (!trimmedName) {
+    return "Bot name must be 3-32 characters.";
+  }
+
+  if (trimmedName.length < 3 || trimmedName.length > 32) {
+    return "Bot name must be 3-32 characters.";
+  }
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9 _-]*$/.test(trimmedName)) {
+    return "Bot name can only use letters, numbers, spaces, underscores, or hyphens.";
+  }
+
+  return "";
+}
+
+function isBotNameOverLimit(name) {
+  return name.trim().length > 32;
+}
+
 export default function BotRegistrationPage() {
   const navigate = useNavigate();
   const { isAuthenticated, loading } = useAuth();
@@ -82,16 +104,20 @@ export default function BotRegistrationPage() {
     botName: "",
     version: null,
   });
+  const [nameTouched, setNameTouched] = useState(false);
+  const nameError = botNameErrorFor(name);
+  const showNameError = (nameTouched || isBotNameOverLimit(name)) && Boolean(nameError);
 
   async function handleSubmit(event) {
     event.preventDefault();
+    setNameTouched(true);
 
     if (!isAuthenticated) {
       navigate("/login");
       return;
     }
 
-    if (!name.trim() || !sourceCode.trim()) {
+    if (nameError || !sourceCode.trim()) {
       return;
     }
 
@@ -174,9 +200,15 @@ export default function BotRegistrationPage() {
                 type="text"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                maxLength={64}
-                required
+                onBlur={() => setNameTouched(true)}
+                aria-describedby={showNameError ? "bot-name-requirements" : undefined}
+                aria-invalid={showNameError}
               />
+              {showNameError && (
+                <span id="bot-name-requirements" className="field-error">
+                  {nameError}
+                </span>
+              )}
             </label>
 
             <label>
@@ -208,7 +240,7 @@ export default function BotRegistrationPage() {
 
             <button
               type="submit"
-              disabled={submitState.loading || !name.trim() || !sourceCode.trim()}
+              disabled={submitState.loading || !sourceCode.trim()}
             >
               {submitState.loading ? "Registering..." : "Register bot"}
             </button>

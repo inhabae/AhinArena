@@ -176,6 +176,14 @@ Duplicate email or username values return `409` responses with
 `email_already_registered`, `username_already_taken`, or
 `registration_conflict` error codes.
 
+Account fields are validated before storage:
+
+- Email addresses are normalized to lowercase, must be ASCII, and can be up to
+  254 characters.
+- Usernames are trimmed and must be 3-20 ASCII characters using letters,
+  numbers, periods, underscores, or hyphens.
+- Passwords must be 8-72 characters when registering.
+
 Log in with an existing account:
 
 ```http
@@ -239,6 +247,9 @@ Successful bot creation returns `201 Created`:
 Unsupported games return `400` with `unsupported_game`; duplicate bot names
 within the same game return `409` with `bot_name_taken`; unauthenticated
 requests return `401` with `unauthorized`.
+
+Bot names are trimmed and must be 3-32 ASCII characters using letters,
+numbers, spaces, underscores, or hyphens.
 
 After creating a bot, authenticated owners can upload Python source with
 `POST /bots/{bot_id}/submission`. New matches run each bot's active submission
