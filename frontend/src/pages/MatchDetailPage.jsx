@@ -147,12 +147,16 @@ function getResultSummary(match) {
 }
 
 function getErrorMessage(error) {
-  if (error.status === 404 || error.code === "match_job_not_found") {
+  if (error.code === "match_job_not_found") {
     return "Match job not found.";
   }
 
-  if (error.status === 404 || error.code === "match_not_found") {
+  if (error.code === "match_not_found") {
     return "Match not found.";
+  }
+
+  if (error.status === 404) {
+    return "Page not found.";
   }
 
   return error.message || "The match could not be loaded.";
