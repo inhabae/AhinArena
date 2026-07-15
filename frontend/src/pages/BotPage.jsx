@@ -40,42 +40,10 @@ function stopLinkPropagation(event) {
   event.stopPropagation();
 }
 
-function formatDelta(value) {
-  if (value > 0) {
-    return { sign: "+", amount: value };
-  }
-
-  if (value < 0) {
-    return { sign: "-", amount: Math.abs(value) };
-  }
-
-  return { sign: "+", amount: 0 };
-}
-
-function getRatingClassName(match, delta) {
-  if (match.result_reason === "draw") {
-    return "player-rating rating-draw";
-  }
-
-  if (delta > 0) {
-    return "player-rating rating-gain";
-  }
-
-  if (delta < 0) {
-    return "player-rating rating-loss";
-  }
-
-  return "player-rating";
-}
-
-function PlayerRating({ match, rating, delta }) {
-  const formattedDelta = formatDelta(delta);
-
+function PlayerRating({ rating }) {
   return (
-    <span className={getRatingClassName(match, delta)}>
-      <span>{rating}</span>
-      <span>{formattedDelta.sign}</span>
-      <span>{formattedDelta.amount}</span>
+    <span className="player-rating">
+      ({rating})
     </span>
   );
 }
@@ -360,9 +328,7 @@ export default function BotPage() {
                               </Link>
                             </span>
                             <PlayerRating
-                              match={match}
                               rating={match.bot_one_rating_before}
-                              delta={match.bot_one_rating_delta}
                             />
                           </span>
                           <span aria-hidden="true">vs</span>
@@ -377,9 +343,7 @@ export default function BotPage() {
                               </Link>
                             </span>
                             <PlayerRating
-                              match={match}
                               rating={match.bot_two_rating_before}
-                              delta={match.bot_two_rating_delta}
                             />
                           </span>
                         </span>
