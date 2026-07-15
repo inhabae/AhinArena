@@ -1373,7 +1373,7 @@ select:disabled {
   position: relative;
 }
 
-.connect-four-cell span {
+.connect-four-piece {
   background: var(--surface);
   border-radius: 50%;
   box-shadow: inset 0 2px 6px rgb(7 21 32 / 0.24);
@@ -1382,25 +1382,19 @@ select:disabled {
   width: 100%;
 }
 
-.connect-four-cell.connect-four-marker-x span {
+.connect-four-cell.connect-four-marker-x .connect-four-piece {
   background: var(--danger);
 }
 
-.connect-four-cell.connect-four-marker-o span {
+.connect-four-cell.connect-four-marker-o .connect-four-piece {
   background: #facc15;
 }
 
-.connect-four-cell.last-move.connect-four-marker-x span {
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+.connect-four-cell.last-move .connect-four-piece {
   box-shadow:
-    0 0 0 4px var(--accent),
-    inset 0 2px 6px rgb(7 21 32 / 0.24);
-}
-
-.connect-four-cell.last-move.connect-four-marker-o span {
-  background: color-mix(in srgb, var(--danger) 15%, var(--surface));
-  box-shadow:
-    0 0 0 4px var(--danger),
+    0 0 0 2px rgb(255 255 255 / 0.82),
+    0 0 0 3px #38bdf8,
+    0 0 9px 2px rgb(56 189 248 / 0.45),
     inset 0 2px 6px rgb(7 21 32 / 0.24);
 }
 

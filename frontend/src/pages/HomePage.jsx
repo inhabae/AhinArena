@@ -420,11 +420,6 @@ export default function HomePage() {
           className: "error",
           message: submittedJob.error_message || "The queued match failed.",
         }
-    : submittedJob
-      ? {
-          className: "success",
-          message: `Match job #${submittedJob.job_id} is ${submittedJob.status}.`,
-        }
     : hasDuplicateBots
       ? {
           className: "error",
