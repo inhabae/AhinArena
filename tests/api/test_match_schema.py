@@ -156,11 +156,22 @@ EXPECTED_USER_COLUMNS = {
     "username",
     "description",
     "password_hash",
+    "is_email_verified",
     "created_at",
 }
 
-EXPECTED_AUTH_MIGRATION_USER_COLUMNS = EXPECTED_USER_COLUMNS - {"username", "description"}
-EXPECTED_USERNAME_MIGRATION_USER_COLUMNS = EXPECTED_USER_COLUMNS - {"description"}
+EXPECTED_AUTH_MIGRATION_USER_COLUMNS = EXPECTED_USER_COLUMNS - {
+    "username",
+    "description",
+    "is_email_verified",
+}
+EXPECTED_USERNAME_MIGRATION_USER_COLUMNS = EXPECTED_USER_COLUMNS - {
+    "description",
+    "is_email_verified",
+}
+EXPECTED_DESCRIPTIONS_MIGRATION_USER_COLUMNS = EXPECTED_USER_COLUMNS - {
+    "is_email_verified",
+}
 
 EXPECTED_SESSION_COLUMNS = {
     "id",
@@ -325,6 +336,7 @@ def test_user_model_declares_expected_columns_and_constraints():
     assert User.__table__.c.description.nullable is False
     assert User.__table__.c.password_hash.nullable is False
     assert User.__table__.c.password_hash.type.length == 255
+    assert User.__table__.c.is_email_verified.nullable is False
     assert User.__table__.c.created_at.nullable is False
 
     constraints = {constraint.name: constraint for constraint in User.__table__.constraints}
@@ -790,7 +802,7 @@ def test_descriptions_migration_adds_user_and_bot_descriptions(monkeypatch):
         user_check_constraints = inspector.get_check_constraints("users")
         bot_check_constraints = inspector.get_check_constraints("bots")
 
-        assert set(user_columns) == EXPECTED_USER_COLUMNS
+        assert set(user_columns) == EXPECTED_DESCRIPTIONS_MIGRATION_USER_COLUMNS
         assert user_columns["description"]["nullable"] is False
         assert reflected_default_value(user_columns["description"]) == ""
         assert set(bot_columns) == EXPECTED_BOT_COLUMNS
