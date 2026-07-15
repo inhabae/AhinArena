@@ -192,10 +192,13 @@ POST /auth/login
 
 ```json
 {
-  "email": "player@example.com",
+  "login": "player",
   "password": "correct horse battery staple"
 }
 ```
+
+The `login` value can be either the account email address or username. The
+legacy `email` field is still accepted for clients that already use it.
 
 Successful login returns the same public user shape and sets the
 `ahin_arena_session` cookie. Invalid credentials return `401` with

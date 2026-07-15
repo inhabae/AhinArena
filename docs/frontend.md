@@ -49,9 +49,9 @@ played and bots registered.
 
 ### Login and Register
 
-`frontend/src/pages/LoginPage.jsx` posts email and password credentials through
-`loginUser`. A successful login stores the session in the backend's HTTP-only
-cookie and refreshes the shared auth context.
+`frontend/src/pages/LoginPage.jsx` posts an email-or-username login identifier
+and password through `loginUser`. A successful login stores the session in the
+backend's HTTP-only cookie and refreshes the shared auth context.
 
 `frontend/src/pages/RegisterPage.jsx` creates an account through `registerUser`
 and then sends the user to `/login`. Registration errors map backend auth error
