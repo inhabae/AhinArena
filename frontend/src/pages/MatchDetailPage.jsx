@@ -185,7 +185,7 @@ export function ConnectFourBoard({ board, lastMove }) {
                   : `connect-four-cell${markerClass}`
               }
             >
-              <span aria-hidden="true" />
+              <span className="connect-four-piece" aria-hidden="true" />
             </div>
           );
         }),
