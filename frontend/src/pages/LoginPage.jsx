@@ -5,7 +5,7 @@ import { useAuth } from "../useAuth";
 
 function errorMessageFor(error) {
   if (error.code === "invalid_credentials") {
-    return "The email or password is incorrect.";
+    return "The email, username, or password is incorrect.";
   }
 
   return error.message || "Could not log in.";
@@ -14,7 +14,7 @@ function errorMessageFor(error) {
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [email, setEmail] = useState("");
+  const [loginIdentifier, setLoginIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [submitState, setSubmitState] = useState({
     loading: false,
@@ -27,7 +27,7 @@ export default function LoginPage() {
     setSubmitState({ loading: true, error: null });
 
     try {
-      await login({ email, password });
+      await login({ login: loginIdentifier, password });
       navigate("/", { replace: true });
     } catch (error) {
       setSubmitState({ loading: false, error });
@@ -43,12 +43,12 @@ export default function LoginPage() {
 
       <form className="form-panel" onSubmit={handleSubmit}>
         <label>
-          <span>Email</span>
+          <span>Email or username</span>
           <input
-            type="email"
-            value={email}
-            autoComplete="email"
-            onChange={(event) => setEmail(event.target.value)}
+            type="text"
+            value={loginIdentifier}
+            autoComplete="username"
+            onChange={(event) => setLoginIdentifier(event.target.value)}
             required
           />
         </label>
