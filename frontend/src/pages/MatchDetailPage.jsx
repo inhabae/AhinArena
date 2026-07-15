@@ -22,7 +22,7 @@ function formatDelta(value) {
   }
 
   if (value < 0) {
-    return `- ${Math.abs(value)}`;
+    return `-${Math.abs(value)}`;
   }
 
   return String(value);
@@ -409,29 +409,6 @@ export default function MatchDetailPage() {
       </div>
 
       <section className="history-panel match-replay-panel">
-        <div className="match-summary-panel">
-          <PlayerSummary
-            botId={match.bot_one_id}
-            game={match.game}
-            marker="X"
-            name={match.bot_one_name}
-            before={match.bot_one_rating_before}
-            after={match.bot_one_rating_after}
-            delta={match.bot_one_rating_delta}
-            deltaClassName={getDeltaClassName(match, match.bot_one_rating_delta)}
-          />
-          <PlayerSummary
-            botId={match.bot_two_id}
-            game={match.game}
-            marker="O"
-            name={match.bot_two_name}
-            before={match.bot_two_rating_before}
-            after={match.bot_two_rating_after}
-            delta={match.bot_two_rating_delta}
-            deltaClassName={getDeltaClassName(match, match.bot_two_rating_delta)}
-          />
-        </div>
-
         <div className="match-detail-grid">
           <div className="replay-board-panel">
             {showEndingBanner && (
@@ -448,6 +425,29 @@ export default function MatchDetailPage() {
           </div>
 
           <aside className="match-side-panel">
+            <div className="match-summary-panel">
+              <PlayerSummary
+                botId={match.bot_one_id}
+                game={match.game}
+                marker="X"
+                name={match.bot_one_name}
+                before={match.bot_one_rating_before}
+                after={match.bot_one_rating_after}
+                delta={match.bot_one_rating_delta}
+                deltaClassName={getDeltaClassName(match, match.bot_one_rating_delta)}
+              />
+              <PlayerSummary
+                botId={match.bot_two_id}
+                game={match.game}
+                marker="O"
+                name={match.bot_two_name}
+                before={match.bot_two_rating_before}
+                after={match.bot_two_rating_after}
+                delta={match.bot_two_rating_delta}
+                deltaClassName={getDeltaClassName(match, match.bot_two_rating_delta)}
+              />
+            </div>
+
             <div className="move-history">
               <h3>Moves</h3>
               {moves.length === 0 ? (
