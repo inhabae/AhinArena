@@ -65,8 +65,8 @@ class UserRegisterRequest(BaseModel):
 
 class UserRegisterResponse(BaseModel):
     user: "UserPublic"
-    verification_token: str
-    verification_url: str
+    verification_token: str | None = None
+    verification_url: str | None = None
 
 
 class UserLoginRequest(BaseModel):
@@ -113,6 +113,9 @@ class PasswordResetRequest(BaseModel):
 class PasswordResetResponse(BaseModel):
     reset_token: str | None = None
     reset_url: str | None = None
+
+class PasswordResetValidationRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=128)
 
 class PasswordResetConfirmRequest(BaseModel):
     token: str = Field(min_length=20, max_length=128)

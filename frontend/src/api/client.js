@@ -202,6 +202,16 @@ export function requestPasswordReset(email) {
   });
 }
 
+export function validatePasswordResetToken(token) {
+  return request("/auth/password-reset/validate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ token }),
+  });
+}
+
 export function confirmPasswordReset({ token, password }) {
   return request("/auth/password-reset/confirm", {
     method: "POST",

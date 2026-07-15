@@ -3,6 +3,17 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { verifyEmail } from "../api/client";
 
+function errorMessageFor(error) {
+  if (error.code === "invalid_or_expired_token") {
+    return [
+      "This verification link has already been used or has expired.",
+      "If you already verified your email, you can log in now.",
+    ];
+  }
+
+  return [error.message || "Could not verify that email address."];
+}
+
 export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
@@ -52,9 +63,18 @@ export default function VerifyEmailPage() {
           </>
         )}
         {state.error && (
-          <p className="error" role="alert">
-            {state.error.message || "Could not verify that email address."}
-          </p>
+          <>
+            <div className="error" role="alert">
+              {errorMessageFor(state.error).map((message) => (
+                <p key={message}>{message}</p>
+              ))}
+            </div>
+            {state.error.code === "invalid_or_expired_token" && (
+              <p className="form-footer">
+                Continue to <Link to="/login">log in</Link>.
+              </p>
+            )}
+          </>
         )}
       </section>
     </main>
