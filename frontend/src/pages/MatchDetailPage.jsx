@@ -4,7 +4,7 @@ import {
   IconPlayerTrackNextFilled,
   IconPlayerTrackPrevFilled,
 } from "@tabler/icons-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { getLiveMatchJob, getMatch } from "../api/client";
@@ -331,6 +331,8 @@ export default function MatchDetailPage() {
     error: null,
   });
   const [step, setStep] = useState(0);
+  const activeMoveRef = useRef(null);
+  const moveListRef = useRef(null);
 
   useEffect(() => {
     let ignore = false;
@@ -448,6 +450,24 @@ export default function MatchDetailPage() {
     };
   }, [maxStep]);
 
+  useEffect(() => {
+    const activeMove = activeMoveRef.current;
+    const moveList = moveListRef.current;
+
+    if (!activeMove || !moveList) {
+      return;
+    }
+
+    const activeMoveRect = activeMove.getBoundingClientRect();
+    const moveListRect = moveList.getBoundingClientRect();
+
+    if (activeMoveRect.top < moveListRect.top) {
+      moveList.scrollTop -= moveListRect.top - activeMoveRect.top;
+    } else if (activeMoveRect.bottom > moveListRect.bottom) {
+      moveList.scrollTop += activeMoveRect.bottom - moveListRect.bottom;
+    }
+  }, [step, moves?.length]);
+
   if (matchState.loading) {
     return (
       <main className="match-detail-page">
@@ -545,35 +565,44 @@ export default function MatchDetailPage() {
                 deltaClassName={getDeltaClassName(match, match.bot_two_rating_delta)}
                 compactRating={showCompactLiveRatings}
               />
+              {resultSummary && (
+                <div className="match-result-summary" aria-live="polite">
+                  <div className="match-result-divider" aria-hidden="true" />
+                  <p>
+                    {resultSummary.reason} &middot; {resultSummary.victor}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="move-history">
               <h3>Moves</h3>
-              {moves.length === 0 && !resultSummary ? (
+              {moves.length === 0 ? (
                 <p className="empty-state">No moves recorded.</p>
               ) : (
-                <ol>
+                <ol ref={moveListRef}>
                   {moves.map((entry) => (
                     <li
                       key={entry.move_number}
+                      ref={step === entry.move_number ? activeMoveRef : null}
                       className={step === entry.move_number ? "active-move" : undefined}
                     >
                       <button
                         type="button"
                         onClick={() => setStep(entry.move_number)}
+                        onPointerUp={(event) => {
+                          if (event.pointerType !== "mouse" && event.pointerType !== "touch") {
+                            return;
+                          }
+
+                          event.currentTarget.blur();
+                        }}
                       >
                         <span>{entry.move_number}</span>
                         <code>{formatMove(match.game, entry.move)}</code>
                       </button>
                     </li>
                   ))}
-                  {resultSummary && (
-                    <li className="move-result-row" aria-live="polite">
-                      <span>{resultSummary.reason}</span>
-                      <span aria-hidden="true">&bull;</span>
-                      <strong>{resultSummary.victor}</strong>
-                    </li>
-                  )}
                 </ol>
               )}
             </div>
