@@ -85,6 +85,10 @@ def valid_connectfour_match_request():
     }
 
 
+def valid_bot_source():
+    return "def choose_move(board):\n    return 0\n"
+
+
 def test_score_for_bot_one_or_error_maps_unknown_winner_to_api_error():
     with pytest.raises(HTTPException) as error:
         api_main.score_for_bot_one_or_error(
@@ -149,14 +153,8 @@ def test_build_bot_sandbox_creates_locked_down_docker_command(monkeypatch):
 def test_build_bot_sandbox_raises_existing_no_submission_error():
     bot = Bot(id=42, name="empty", game_id="tictactoe")
 
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises(ValueError, match="Bot has no active submission: empty"):
         api_main.build_bot_sandbox(bot)
-
-    assert error.value.status_code == 400
-    assert error.value.detail == {
-        "code": "bot_has_no_submission",
-        "message": "Bot has no active submission: empty",
-    }
 
 
 def test_cleanup_bot_sandbox_force_removes_container_and_deletes_temp_file(
@@ -1241,7 +1239,11 @@ def test_update_bot_rejects_overlong_description(sqlite_database_dependency):
 def test_create_bot_requires_authentication(sqlite_database_dependency):
     response = client.post(
         "/bots",
-        json={"game_id": "tictactoe", "name": "custom"},
+        json={
+            "game_id": "tictactoe",
+            "name": "custom",
+            "source_code": valid_bot_source(),
+        },
     )
 
     assert response.status_code == 401
@@ -1259,7 +1261,11 @@ def test_create_bot_rejects_unsupported_game(sqlite_database_dependency):
 
     response = client.post(
         "/bots",
-        json={"game_id": "missing-game", "name": "custom"},
+        json={
+            "game_id": "missing-game",
+            "name": "custom",
+            "source_code": valid_bot_source(),
+        },
     )
 
     assert response.status_code == 400
@@ -1278,7 +1284,11 @@ def test_create_bot_returns_409_for_duplicate_name_within_game(sqlite_database_d
 
     response = client.post(
         "/bots",
-        json={"game_id": "tictactoe", "name": "custom"},
+        json={
+            "game_id": "tictactoe",
+            "name": "custom",
+            "source_code": valid_bot_source(),
+        },
     )
 
     assert response.status_code == 409
@@ -1296,7 +1306,11 @@ def test_create_bot_trims_name_before_storing(sqlite_database_dependency):
 
     response = client.post(
         "/bots",
-        json={"game_id": "tictactoe", "name": "  custom  "},
+        json={
+            "game_id": "tictactoe",
+            "name": "  custom  ",
+            "source_code": valid_bot_source(),
+        },
     )
 
     assert response.status_code == 201
@@ -1306,8 +1320,11 @@ def test_create_bot_trims_name_before_storing(sqlite_database_dependency):
         "game_id": "tictactoe",
         "name": "custom",
         "owner_id": user.id,
+        "submission_id": bot.active_submission_id,
+        "version": 1,
     }
     assert bot.name == "custom"
+    assert sqlite_database_dependency.query(BotSubmission).count() == 1
 
 
 def test_create_bot_rejects_duplicate_name_after_trimming(sqlite_database_dependency):
@@ -1316,7 +1333,11 @@ def test_create_bot_rejects_duplicate_name_after_trimming(sqlite_database_depend
 
     response = client.post(
         "/bots",
-        json={"game_id": "tictactoe", "name": " custom "},
+        json={
+            "game_id": "tictactoe",
+            "name": " custom ",
+            "source_code": valid_bot_source(),
+        },
     )
 
     assert response.status_code == 409
@@ -1334,7 +1355,11 @@ def test_create_bot_rejects_blank_name_after_trimming(sqlite_database_dependency
 
     response = client.post(
         "/bots",
-        json={"game_id": "tictactoe", "name": "   "},
+        json={
+            "game_id": "tictactoe",
+            "name": "   ",
+            "source_code": valid_bot_source(),
+        },
     )
 
     assert response.status_code == 422
@@ -1352,7 +1377,11 @@ def test_create_bot_sets_owner_to_authenticated_user(sqlite_database_dependency)
 
     response = client.post(
         "/bots",
-        json={"game_id": "tictactoe", "name": "custom"},
+        json={
+            "game_id": "tictactoe",
+            "name": "custom",
+            "source_code": valid_bot_source(),
+        },
     )
 
     assert response.status_code == 201
@@ -1364,8 +1393,72 @@ def test_create_bot_sets_owner_to_authenticated_user(sqlite_database_dependency)
         "game_id": "tictactoe",
         "name": "custom",
         "owner_id": user.id,
+        "submission_id": bot.active_submission_id,
+        "version": 1,
     }
     assert bot.owner_id == user.id
+    assert bot.active_submission_id is not None
+
+
+def test_create_bot_rejects_invalid_python_without_creating_bot(
+    sqlite_database_dependency,
+):
+    login_user(sqlite_database_dependency)
+
+    response = client.post(
+        "/bots",
+        json={
+            "game_id": "tictactoe",
+            "name": "custom",
+            "source_code": "def choose_move(:\n    return 0\n",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_syntax"
+    assert sqlite_database_dependency.query(Bot).count() == 0
+    assert sqlite_database_dependency.query(BotSubmission).count() == 0
+
+
+def test_create_bot_rejects_oversized_source_without_creating_bot(
+    sqlite_database_dependency,
+):
+    login_user(sqlite_database_dependency)
+
+    response = client.post(
+        "/bots",
+        json={
+            "game_id": "tictactoe",
+            "name": "custom",
+            "source_code": "x = 1\n" + ("#" * api_main.MAX_BOT_SUBMISSION_SOURCE_BYTES),
+        },
+    )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "submission_too_large"
+    assert sqlite_database_dependency.query(Bot).count() == 0
+    assert sqlite_database_dependency.query(BotSubmission).count() == 0
+
+
+def test_create_bot_rejects_unsupported_language_without_creating_bot(
+    sqlite_database_dependency,
+):
+    login_user(sqlite_database_dependency)
+
+    response = client.post(
+        "/bots",
+        json={
+            "game_id": "tictactoe",
+            "name": "custom",
+            "source_code": valid_bot_source(),
+            "language": "javascript",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "unsupported_language"
+    assert sqlite_database_dependency.query(Bot).count() == 0
+    assert sqlite_database_dependency.query(BotSubmission).count() == 0
 
 
 def test_submit_bot_source_creates_first_submission_and_sets_active(
@@ -2168,35 +2261,6 @@ def test_create_match_rejects_first_player_missing_from_database(
         "error": {
             "code": "bot_not_found",
             "message": "Bot not found: missing-first-bot",
-        }
-    }
-
-
-def test_create_match_rejects_bot_without_active_submission(
-    sqlite_database_dependency,
-):
-    authenticate_request_dependency()
-    bot_one = Bot(name="database-only-one", game_id="tictactoe")
-    bot_two = Bot(name="database-only-two", game_id="tictactoe")
-    sqlite_database_dependency.add_all([bot_one, bot_two])
-    sqlite_database_dependency.commit()
-
-    response = client.post(
-        "/matches",
-        json={
-            "game": "tictactoe",
-            "players": [
-                {"bot": "database-only-one"},
-                {"bot": "database-only-two"},
-            ],
-        },
-    )
-
-    assert response.status_code == 400
-    assert response.json() == {
-        "error": {
-            "code": "bot_has_no_submission",
-            "message": "Bot has no active submission: database-only-one",
         }
     }
 

@@ -41,8 +41,9 @@ switching users.
 
 ## Match Execution Flow
 
-`POST /matches` resolves the two requested bots and requires both to have an
-active submission. Missing active source is rejected with `bot_has_no_submission`.
+`POST /matches` resolves the two requested bots. Bot registration creates the
+first active submission atomically, so missing active source at sandbox build
+time is treated as an internal data invariant failure.
 
 For each bot, `api.bot_sandbox.build_bot_sandbox`:
 

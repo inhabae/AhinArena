@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { createBot, submitBotCode } from "../api/client";
+import { createBot } from "../api/client";
 import { defaultGameId, supportedGames } from "../games";
 import { useAuth } from "../useAuth";
 
@@ -55,10 +55,6 @@ function errorMessageFor(error) {
     return error.message || "The source code has invalid Python syntax.";
   }
 
-  if (error.code === "bot_has_no_submission") {
-    return "Submit source code before using this bot in a match.";
-  }
-
   if (error.code === "bot_not_owned") {
     return "You can only submit code for bots you own.";
   }
@@ -110,8 +106,6 @@ export default function BotRegistrationPage() {
       const bot = await createBot({
         game_id: selectedGame,
         name: name.trim(),
-      });
-      const submission = await submitBotCode(bot.bot_id, {
         source_code: sourceCode,
       });
 
@@ -119,7 +113,7 @@ export default function BotRegistrationPage() {
         loading: false,
         error: null,
         botName: bot.name,
-        version: submission.version,
+        version: bot.version,
       });
     } catch (error) {
       if (error.status === 401) {

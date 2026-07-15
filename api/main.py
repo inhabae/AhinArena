@@ -401,15 +401,6 @@ def resolve_bot(db: Session, *, game_id: str, bot_name: str) -> Bot:
     return bot
 
 
-def require_active_submission(bot: Bot) -> None:
-    if bot.active_submission_id is None:
-        api_error(
-            400,
-            "bot_has_no_submission",
-            f"Bot has no active submission: {bot.name}",
-        )
-
-
 def score_for_bot_one_or_error(
     winner_bot_id: int | None,
     bot_one_id: int,
@@ -618,9 +609,14 @@ def create_bot(
     if request.game_id not in SUPPORTED_GAMES:
         api_error(400, "unsupported_game", f"Unsupported game: {request.game_id}")
 
+    if request.language != "python":
+        api_error(400, "unsupported_language", f"Unsupported language: {request.language}")
+
     bot_name = request.name.strip()
     if not bot_name:
         api_error(422, "validation_error", "Bot name is required.")
+
+    validate_python_submission_source(request.source_code)
 
     existing_bot = (
         db.query(Bot)
@@ -638,18 +634,31 @@ def create_bot(
     db.add(bot)
 
     try:
+        db.flush()
+        submission = BotSubmission(
+            bot_id=bot.id,
+            version=1,
+            language=request.language,
+            source_code=request.source_code,
+        )
+        db.add(submission)
+        db.flush()
+        bot.active_submission_id = submission.id
         db.commit()
     except IntegrityError:
         db.rollback()
         bot_name_taken()
 
     db.refresh(bot)
+    db.refresh(submission)
 
     return BotCreateResponse(
         bot_id=bot.id,
         game_id=bot.game_id,
         name=bot.name,
         owner_id=bot.owner_id,
+        submission_id=submission.id,
+        version=submission.version,
     )
 
 
@@ -770,8 +779,6 @@ def create_match(
 
     bot_one = resolve_bot(db, game_id=request.game, bot_name=request.players[0].bot)
     bot_two = resolve_bot(db, game_id=request.game, bot_name=request.players[1].bot)
-    require_active_submission(bot_one)
-    require_active_submission(bot_two)
 
     if bot_one.id == bot_two.id:
         api_error(400, "duplicate_bot_match", "A bot cannot play against itself")

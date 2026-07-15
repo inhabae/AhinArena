@@ -6,7 +6,6 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from api.errors import api_error
 from api.models import Bot
 
 
@@ -41,11 +40,7 @@ def _remove_readonly(_func, path, _exc_info) -> None:
 
 def build_bot_sandbox(bot: Bot) -> BotSandbox:
     if bot.active_submission_id is None or bot.active_submission is None:
-        api_error(
-            400,
-            "bot_has_no_submission",
-            f"Bot has no active submission: {bot.name}",
-        )
+        raise ValueError(f"Bot has no active submission: {bot.name}")
 
     temp_dir = Path(
         tempfile.mkdtemp(prefix=f"ahinarena_bot_{bot.id}_", suffix="_sandbox")
