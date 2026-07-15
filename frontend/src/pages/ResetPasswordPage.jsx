@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { confirmPasswordReset } from "../api/client";
+import { confirmPasswordReset, validatePasswordResetToken } from "../api/client";
 
 function passwordErrorFor(password) {
   const requirements = [];
@@ -14,14 +14,58 @@ function passwordErrorFor(password) {
   return requirements.length > 0 ? `Password must include ${requirements.join(", ")}.` : "";
 }
 
+function errorMessageFor(error) {
+  if (error.code === "invalid_or_expired_token") {
+    return [
+      "This reset link has already been used or has expired.",
+      "Request a new password reset link if you still need to change your password.",
+    ];
+  }
+
+  return [error.message || "Could not reset the password."];
+}
+
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
   const [password, setPassword] = useState("");
   const [passwordTouched, setPasswordTouched] = useState(false);
-  const [state, setState] = useState({ loading: false, error: null, complete: false });
+  const [state, setState] = useState({
+    checkingToken: Boolean(token),
+    loading: false,
+    error: null,
+    complete: false,
+  });
   const passwordError = passwordErrorFor(password);
   const showPasswordError = passwordTouched && Boolean(passwordError);
+  const resetLinkUnavailable = state.error?.code === "invalid_or_expired_token";
+  const showResetForm = !state.checkingToken && !resetLinkUnavailable && !state.complete;
+
+  useEffect(() => {
+    if (!token) {
+      setState({ checkingToken: false, loading: false, error: null, complete: false });
+      return;
+    }
+
+    let ignore = false;
+    setState({ checkingToken: true, loading: false, error: null, complete: false });
+
+    validatePasswordResetToken(token)
+      .then(() => {
+        if (!ignore) {
+          setState({ checkingToken: false, loading: false, error: null, complete: false });
+        }
+      })
+      .catch((error) => {
+        if (!ignore) {
+          setState({ checkingToken: false, loading: false, error, complete: false });
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [token]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -31,13 +75,13 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    setState({ loading: true, error: null, complete: false });
+    setState({ checkingToken: false, loading: true, error: null, complete: false });
 
     try {
       await confirmPasswordReset({ token, password });
-      setState({ loading: false, error: null, complete: true });
+      setState({ checkingToken: false, loading: false, error: null, complete: true });
     } catch (error) {
-      setState({ loading: false, error, complete: false });
+      setState({ checkingToken: false, loading: false, error, complete: false });
     }
   }
 
@@ -55,28 +99,40 @@ export default function ResetPasswordPage() {
           </p>
         )}
 
-        <label>
-          <span>New password</span>
-          <input
-            type="password"
-            value={password}
-            autoComplete="new-password"
-            onChange={(event) => setPassword(event.target.value)}
-            onBlur={() => setPasswordTouched(true)}
-            aria-describedby={showPasswordError ? "password-requirements" : undefined}
-            aria-invalid={showPasswordError}
-          />
-          {showPasswordError && (
-            <span id="password-requirements" className="field-error">
-              {passwordError}
-            </span>
-          )}
-        </label>
+        {state.checkingToken && <p>Checking reset link...</p>}
 
         {state.error && (
-          <p className="error" role="alert">
-            {state.error.message || "Could not reset the password."}
+          <div className="error" role="alert">
+            {errorMessageFor(state.error).map((message) => (
+              <p key={message}>{message}</p>
+            ))}
+          </div>
+        )}
+
+        {resetLinkUnavailable && (
+          <p className="form-footer">
+            <Link to="/forgot-password">Request a new reset link</Link>
           </p>
+        )}
+
+        {showResetForm && (
+          <label>
+            <span>New password</span>
+            <input
+              type="password"
+              value={password}
+              autoComplete="new-password"
+              onChange={(event) => setPassword(event.target.value)}
+              onBlur={() => setPasswordTouched(true)}
+              aria-describedby={showPasswordError ? "password-requirements" : undefined}
+              aria-invalid={showPasswordError}
+            />
+            {showPasswordError && (
+              <span id="password-requirements" className="field-error">
+                {passwordError}
+              </span>
+            )}
+          </label>
         )}
 
         {state.complete && (
@@ -85,12 +141,14 @@ export default function ResetPasswordPage() {
           </p>
         )}
 
-        <button type="submit" disabled={state.loading || !token}>
-          {state.loading ? "Resetting..." : "Reset password"}
-        </button>
+        {showResetForm && (
+          <button type="submit" disabled={state.loading || !token}>
+            {state.loading ? "Resetting..." : "Reset password"}
+          </button>
+        )}
 
         <p className="form-footer">
-          Continue to <Link to="/login">log in</Link>.
+          Continue to <Link to="/login">log in</Link>
         </p>
       </form>
     </main>

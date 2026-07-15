@@ -51,8 +51,10 @@ class DummySession:
 
 
 @pytest.fixture(autouse=True)
-def override_database_dependency():
+def override_database_dependency(monkeypatch):
     client.cookies.clear()
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.delenv("EMAIL_FROM", raising=False)
     session = DummySession()
 
     def fake_get_db():
@@ -366,6 +368,43 @@ def test_register_user_creates_public_user_response(sqlite_database_dependency):
     assert token.user_id == user.id
     assert token.purpose == "email_verification"
     assert token.used_at is None
+
+
+def test_register_user_sends_verification_email_when_email_delivery_is_configured(
+    monkeypatch,
+    sqlite_database_dependency,
+):
+    sent_messages = []
+
+    def fake_send_verification_email(**message):
+        sent_messages.append(message)
+
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    monkeypatch.setenv("EMAIL_FROM", "AhinArena <noreply@example.com>")
+    monkeypatch.setenv("FRONTEND_URL", "https://arena.example.com")
+    monkeypatch.setattr(api_main, "send_verification_email", fake_send_verification_email)
+
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "Player@Example.com",
+            "username": "PlayerOne",
+            "password": "Super-secret1",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["verification_token"] is None
+    assert body["verification_url"] is None
+    token = sqlite_database_dependency.query(AuthToken).one()
+    assert sent_messages == [
+        {
+            "to": "player@example.com",
+            "username": "PlayerOne",
+            "verification_url": f"https://arena.example.com/verify-email?token={token.token}",
+        }
+    ]
 
 
 def test_register_user_returns_422_for_weak_password(sqlite_database_dependency):
@@ -686,6 +725,80 @@ def test_password_reset_confirm_updates_password_and_verifies_user(sqlite_databa
     assert user.is_email_verified is True
     assert verify_password("New-password1", user.password_hash) is True
     assert verify_password("old-password", user.password_hash) is False
+
+
+def test_password_reset_validate_accepts_active_token(sqlite_database_dependency):
+    user = User(
+        username="player",
+        email="player@example.com",
+        password_hash=hash_password("old-password"),
+    )
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+
+    reset_response = client.post("/auth/password-reset", json={"email": "player@example.com"})
+    token = reset_response.json()["reset_token"]
+
+    validate_response = client.post("/auth/password-reset/validate", json={"token": token})
+
+    assert validate_response.status_code == 204
+
+
+def test_password_reset_validate_rejects_used_token(sqlite_database_dependency):
+    user = User(
+        username="player",
+        email="player@example.com",
+        password_hash=hash_password("old-password"),
+    )
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+
+    reset_response = client.post("/auth/password-reset", json={"email": "player@example.com"})
+    token = reset_response.json()["reset_token"]
+    client.post(
+        "/auth/password-reset/confirm",
+        json={"token": token, "password": "New-password1"},
+    )
+
+    validate_response = client.post("/auth/password-reset/validate", json={"token": token})
+
+    assert validate_response.status_code == 400
+    assert validate_response.json()["error"]["code"] == "invalid_or_expired_token"
+
+
+def test_password_reset_sends_email_when_email_delivery_is_configured(
+    monkeypatch,
+    sqlite_database_dependency,
+):
+    sent_messages = []
+    user = User(
+        username="player",
+        email="player@example.com",
+        password_hash=hash_password("old-password"),
+    )
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+
+    def fake_send_password_reset_email(**message):
+        sent_messages.append(message)
+
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    monkeypatch.setenv("EMAIL_FROM", "AhinArena <noreply@example.com>")
+    monkeypatch.setenv("FRONTEND_URL", "https://arena.example.com")
+    monkeypatch.setattr(api_main, "send_password_reset_email", fake_send_password_reset_email)
+
+    response = client.post("/auth/password-reset", json={"email": "player@example.com"})
+
+    assert response.status_code == 200
+    assert response.json() == {"reset_token": None, "reset_url": None}
+    token = sqlite_database_dependency.query(AuthToken).one()
+    assert sent_messages == [
+        {
+            "to": "player@example.com",
+            "username": "player",
+            "reset_url": f"https://arena.example.com/reset-password?token={token.token}",
+        }
+    ]
 
 
 def test_session_cookie_is_secure_in_production(monkeypatch):

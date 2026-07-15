@@ -220,12 +220,14 @@ export default function RegisterPage() {
         {submitState.registered && (
           <div className="form-message success" role="status">
             <p>Account created. Verify your email before logging in.</p>
-            <p>
-              Development verification link:{" "}
-              <Link to={`/verify-email?token=${submitState.registered.verification_token}`}>
-                Verify email
-              </Link>
-            </p>
+            {submitState.registered.verification_token && (
+              <p>
+                Development verification link:{" "}
+                <Link to={`/verify-email?token=${submitState.registered.verification_token}`}>
+                  Verify email
+                </Link>
+              </p>
+            )}
           </div>
         )}
 

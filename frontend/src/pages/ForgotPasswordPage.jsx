@@ -94,7 +94,7 @@ export default function ForgotPasswordPage() {
 
         {state.result && (
           <div className="form-message success" role="status">
-            <p>If that email exists, a reset link is ready.</p>
+            <p>If an account with that email exists, a password reset link has been sent.</p>
             {state.result.reset_token && (
               <p>
                 Development reset link:{" "}

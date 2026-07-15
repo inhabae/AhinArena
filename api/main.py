@@ -8,6 +8,13 @@ from pathlib import Path
 from api.auth import hash_password, verify_password
 from api.bot_sandbox import build_bot_sandbox
 from api.database import get_db, get_sessionmaker
+from api.email_delivery import (
+    EmailDeliveryConfigurationError,
+    EmailDeliveryError,
+    is_email_delivery_configured,
+    send_password_reset_email,
+    send_verification_email,
+)
 from api.featured_games import select_featured_match_jobs
 from api.models import AuthToken, Bot, BotSubmission, Match, MatchJob, Move, Session as AuthSession, User
 from api.match_execution import (
@@ -61,6 +68,7 @@ from api.schemas import (
     PasswordResetConfirmRequest,
     PasswordResetRequest,
     PasswordResetResponse,
+    PasswordResetValidationRequest,
     UserProfile,
     UserPublic,
     UserRegisterRequest,
@@ -130,6 +138,21 @@ def make_auth_token(db: Session, *, user: User, purpose: str, ttl: timedelta) ->
 def frontend_url(path: str) -> str:
     base_url = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
     return f"{base_url}{path}"
+
+
+def email_delivery_error(error: EmailDeliveryError) -> None:
+    if isinstance(error, EmailDeliveryConfigurationError):
+        api_error(
+            500,
+            "email_delivery_not_configured",
+            "Email delivery is not fully configured.",
+        )
+
+    api_error(
+        502,
+        "email_delivery_failed",
+        "Could not send email. Please try again.",
+    )
 
 
 def resolve_active_auth_token(db: Session, *, token: str, purpose: str) -> AuthToken:
@@ -552,17 +575,34 @@ def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
             purpose="email_verification",
             ttl=EMAIL_VERIFICATION_TTL,
         )
-        db.commit()
     except IntegrityError:
         db.rollback()
         api_error(409, "registration_conflict", "Email or username is already registered.")
 
+    verification_url = frontend_url(f"/verify-email?token={verification_token.token}")
+
+    if is_email_delivery_configured():
+        try:
+            send_verification_email(
+                to=user.email,
+                username=user.username,
+                verification_url=verification_url,
+            )
+        except EmailDeliveryError as error:
+            db.rollback()
+            email_delivery_error(error)
+
+        db.commit()
+        db.refresh(user)
+        return UserRegisterResponse(user=serialize_user_public(user))
+
+    db.commit()
     db.refresh(user)
 
     return UserRegisterResponse(
         user=serialize_user_public(user),
         verification_token=verification_token.token,
-        verification_url=frontend_url(f"/verify-email?token={verification_token.token}"),
+        verification_url=verification_url,
     )
 
 
@@ -593,12 +633,41 @@ def request_password_reset(request: PasswordResetRequest, db: Session = Depends(
         purpose="password_reset",
         ttl=PASSWORD_RESET_TTL,
     )
+    reset_url = frontend_url(f"/reset-password?token={reset_token.token}")
+
+    if is_email_delivery_configured():
+        try:
+            send_password_reset_email(
+                to=user.email,
+                username=user.username,
+                reset_url=reset_url,
+            )
+        except EmailDeliveryError as error:
+            db.rollback()
+            email_delivery_error(error)
+
+        db.commit()
+        return PasswordResetResponse()
+
     db.commit()
 
     return PasswordResetResponse(
         reset_token=reset_token.token,
-        reset_url=frontend_url(f"/reset-password?token={reset_token.token}"),
+        reset_url=reset_url,
     )
+
+
+@app.post("/auth/password-reset/validate", status_code=status.HTTP_204_NO_CONTENT)
+def validate_password_reset_token(
+    request: PasswordResetValidationRequest,
+    db: Session = Depends(get_db),
+):
+    resolve_active_auth_token(
+        db,
+        token=request.token,
+        purpose="password_reset",
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.post("/auth/password-reset/confirm", response_model=UserPublic)
