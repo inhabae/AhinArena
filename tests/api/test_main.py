@@ -1400,12 +1400,11 @@ def test_create_bot_rejects_blank_name_after_trimming(sqlite_database_dependency
     )
 
     assert response.status_code == 422
-    assert response.json() == {
-        "error": {
-            "code": "validation_error",
-            "message": "Bot name is required.",
-        }
-    }
+    body = response.json()
+    assert body["error"]["code"] == "validation_error"
+    assert body["error"]["message"] == "Request body is invalid."
+    assert body["error"]["details"][0]["loc"] == ["body", "name"]
+    assert "Bot name is required." in body["error"]["details"][0]["msg"]
     assert sqlite_database_dependency.query(Bot).count() == 0
 
 

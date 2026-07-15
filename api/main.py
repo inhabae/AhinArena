@@ -613,8 +613,6 @@ def create_bot(
         api_error(400, "unsupported_language", f"Unsupported language: {request.language}")
 
     bot_name = request.name.strip()
-    if not bot_name:
-        api_error(422, "validation_error", "Bot name is required.")
 
     validate_python_submission_source(request.source_code)
 
