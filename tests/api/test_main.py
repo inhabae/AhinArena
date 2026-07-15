@@ -548,6 +548,24 @@ def test_login_sets_http_only_lax_cookie(sqlite_database_dependency):
     assert "SameSite=lax" in set_cookie
 
 
+def test_login_accepts_username(sqlite_database_dependency):
+    user = User(username="PlayerOne", email="player@example.com", password_hash=hash_password("correct"))
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        "/auth/login",
+        json={"login": "PlayerOne", "password": "correct"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["email"] == "player@example.com"
+    assert body["username"] == "PlayerOne"
+    assert sqlite_database_dependency.query(AuthSession).count() == 1
+    assert f"{api_main.SESSION_COOKIE_NAME}=" in response.headers["set-cookie"]
+
+
 def test_session_cookie_is_secure_in_production(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
     response = Response()

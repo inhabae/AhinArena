@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class UserRegisterRequest(BaseModel):
@@ -34,8 +34,25 @@ class UserRegisterRequest(BaseModel):
 
 
 class UserLoginRequest(BaseModel):
-    email: str
+    login: str | None = None
+    email: str | None = None
     password: str = Field(max_length=72)
+
+    @model_validator(mode="after")
+    def validate_login_identifier(self):
+        if self.login is None and self.email is None:
+            raise ValueError("Email or username is required.")
+
+        if self.login is not None:
+            self.login = self.login.strip()
+
+        if self.email is not None:
+            self.email = self.email.strip()
+
+        if not self.login and not self.email:
+            raise ValueError("Email or username is required.")
+
+        return self
 
 
 class UserPublic(BaseModel):
