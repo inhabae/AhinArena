@@ -8,7 +8,8 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { getLeaderboard } from "../api/client";
+import { getLeaderboard, getUserProfile, updateCurrentUser } from "../api/client";
+import DescriptionEditor from "../components/DescriptionEditor";
 import { formatGame, supportedGames } from "../games";
 import { useAuth } from "../useAuth";
 
@@ -79,6 +80,11 @@ export default function PlayerPage() {
     leaderboards: [],
     error: null,
   });
+  const [profileState, setProfileState] = useState({
+    loading: true,
+    data: null,
+    error: null,
+  });
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -98,18 +104,27 @@ export default function PlayerPage() {
       leaderboards: current.leaderboards,
       error: null,
     }));
+    setProfileState({ loading: true, data: null, error: null });
 
-    Promise.all(
-      supportedGames.map((game) =>
-        getLeaderboard({
-          game_id: game.id,
-          limit: leaderboardLimit,
-          offset: 0,
-        }).then((bots) => ({ gameId: game.id, bots })),
+    Promise.all([
+      getUserProfile(username),
+      Promise.all(
+        supportedGames.map((game) =>
+          getLeaderboard({
+            game_id: game.id,
+            limit: leaderboardLimit,
+            offset: 0,
+          }).then((bots) => ({ gameId: game.id, bots })),
+        ),
       ),
-    )
-      .then((leaderboards) => {
+    ])
+      .then(([profile, leaderboards]) => {
         if (!ignore) {
+          setProfileState({
+            loading: false,
+            data: profile,
+            error: null,
+          });
           setPlayerState({
             loading: false,
             leaderboards,
@@ -119,6 +134,11 @@ export default function PlayerPage() {
       })
       .catch((error) => {
         if (!ignore) {
+          setProfileState({
+            loading: false,
+            data: null,
+            error,
+          });
           setPlayerState({
             loading: false,
             leaderboards: [],
@@ -130,7 +150,7 @@ export default function PlayerPage() {
     return () => {
       ignore = true;
     };
-  }, [authLoading, isAuthenticated, navigate]);
+  }, [authLoading, isAuthenticated, navigate, username]);
 
   const playerBots = useMemo(
     () => getRankedBots(playerState.leaderboards, username),
@@ -182,7 +202,21 @@ export default function PlayerPage() {
     setCurrentPage(1);
   }, [username, playerBots.length]);
 
-  if (authLoading || playerState.loading) {
+  async function handleSaveDescription(description) {
+    const updatedUser = await updateCurrentUser({ description });
+    setProfileState({
+      loading: false,
+      data: {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        description: updatedUser.description,
+        created_at: updatedUser.created_at,
+      },
+      error: null,
+    });
+  }
+
+  if (authLoading || playerState.loading || profileState.loading) {
     return (
       <main className="player-page">
         <p className="empty-state">Loading player...</p>
@@ -193,9 +227,18 @@ export default function PlayerPage() {
   return (
     <main className="player-page">
       <div className="page-header player-header">
-        <div>
+        <div className="player-header-content">
           <h1>{username}</h1>
-          <p>Registered bots, ratings, and match record.</p>
+          <DescriptionEditor
+            description={profileState.data?.description ?? ""}
+            editable={isOwnProfile}
+            emptyText={
+              isOwnProfile
+                ? "Add a description for your player profile."
+                : "No player description yet."
+            }
+            onSave={handleSaveDescription}
+          />
         </div>
         {isOwnProfile && (
           <Link className="button-link" to="/bots/new">
@@ -204,13 +247,13 @@ export default function PlayerPage() {
         )}
       </div>
 
-      {playerState.error && (
+      {(playerState.error || profileState.error) && (
         <p className="error" role="alert">
-          Could not load player: {playerState.error.message}
+          Could not load player: {(playerState.error || profileState.error).message}
         </p>
       )}
 
-      {!playerState.error && (
+      {!playerState.error && !profileState.error && (
         <>
           <section className="player-stats" aria-label="Player summary">
             {statCards.map(({ label, value, icon: Icon, muted }) => (

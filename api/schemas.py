@@ -42,7 +42,22 @@ class UserPublic(BaseModel):
     id: int
     email: str
     username: str
+    description: str = ""
     created_at: datetime
+
+class UserProfile(BaseModel):
+    id: int
+    username: str
+    description: str = ""
+    created_at: datetime
+
+class DescriptionUpdateRequest(BaseModel):
+    description: str = Field(max_length=280)
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value):
+        return value.strip()
 
 
 class PlayerConfig(BaseModel):
@@ -158,6 +173,7 @@ class BotSummary(BaseModel):
 class BotDetail(BaseModel):
     bot_id: int
     name: str
+    description: str = ""
     game_id: str
     owner_name: str
     rating: int
