@@ -1,4 +1,3 @@
-import { IconTrophyFilled } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
@@ -14,63 +13,31 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-function MatchResult({ match }) {
-  if (match.winner_bot_name) {
-    return (
-      <span className="match-result-badge result-win">
-        <IconTrophyFilled size={13} aria-hidden="true" />
-        <span>{match.winner_bot_name}</span>
-      </span>
-    );
-  }
-
+function getPlayerResult(match, botId) {
   if (match.result_reason === "draw") {
-    return <span className="match-result-badge result-draw">Draw</span>;
+    return {
+      className: "player-result-mark player-result-draw",
+      label: "D",
+    };
   }
 
+  if (match.winner_bot_id === botId) {
+    return {
+      className: "player-result-mark player-result-win",
+      label: "W",
+    };
+  }
+
+  return {
+    className: "player-result-mark player-result-loss",
+    label: "L",
+  };
+}
+
+function PlayerRating({ rating }) {
   return (
-    <span className="match-result-badge result-draw">
-      {match.result_reason.replaceAll("_", " ")}
-    </span>
-  );
-}
-
-function formatDelta(value) {
-  if (value > 0) {
-    return { sign: "+", amount: value };
-  }
-
-  if (value < 0) {
-    return { sign: "-", amount: Math.abs(value) };
-  }
-
-  return { sign: "+", amount: 0 };
-}
-
-function getRatingClassName(match, delta) {
-  if (match.result_reason === "draw") {
-    return "player-rating rating-draw";
-  }
-
-  if (delta > 0) {
-    return "player-rating rating-gain";
-  }
-
-  if (delta < 0) {
-    return "player-rating rating-loss";
-  }
-
-  return "player-rating";
-}
-
-function PlayerRating({ match, rating, delta }) {
-  const formattedDelta = formatDelta(delta);
-
-  return (
-    <span className={getRatingClassName(match, delta)}>
-      <span>{rating}</span>
-      <span>{formattedDelta.sign}</span>
-      <span>{formattedDelta.amount}</span>
+    <span className="player-rating">
+      ({rating})
     </span>
   );
 }
@@ -249,64 +216,67 @@ export default function MatchHistoryPage() {
                 <tr>
                   <th scope="col">Game</th>
                   <th scope="col">Players</th>
-                  <th scope="col">Result</th>
                   <th scope="col">Completed date</th>
                 </tr>
               </thead>
               <tbody>
-                {matchesState.items.map((match) => (
-                  <tr
-                    key={match.match_id}
-                    className="clickable-row"
-                    tabIndex={0}
-                    onClick={() => navigate(`/matches/${match.match_id}`)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        navigate(`/matches/${match.match_id}`);
-                      }
-                    }}
-                  >
-                    <td>{formatGame(match.game)}</td>
-                    <td>
-                      <span className="players-cell">
-                        <span className="player-name player-matchup-name">
-                          <Link
-                            className="bot-name-link"
-                            to={`/bots/${match.bot_one_id}`}
-                            onClick={stopLinkPropagation}
-                          >
-                            {match.bot_one_name}
-                          </Link>
-                          <PlayerRating
-                            match={match}
-                            rating={match.bot_one_rating_before}
-                            delta={match.bot_one_rating_delta}
-                          />
+                {matchesState.items.map((match) => {
+                  const botOneResult = getPlayerResult(match, match.bot_one_id);
+                  const botTwoResult = getPlayerResult(match, match.bot_two_id);
+
+                  return (
+                    <tr
+                      key={match.match_id}
+                      className="clickable-row"
+                      tabIndex={0}
+                      onClick={() => navigate(`/matches/${match.match_id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(`/matches/${match.match_id}`);
+                        }
+                      }}
+                    >
+                      <td>{formatGame(match.game)}</td>
+                      <td>
+                        <span className="players-cell">
+                          <span className="player-name player-matchup-name">
+                            <span className={botOneResult.className}>
+                              {botOneResult.label}
+                            </span>
+                            <Link
+                              className="bot-name-link"
+                              to={`/bots/${match.bot_one_id}`}
+                              onClick={stopLinkPropagation}
+                            >
+                              {match.bot_one_name}
+                            </Link>
+                            <PlayerRating
+                              rating={match.bot_one_rating_before}
+                            />
+                          </span>
+                          <span aria-hidden="true">vs</span>
+                          <span className="player-name player-matchup-name">
+                            <span className={botTwoResult.className}>
+                              {botTwoResult.label}
+                            </span>
+                            <Link
+                              className="bot-name-link"
+                              to={`/bots/${match.bot_two_id}`}
+                              onClick={stopLinkPropagation}
+                            >
+                              {match.bot_two_name}
+                            </Link>
+                            <PlayerRating
+                              rating={match.bot_two_rating_before}
+                            />
+                          </span>
                         </span>
-                        <span aria-hidden="true">vs</span>
-                        <span className="player-name player-matchup-name">
-                          <Link
-                            className="bot-name-link"
-                            to={`/bots/${match.bot_two_id}`}
-                            onClick={stopLinkPropagation}
-                          >
-                            {match.bot_two_name}
-                          </Link>
-                          <PlayerRating
-                            match={match}
-                            rating={match.bot_two_rating_before}
-                            delta={match.bot_two_rating_delta}
-                          />
-                        </span>
-                      </span>
-                    </td>
-                    <td>
-                      <MatchResult match={match} />
-                    </td>
-                    <td className="completed-date">{formatDate(match.completed_at)}</td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="completed-date">{formatDate(match.completed_at)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

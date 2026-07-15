@@ -1695,15 +1695,43 @@ select:disabled {
 .player-matchup-name {
   align-items: center;
   display: flex;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
 }
 
-.player-matchup-name > span:first-child {
+.player-matchup-name .bot-name-link {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.player-result-mark {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 750;
+  height: 19px;
+  justify-content: center;
+  line-height: 1;
+  width: 19px;
+}
+
+.player-result-win {
+  background: var(--bg-success);
+  color: var(--text-success);
+}
+
+.player-result-loss {
+  background: var(--bg-danger);
+  color: var(--text-danger);
+}
+
+.player-result-draw {
+  background: var(--bg-warning);
+  color: var(--text-warning);
 }
 
 .data-table .completed-date,
@@ -1722,35 +1750,12 @@ select:disabled {
 }
 
 .player-rating {
-  align-items: center;
-  border-radius: 999px;
-  color: var(--text-muted);
-  display: inline-flex;
+  color: var(--text-secondary);
   flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 400;
-  gap: 3px;
-  justify-content: center;
-  line-height: 1.35;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: inherit;
   margin-left: 2px;
-  min-width: 64px;
-  padding: 2px 8px;
-}
-
-.player-rating.rating-gain {
-  background: var(--bg-success);
-  color: var(--text-success);
-}
-
-.player-rating.rating-loss {
-  background: var(--bg-danger);
-  color: var(--text-danger);
-}
-
-.player-rating.rating-draw {
-  background: var(--bg-warning);
-  color: var(--text-warning);
 }
 
 .match-result-badge {
