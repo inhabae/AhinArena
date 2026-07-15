@@ -157,6 +157,8 @@ textarea:focus-visible {
   background: transparent;
   font-size: 14px;
   font-weight: 500;
+  line-height: 1.35;
+  padding-bottom: 1px;
 }
 
 .nav-link:hover {
@@ -1557,13 +1559,14 @@ select:disabled {
 .pagination-controls {
   align-items: center;
   display: flex;
-  gap: 12px;
+  gap: 16px;
   justify-content: flex-end;
 }
 
 .pagination-controls span {
   color: var(--text-muted);
   font-size: 13px;
+  margin: 0 2px;
 }
 
 .pagination-button {
@@ -1586,6 +1589,7 @@ select:disabled {
 }
 
 .pagination-button:disabled {
+  cursor: default;
   opacity: 0.45;
 }
 
