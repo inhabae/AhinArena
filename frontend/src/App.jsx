@@ -1,4 +1,4 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import AppLayout from "./components/AppLayout";
 import { AuthProvider } from "./auth";
@@ -14,6 +14,36 @@ import PlayerPage from "./pages/PlayerPage";
 import RegisterPage from "./pages/RegisterPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
+import { useAuth } from "./useAuth";
+
+function RequireAuth({ children }) {
+  const location = useLocation();
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return <main className="empty-state">Checking session...</main>;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  return children;
+}
+
+function RequireGuest({ children }) {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return <main className="empty-state">Checking session...</main>;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
 
 function App() {
   return (
@@ -34,7 +64,11 @@ function App() {
 
           <Route
             path="/bots/new"
-            element={<BotRegistrationPage />}
+            element={
+              <RequireAuth>
+                <BotRegistrationPage />
+              </RequireAuth>
+            }
           />
 
           <Route
@@ -49,27 +83,47 @@ function App() {
 
           <Route
             path="/login"
-            element={<LoginPage />}
+            element={
+              <RequireGuest>
+                <LoginPage />
+              </RequireGuest>
+            }
           />
 
           <Route
             path="/register"
-            element={<RegisterPage />}
+            element={
+              <RequireGuest>
+                <RegisterPage />
+              </RequireGuest>
+            }
           />
 
           <Route
             path="/verify-email"
-            element={<VerifyEmailPage />}
+            element={
+              <RequireGuest>
+                <VerifyEmailPage />
+              </RequireGuest>
+            }
           />
 
           <Route
             path="/forgot-password"
-            element={<ForgotPasswordPage />}
+            element={
+              <RequireGuest>
+                <ForgotPasswordPage />
+              </RequireGuest>
+            }
           />
 
           <Route
             path="/reset-password"
-            element={<ResetPasswordPage />}
+            element={
+              <RequireGuest>
+                <ResetPasswordPage />
+              </RequireGuest>
+            }
           />
 
           <Route
