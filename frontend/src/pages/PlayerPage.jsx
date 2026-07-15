@@ -6,7 +6,7 @@ import {
   IconTrophy,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { getLeaderboard, getUserProfile, updateCurrentUser } from "../api/client";
 import DescriptionEditor from "../components/DescriptionEditor";
@@ -71,7 +71,6 @@ function summarizeBots(bots) {
 }
 
 export default function PlayerPage() {
-  const navigate = useNavigate();
   const { username: usernameParam } = useParams();
   const { isAuthenticated, loading: authLoading, user } = useAuth();
   const username = usernameParam ? decodeURIComponent(usernameParam) : "";
@@ -89,11 +88,6 @@ export default function PlayerPage() {
 
   useEffect(() => {
     if (authLoading) {
-      return;
-    }
-
-    if (!isAuthenticated) {
-      navigate("/login");
       return;
     }
 
@@ -150,7 +144,7 @@ export default function PlayerPage() {
     return () => {
       ignore = true;
     };
-  }, [authLoading, isAuthenticated, navigate, username]);
+  }, [authLoading, username]);
 
   const playerBots = useMemo(
     () => getRankedBots(playerState.leaderboards, username),

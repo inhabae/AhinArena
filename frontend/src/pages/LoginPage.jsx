@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../useAuth";
 
@@ -16,6 +16,7 @@ function errorMessageFor(error) {
 }
 
 export default function LoginPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { login } = useAuth();
   const [loginIdentifier, setLoginIdentifier] = useState("");
@@ -24,6 +25,10 @@ export default function LoginPage() {
     loading: false,
     error: null,
   });
+  const redirectFrom = location.state?.from;
+  const redirectTo = redirectFrom
+    ? `${redirectFrom.pathname}${redirectFrom.search}${redirectFrom.hash}`
+    : "/";
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -32,7 +37,7 @@ export default function LoginPage() {
 
     try {
       await login({ login: loginIdentifier, password });
-      navigate("/", { replace: true });
+      navigate(redirectTo, { replace: true });
     } catch (error) {
       setSubmitState({ loading: false, error });
     }
