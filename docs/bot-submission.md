@@ -80,8 +80,10 @@ that the bot follows the game protocol or behaves safely at runtime.
 
 ## Match Execution
 
-When `POST /matches` resolves each named bot, the backend requires an active
-submission. A bot without one is rejected with `bot_has_no_submission`.
+Bot registration creates the bot and its first active submission in one
+transaction, so normal match creation only resolves bots that already have
+source code. Missing active source at execution time is treated as an internal
+data invariant failure rather than a public match-creation validation case.
 
 For a bot with an active submission, the backend writes the source to a private
 temporary file and starts a `docker run` command that bind-mounts that file

@@ -180,12 +180,16 @@ class BotDetail(BaseModel):
 class BotCreateRequest(BaseModel):
     game_id: str
     name: str = Field(max_length=64)
+    source_code: str
+    language: str = "python"
 
 class BotCreateResponse(BaseModel):
     bot_id: int
     game_id: str
     name: str
     owner_id: int
+    submission_id: int
+    version: int
 
 class BotSubmissionRequest(BaseModel):
     source_code: str
