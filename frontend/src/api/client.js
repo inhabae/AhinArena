@@ -84,6 +84,16 @@ export function getBot(botId) {
   return request(`/bots/${botId}`);
 }
 
+export function updateBot(botId, bot) {
+  return request(`/bots/${botId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(bot),
+  });
+}
+
 export function createMatch(match) {
   return request("/matches", {
     method: "POST",
@@ -136,6 +146,20 @@ export function getBots(params) {
 
 export function getCurrentUser() {
   return request("/auth/me");
+}
+
+export function getUserProfile(username) {
+  return request(`/users/${encodeURIComponent(username)}`);
+}
+
+export function updateCurrentUser(user) {
+  return request("/auth/me", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(user),
+  });
 }
 
 export function loginUser(credentials) {

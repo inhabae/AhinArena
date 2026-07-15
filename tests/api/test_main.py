@@ -347,9 +347,10 @@ def test_register_user_creates_public_user_response(sqlite_database_dependency):
 
     assert response.status_code == 201
     body = response.json()
-    assert set(body.keys()) == {"id", "email", "username", "created_at"}
+    assert set(body.keys()) == {"id", "email", "username", "description", "created_at"}
     assert body["email"] == "player@example.com"
     assert body["username"] == "PlayerOne"
+    assert body["description"] == ""
     assert body["created_at"]
 
     user = sqlite_database_dependency.query(User).one()
@@ -537,9 +538,10 @@ def test_login_sets_http_only_lax_cookie(sqlite_database_dependency):
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body.keys()) == {"id", "email", "username", "created_at"}
+    assert set(body.keys()) == {"id", "email", "username", "description", "created_at"}
     assert body["email"] == "player@example.com"
     assert body["username"] == "player"
+    assert body["description"] == ""
     assert sqlite_database_dependency.query(AuthSession).count() == 1
 
     set_cookie = response.headers["set-cookie"]
@@ -593,7 +595,12 @@ def test_login_returns_same_401_for_wrong_email_or_password(
 
 
 def test_auth_me_returns_current_user_from_cookie(sqlite_database_dependency):
-    user = User(username="player", email="player@example.com", password_hash=hash_password("correct"))
+    user = User(
+        username="player",
+        email="player@example.com",
+        description="Builder of careful bots.",
+        password_hash=hash_password("correct"),
+    )
     sqlite_database_dependency.add(user)
     sqlite_database_dependency.commit()
 
@@ -607,6 +614,66 @@ def test_auth_me_returns_current_user_from_cookie(sqlite_database_dependency):
     assert response.status_code == 200
     assert response.json()["email"] == "player@example.com"
     assert response.json()["username"] == "player"
+    assert response.json()["description"] == "Builder of careful bots."
+
+
+def test_get_user_profile_returns_public_description(sqlite_database_dependency):
+    user = User(
+        username="player",
+        email="player@example.com",
+        description="Tic tac tactician.",
+        password_hash=hash_password("correct"),
+    )
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+
+    response = client.get("/users/player")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": user.id,
+        "username": "player",
+        "description": "Tic tac tactician.",
+        "created_at": user.created_at.isoformat(),
+    }
+
+
+def test_get_user_profile_returns_404_for_unknown_username(sqlite_database_dependency):
+    response = client.get("/users/missing")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "user_not_found",
+            "message": "User not found: missing",
+        }
+    }
+
+
+def test_update_auth_me_updates_description(sqlite_database_dependency):
+    user = login_user(sqlite_database_dependency)
+
+    response = client.patch(
+        "/auth/me",
+        json={"description": "  Connect Four enjoyer.  "},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["description"] == "Connect Four enjoyer."
+    sqlite_database_dependency.refresh(user)
+    assert user.description == "Connect Four enjoyer."
+
+
+def test_update_auth_me_rejects_overlong_description(sqlite_database_dependency):
+    login_user(sqlite_database_dependency)
+
+    response = client.patch(
+        "/auth/me",
+        json={"description": "a" * 281},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
 
 
 def test_auth_me_returns_401_for_missing_cookie(sqlite_database_dependency):
@@ -1080,6 +1147,7 @@ def test_get_bot_returns_bot_detail(sqlite_database_dependency):
     body = response.json()
     assert body["bot_id"] == bot.id
     assert body["name"] == "alpha"
+    assert body["description"] == ""
     assert body["game_id"] == "tictactoe"
     assert body["owner_name"] == "owner"
     assert body["rating"] == 1337
@@ -1107,6 +1175,67 @@ def test_get_bot_returns_not_found(sqlite_database_dependency):
         "code": "bot_not_found",
         "message": "Bot not found: 999",
     }
+
+
+def test_update_bot_updates_owned_bot_description(sqlite_database_dependency):
+    user = login_user(sqlite_database_dependency)
+    bot = Bot(name="alpha", game_id="tictactoe", owner_id=user.id)
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+
+    response = client.patch(
+        f"/bots/{bot.id}",
+        json={"description": "  Plays the center whenever possible.  "},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["description"] == "Plays the center whenever possible."
+    sqlite_database_dependency.refresh(bot)
+    assert bot.description == "Plays the center whenever possible."
+
+
+def test_update_bot_rejects_unowned_bot(sqlite_database_dependency):
+    owner = User(
+        username="owner",
+        email="owner@example.com",
+        password_hash=hash_password("password"),
+    )
+    sqlite_database_dependency.add(owner)
+    sqlite_database_dependency.commit()
+    bot = Bot(name="alpha", game_id="tictactoe", owner_id=owner.id)
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+    login_user(sqlite_database_dependency, email="other@example.com")
+
+    response = client.patch(
+        f"/bots/{bot.id}",
+        json={"description": "Not mine."},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {
+            "code": "bot_not_owned",
+            "message": "Bot is not owned by the authenticated user.",
+        }
+    }
+    sqlite_database_dependency.refresh(bot)
+    assert bot.description == ""
+
+
+def test_update_bot_rejects_overlong_description(sqlite_database_dependency):
+    user = login_user(sqlite_database_dependency)
+    bot = Bot(name="alpha", game_id="tictactoe", owner_id=user.id)
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+
+    response = client.patch(
+        f"/bots/{bot.id}",
+        json={"description": "a" * 281},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
 
 
 def test_create_bot_requires_authentication(sqlite_database_dependency):

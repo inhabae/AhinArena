@@ -7,8 +7,10 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { getBot, getMatches } from "../api/client";
+import { getBot, getMatches, updateBot } from "../api/client";
+import DescriptionEditor from "../components/DescriptionEditor";
 import { formatGame } from "../games";
+import { useAuth } from "../useAuth";
 import { formatPercent, getWinRate } from "./PlayerPage";
 
 const pageSize = 10;
@@ -102,6 +104,7 @@ function getBotMatchResult(match, botId) {
 export default function BotPage() {
   const navigate = useNavigate();
   const { botId } = useParams();
+  const { user } = useAuth();
   const [botState, setBotState] = useState({
     loading: true,
     data: null,
@@ -202,6 +205,12 @@ export default function BotPage() {
   const isPreviousDisabled = offset === 0 || matchesState.loading;
   const isNextDisabled =
     matchesState.loading || offset + pageSize >= matchesState.total;
+  const isOwnBot = Boolean(user?.username && bot?.owner_name === user.username);
+
+  async function handleSaveDescription(description) {
+    const updatedBot = await updateBot(botId, { description });
+    setBotState({ loading: false, data: updatedBot, error: null });
+  }
 
   if (botState.loading) {
     return (
@@ -245,34 +254,37 @@ export default function BotPage() {
 
   return (
     <main className="bot-page">
-      <div className="page-header player-header">
-        <div>
-          <h1>{bot.name}</h1>
-          <p>Placeholder bot description</p>
-          <p className="bot-header-info">
-            <span>
-              Game <strong>{formatGame(bot.game_id)}</strong>
-            </span>
-            <span aria-hidden="true">&middot;</span>
-            <span>
-              Owner{" "}
-              <strong>
-                {bot.owner_name === "System" ? (
-                  "System"
-                ) : (
-                  <Link to={`/players/${encodeURIComponent(bot.owner_name)}`}>
-                    {bot.owner_name}
-                  </Link>
-                )}
-              </strong>
-            </span>
-            <span aria-hidden="true">&middot;</span>
-            <span>
-              Created <strong>{formatHeaderDate(bot.created_at)}</strong>
-            </span>
-          </p>
-        </div>
-      </div>
+      <section className="bot-header-card" aria-labelledby="bot-title">
+        <h1 id="bot-title">{bot.name}</h1>
+        <DescriptionEditor
+          description={bot.description}
+          editable={isOwnBot}
+          emptyText={isOwnBot ? "Add a description" : "No bot description yet."}
+          onSave={handleSaveDescription}
+        />
+        <p className="bot-header-info">
+          <span>
+            Game <strong>{formatGame(bot.game_id)}</strong>
+          </span>
+          <span aria-hidden="true">&middot;</span>
+          <span>
+            Owner{" "}
+            <strong>
+              {bot.owner_name === "System" ? (
+                "System"
+              ) : (
+                <Link to={`/players/${encodeURIComponent(bot.owner_name)}`}>
+                  {bot.owner_name}
+                </Link>
+              )}
+            </strong>
+          </span>
+          <span aria-hidden="true">&middot;</span>
+          <span>
+            Created <strong>{formatHeaderDate(bot.created_at)}</strong>
+          </span>
+        </p>
+      </section>
 
       <section className="player-stats" aria-label="Bot summary">
         {statCards.map(({ label, value, icon: Icon, muted }) => (

@@ -55,7 +55,9 @@ from api.schemas import (
     BotCreateResponse,
     BotSubmissionRequest,
     BotSubmissionResponse,
+    DescriptionUpdateRequest,
     UserLoginRequest,
+    UserProfile,
     UserPublic,
     UserRegisterRequest,
 )
@@ -92,6 +94,25 @@ def get_bot_owner_display_name(bot: Bot) -> str | None:
         return None
 
     return bot.owner.username
+
+
+def serialize_user_public(user: User) -> UserPublic:
+    return UserPublic(
+        id=user.id,
+        email=user.email,
+        username=user.username,
+        description=user.description,
+        created_at=user.created_at,
+    )
+
+
+def serialize_user_profile(user: User) -> UserProfile:
+    return UserProfile(
+        id=user.id,
+        username=user.username,
+        description=user.description,
+        created_at=user.created_at,
+    )
 
 
 def get_cors_allowed_origins() -> list[str]:
@@ -488,12 +509,7 @@ def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
 
     db.refresh(user)
 
-    return UserPublic(
-        id=user.id,
-        email=user.email,
-        username=user.username,
-        created_at=user.created_at,
-    )
+    return serialize_user_public(user)
 
 
 @app.post(
@@ -522,12 +538,7 @@ def login_user(
 
     set_session_cookie(response, auth_session.id, expires_at)
 
-    return UserPublic(
-        id=user.id,
-        email=user.email,
-        username=user.username,
-        created_at=user.created_at,
-    )
+    return serialize_user_public(user)
 
 
 @app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -547,12 +558,34 @@ def logout_user(
 
 @app.get("/auth/me", response_model=UserPublic)
 def get_authenticated_user(current_user: User = Depends(get_current_user)):
-    return UserPublic(
-        id=current_user.id,
-        email=current_user.email,
-        username=current_user.username,
-        created_at=current_user.created_at,
-    )
+    return serialize_user_public(current_user)
+
+
+@app.get("/users/{username}", response_model=UserProfile)
+def get_user_profile(username: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == username).first()
+
+    if user is None:
+        api_error(404, "user_not_found", f"User not found: {username}")
+
+    return serialize_user_profile(user)
+
+
+@app.patch("/auth/me", response_model=UserPublic)
+def update_authenticated_user(
+    request: DescriptionUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if user is None:
+        unauthorized()
+
+    user.description = request.description
+    db.commit()
+    db.refresh(user)
+
+    return serialize_user_public(user)
 
 
 def bot_name_taken():
@@ -673,6 +706,44 @@ def submit_bot_source(
         bot_id=bot.id,
         submission_id=submission.id,
         version=submission.version,
+    )
+
+
+@app.patch("/bots/{bot_id}", response_model=BotDetail)
+def update_bot(
+    bot_id: int,
+    request: DescriptionUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bot = (
+        db.query(Bot)
+        .options(selectinload(Bot.owner))
+        .filter(Bot.id == bot_id)
+        .first()
+    )
+    if bot is None:
+        api_error(404, "bot_not_found", f"Bot not found: {bot_id}")
+
+    if bot.owner_id != current_user.id:
+        api_error(403, "bot_not_owned", "Bot is not owned by the authenticated user.")
+
+    bot.description = request.description
+    db.commit()
+    db.refresh(bot)
+
+    return BotDetail(
+        bot_id=bot.id,
+        name=bot.name,
+        description=bot.description,
+        game_id=bot.game_id,
+        owner_name=get_bot_owner_name(bot),
+        rating=bot.rating,
+        games_played=bot.games_played,
+        wins=bot.wins,
+        losses=bot.losses,
+        draws=bot.draws,
+        created_at=bot.created_at,
     )
 
 
@@ -929,6 +1000,7 @@ def get_bot(bot_id: int, db: Session = Depends(get_db)):
     return BotDetail(
         bot_id=bot.id,
         name=bot.name,
+        description=bot.description,
         game_id=bot.game_id,
         owner_name=get_bot_owner_name(bot),
         rating=bot.rating,

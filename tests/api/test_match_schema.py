@@ -78,6 +78,17 @@ bot_submissions_schema = importlib.util.module_from_spec(bot_submissions_spec)
 assert bot_submissions_spec.loader is not None
 bot_submissions_spec.loader.exec_module(bot_submissions_schema)
 
+descriptions_spec = importlib.util.spec_from_file_location(
+    "add_profile_descriptions",
+    Path(__file__).parents[2]
+    / "alembic"
+    / "versions"
+    / "5f7d8c9a0b12_add_profile_descriptions.py",
+)
+descriptions_schema = importlib.util.module_from_spec(descriptions_spec)
+assert descriptions_spec.loader is not None
+descriptions_spec.loader.exec_module(descriptions_schema)
+
 EXPECTED_MATCH_COLUMNS = {
     "id",
     "game_id",
@@ -106,6 +117,7 @@ EXPECTED_MOVE_COLUMNS = {
 EXPECTED_BOT_COLUMNS = {
     "id",
     "name",
+    "description",
     "game_id",
     "owner_id",
     "active_submission_id",
@@ -119,11 +131,15 @@ EXPECTED_BOT_COLUMNS = {
 }
 
 EXPECTED_BOT_OWNER_MIGRATION_BOT_COLUMNS = EXPECTED_BOT_COLUMNS - {
-    "active_submission_id"
+    "active_submission_id",
+    "description",
+}
+EXPECTED_BOT_SUBMISSIONS_MIGRATION_BOT_COLUMNS = EXPECTED_BOT_COLUMNS - {
+    "description",
 }
 
 EXPECTED_BASELINE_BOT_COLUMNS = (EXPECTED_BOT_COLUMNS - {"owner_id"}) | {"created_by"}
-EXPECTED_BASELINE_BOT_COLUMNS -= {"active_submission_id"}
+EXPECTED_BASELINE_BOT_COLUMNS -= {"active_submission_id", "description"}
 
 EXPECTED_BOT_SUBMISSION_COLUMNS = {
     "id",
@@ -138,11 +154,13 @@ EXPECTED_USER_COLUMNS = {
     "id",
     "email",
     "username",
+    "description",
     "password_hash",
     "created_at",
 }
 
-EXPECTED_AUTH_MIGRATION_USER_COLUMNS = EXPECTED_USER_COLUMNS - {"username"}
+EXPECTED_AUTH_MIGRATION_USER_COLUMNS = EXPECTED_USER_COLUMNS - {"username", "description"}
+EXPECTED_USERNAME_MIGRATION_USER_COLUMNS = EXPECTED_USER_COLUMNS - {"description"}
 
 EXPECTED_SESSION_COLUMNS = {
     "id",
@@ -169,6 +187,7 @@ def test_bot_model_declares_expected_columns_defaults_and_constraints():
     assert set(Bot.__table__.columns.keys()) == EXPECTED_BOT_COLUMNS
 
     assert Bot.__table__.c.name.nullable is False
+    assert Bot.__table__.c.description.nullable is False
     assert Bot.__table__.c.game_id.nullable is False
     assert Bot.__table__.c.owner_id.nullable is True
     assert {
@@ -193,11 +212,13 @@ def test_bot_model_declares_expected_columns_defaults_and_constraints():
     assert column_default_value(Bot.__table__.c.wins) == 0
     assert column_default_value(Bot.__table__.c.losses) == 0
     assert column_default_value(Bot.__table__.c.draws) == 0
+    assert column_default_value(Bot.__table__.c.description) == ""
     assert server_default_value(Bot.__table__.c.rating) == "1200"
     assert server_default_value(Bot.__table__.c.games_played) == "0"
     assert server_default_value(Bot.__table__.c.wins) == "0"
     assert server_default_value(Bot.__table__.c.losses) == "0"
     assert server_default_value(Bot.__table__.c.draws) == "0"
+    assert server_default_value(Bot.__table__.c.description) == ""
 
     constraints = {constraint.name: constraint for constraint in Bot.__table__.constraints}
     assert "uq_bots_game_id_name" in constraints
@@ -208,6 +229,7 @@ def test_bot_model_declares_expected_columns_defaults_and_constraints():
     assert "ck_bots_losses_non_negative" in constraints
     assert "ck_bots_draws_non_negative" in constraints
     assert "ck_bots_record_matches_games_played" in constraints
+    assert "ck_bots_description_max_length" in constraints
 
     indexes = {index.name: index for index in Bot.__table__.indexes}
     assert indexes["ix_bots_game_id_rating"].columns.keys() == ["game_id", "rating"]
@@ -300,6 +322,7 @@ def test_user_model_declares_expected_columns_and_constraints():
     assert User.__table__.c.email.type.length == 320
     assert User.__table__.c.username.nullable is False
     assert User.__table__.c.username.type.length == 80
+    assert User.__table__.c.description.nullable is False
     assert User.__table__.c.password_hash.nullable is False
     assert User.__table__.c.password_hash.type.length == 255
     assert User.__table__.c.created_at.nullable is False
@@ -311,6 +334,7 @@ def test_user_model_declares_expected_columns_and_constraints():
     assert "ck_users_email_format" in constraints
     assert "ck_users_username_min_length" in constraints
     assert "ck_users_username_max_length" in constraints
+    assert "ck_users_description_max_length" in constraints
 
     assert not User.__table__.indexes
 
@@ -602,7 +626,7 @@ def test_username_migration_adds_unique_required_username(monkeypatch):
         user_check_constraints = inspector.get_check_constraints("users")
         rows = connection.execute(sa.text("SELECT email, username FROM users")).all()
 
-        assert set(user_columns) == EXPECTED_USER_COLUMNS
+        assert set(user_columns) == EXPECTED_USERNAME_MIGRATION_USER_COLUMNS
         assert user_columns["username"]["nullable"] is False
         assert user_columns["username"]["type"].length == 80
         assert rows == [("player@example.com", "player@example.com")]
@@ -713,7 +737,7 @@ def test_bot_submissions_migration_adds_submissions_and_active_pointer(monkeypat
             "bot_submissions"
         )
 
-        assert set(bot_columns) == EXPECTED_BOT_COLUMNS
+        assert set(bot_columns) == EXPECTED_BOT_SUBMISSIONS_MIGRATION_BOT_COLUMNS
         assert bot_columns["active_submission_id"]["nullable"] is True
         assert set(submission_columns) == EXPECTED_BOT_SUBMISSION_COLUMNS
         assert submission_columns["bot_id"]["nullable"] is False
@@ -736,6 +760,48 @@ def test_bot_submissions_migration_adds_submissions_and_active_pointer(monkeypat
             constraint["column_names"] == ["bot_id", "version"]
             for constraint in submission_unique_constraints
         )
+
+
+def test_descriptions_migration_adds_user_and_bot_descriptions(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        operations = Operations(context)
+        monkeypatch.setattr(baseline_schema, "op", operations)
+        monkeypatch.setattr(auth_schema, "op", operations)
+        monkeypatch.setattr(bot_owner_schema, "op", operations)
+        monkeypatch.setattr(username_schema, "op", operations)
+        monkeypatch.setattr(cleanup_indexes_schema, "op", operations)
+        monkeypatch.setattr(bot_submissions_schema, "op", operations)
+        monkeypatch.setattr(descriptions_schema, "op", operations)
+
+        baseline_schema.upgrade()
+        auth_schema.upgrade()
+        bot_owner_schema.upgrade()
+        username_schema.upgrade()
+        cleanup_indexes_schema.upgrade()
+        bot_submissions_schema.upgrade()
+        descriptions_schema.upgrade()
+
+        inspector = sa.inspect(connection)
+        user_columns = {column["name"]: column for column in inspector.get_columns("users")}
+        bot_columns = {column["name"]: column for column in inspector.get_columns("bots")}
+        user_check_constraints = inspector.get_check_constraints("users")
+        bot_check_constraints = inspector.get_check_constraints("bots")
+
+        assert set(user_columns) == EXPECTED_USER_COLUMNS
+        assert user_columns["description"]["nullable"] is False
+        assert reflected_default_value(user_columns["description"]) == ""
+        assert set(bot_columns) == EXPECTED_BOT_COLUMNS
+        assert bot_columns["description"]["nullable"] is False
+        assert reflected_default_value(bot_columns["description"]) == ""
+        assert "ck_users_description_max_length" in {
+            constraint["name"] for constraint in user_check_constraints
+        }
+        assert "ck_bots_description_max_length" in {
+            constraint["name"] for constraint in bot_check_constraints
+        }
 
 
 def test_auth_migration_downgrade_drops_users_and_sessions(monkeypatch):

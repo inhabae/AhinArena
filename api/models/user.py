@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, Integer, String, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, Column, DateTime, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import relationship
 
 from api.database import Base
@@ -12,6 +12,7 @@ class User(Base):
         CheckConstraint("length(email) <= 320", name="ck_users_email_max_length"),
         CheckConstraint("length(username) >= 1", name="ck_users_username_min_length"),
         CheckConstraint("length(username) <= 80", name="ck_users_username_max_length"),
+        CheckConstraint("length(description) <= 280", name="ck_users_description_max_length"),
         CheckConstraint("email LIKE '%_@_%._%'", name="ck_users_email_format"),
     )
 
@@ -19,6 +20,7 @@ class User(Base):
 
     email = Column(String(320), nullable=False)
     username = Column(String(80), nullable=False)
+    description = Column(Text, nullable=False, default="", server_default="")
     password_hash = Column(String(255), nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
