@@ -8,6 +8,10 @@ function errorMessageFor(error) {
     return "The email, username, or password is incorrect.";
   }
 
+  if (error.code === "email_not_verified") {
+    return "Please verify your email before logging in.";
+  }
+
   return error.message || "Could not log in.";
 }
 
@@ -76,6 +80,9 @@ export default function LoginPage() {
 
         <p className="form-footer">
           Need an account? <Link to="/register">Register</Link>
+        </p>
+        <p className="form-footer">
+          Forgot your password? <Link to="/forgot-password">Reset it</Link>
         </p>
       </form>
     </main>

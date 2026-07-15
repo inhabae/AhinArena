@@ -761,6 +761,17 @@ select:disabled {
   margin: 0;
 }
 
+.form-message {
+  border-radius: var(--radius);
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+}
+
+.form-message.success {
+  background: var(--bg-success);
+}
+
 .form-footer a {
   color: var(--accent);
   font-weight: 500;

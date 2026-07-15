@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import relationship
 
 from api.database import Base
@@ -22,11 +22,18 @@ class User(Base):
     username = Column(String(80), nullable=False)
     description = Column(Text, nullable=False, default="", server_default="")
     password_hash = Column(String(255), nullable=False)
+    is_email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     sessions = relationship(
         "Session",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    auth_tokens = relationship(
+        "AuthToken",
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,

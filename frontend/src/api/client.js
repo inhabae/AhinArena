@@ -182,6 +182,36 @@ export function registerUser(credentials) {
   });
 }
 
+export function verifyEmail(token) {
+  return request("/auth/verify-email", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ token }),
+  });
+}
+
+export function requestPasswordReset(email) {
+  return request("/auth/password-reset", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function confirmPasswordReset({ token, password }) {
+  return request("/auth/password-reset/confirm", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ token, password }),
+  });
+}
+
 export function logoutUser() {
   return request("/auth/logout", {
     method: "POST",

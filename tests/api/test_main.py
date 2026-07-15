@@ -12,6 +12,7 @@ from api.auth import hash_password, verify_password
 import api.bot_sandbox as bot_sandbox
 from api.database import Base, get_db
 from api.models import (
+    AuthToken,
     Bot,
     BotSubmission,
     Match,
@@ -233,6 +234,7 @@ def login_user(session, *, email="player@example.com", password="correct"):
         username=email.split("@", maxsplit=1)[0],
         email=email,
         password_hash=hash_password(password),
+        is_email_verified=True,
     )
     session.add(user)
     session.commit()
@@ -339,30 +341,53 @@ def test_register_user_creates_public_user_response(sqlite_database_dependency):
         json={
             "email": "Player@Example.com",
             "username": "PlayerOne",
-            "password": "super-secret",
+            "password": "Super-secret1",
         },
     )
 
     assert response.status_code == 201
     body = response.json()
-    assert set(body.keys()) == {"id", "email", "username", "description", "created_at"}
-    assert body["email"] == "player@example.com"
-    assert body["username"] == "PlayerOne"
-    assert body["description"] == ""
-    assert body["created_at"]
+    assert set(body.keys()) == {"user", "verification_token", "verification_url"}
+    assert body["user"]["email"] == "player@example.com"
+    assert body["user"]["username"] == "PlayerOne"
+    assert body["user"]["description"] == ""
+    assert body["user"]["is_email_verified"] is False
+    assert body["user"]["created_at"]
+    assert body["verification_token"]
+    assert body["verification_token"] in body["verification_url"]
 
     user = sqlite_database_dependency.query(User).one()
     assert user.email == "player@example.com"
     assert user.username == "PlayerOne"
-    assert user.password_hash != "super-secret"
-    assert verify_password("super-secret", user.password_hash) is True
+    assert user.password_hash != "Super-secret1"
+    assert verify_password("Super-secret1", user.password_hash) is True
+    assert user.is_email_verified is False
+    token = sqlite_database_dependency.query(AuthToken).one()
+    assert token.user_id == user.id
+    assert token.purpose == "email_verification"
+    assert token.used_at is None
+
+
+def test_register_user_returns_422_for_weak_password(sqlite_database_dependency):
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "player@example.com",
+            "username": "player",
+            "password": "password",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert sqlite_database_dependency.query(User).count() == 0
 
 
 def test_user_register_request_normalizes_email_and_username():
     request = UserRegisterRequest(
         email="  Player@Example.com  ",
         username="  PlayerOne  ",
-        password="super-secret",
+        password="Super-secret1",
     )
 
     assert request.email == "player@example.com"
@@ -380,7 +405,7 @@ def test_register_user_returns_409_for_duplicate_email(sqlite_database_dependenc
         json={
             "email": "PLAYER@example.com",
             "username": "other-player",
-            "password": "new-password",
+            "password": "New-password1",
         },
     )
 
@@ -409,7 +434,7 @@ def test_register_user_returns_409_for_duplicate_username(sqlite_database_depend
         json={
             "email": "other@example.com",
             "username": "player",
-            "password": "new-password",
+            "password": "New-password1",
         },
     )
 
@@ -441,7 +466,7 @@ def test_register_user_returns_422_for_invalid_email(email, sqlite_database_depe
         json={
             "email": email,
             "username": "player",
-            "password": "new-password",
+            "password": "New-password1",
         },
     )
 
@@ -456,7 +481,7 @@ def test_register_user_returns_422_for_overlong_email(sqlite_database_dependency
         json={
             "email": f"{'a' * 243}@example.com",
             "username": "player",
-            "password": "new-password",
+            "password": "New-password1",
         },
     )
 
@@ -472,7 +497,7 @@ def test_register_user_returns_422_for_invalid_username(username, sqlite_databas
         json={
             "email": "player@example.com",
             "username": username,
-            "password": "new-password",
+            "password": "New-password1",
         },
     )
 
@@ -543,7 +568,12 @@ def test_cors_allowed_origins_rejects_wildcard_when_credentials_are_enabled(monk
 
 
 def test_login_sets_http_only_lax_cookie(sqlite_database_dependency):
-    user = User(username="player", email="player@example.com", password_hash=hash_password("correct"))
+    user = User(
+        username="player",
+        email="player@example.com",
+        password_hash=hash_password("correct"),
+        is_email_verified=True,
+    )
     sqlite_database_dependency.add(user)
     sqlite_database_dependency.commit()
 
@@ -554,7 +584,7 @@ def test_login_sets_http_only_lax_cookie(sqlite_database_dependency):
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body.keys()) == {"id", "email", "username", "description", "created_at"}
+    assert set(body.keys()) == {"id", "email", "username", "description", "is_email_verified", "created_at"}
     assert body["email"] == "player@example.com"
     assert body["username"] == "player"
     assert body["description"] == ""
@@ -567,7 +597,12 @@ def test_login_sets_http_only_lax_cookie(sqlite_database_dependency):
 
 
 def test_login_accepts_username(sqlite_database_dependency):
-    user = User(username="PlayerOne", email="player@example.com", password_hash=hash_password("correct"))
+    user = User(
+        username="PlayerOne",
+        email="player@example.com",
+        password_hash=hash_password("correct"),
+        is_email_verified=True,
+    )
     sqlite_database_dependency.add(user)
     sqlite_database_dependency.commit()
 
@@ -582,6 +617,75 @@ def test_login_accepts_username(sqlite_database_dependency):
     assert body["username"] == "PlayerOne"
     assert sqlite_database_dependency.query(AuthSession).count() == 1
     assert f"{api_main.SESSION_COOKIE_NAME}=" in response.headers["set-cookie"]
+
+
+def test_login_rejects_unverified_email(sqlite_database_dependency):
+    user = User(
+        username="player",
+        email="player@example.com",
+        password_hash=hash_password("correct"),
+    )
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        "/auth/login",
+        json={"email": "player@example.com", "password": "correct"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {
+            "code": "email_not_verified",
+            "message": "Please verify your email before logging in.",
+        }
+    }
+    assert sqlite_database_dependency.query(AuthSession).count() == 0
+
+
+def test_verify_email_marks_user_verified(sqlite_database_dependency):
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "player@example.com",
+            "username": "player",
+            "password": "Strong-pass1",
+        },
+    )
+    token = response.json()["verification_token"]
+
+    verify_response = client.post("/auth/verify-email", json={"token": token})
+
+    assert verify_response.status_code == 200
+    assert verify_response.json()["is_email_verified"] is True
+    user = sqlite_database_dependency.query(User).one()
+    auth_token = sqlite_database_dependency.query(AuthToken).one()
+    assert user.is_email_verified is True
+    assert auth_token.used_at is not None
+
+
+def test_password_reset_confirm_updates_password_and_verifies_user(sqlite_database_dependency):
+    user = User(
+        username="player",
+        email="player@example.com",
+        password_hash=hash_password("old-password"),
+    )
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+
+    reset_response = client.post("/auth/password-reset", json={"email": "player@example.com"})
+    token = reset_response.json()["reset_token"]
+
+    confirm_response = client.post(
+        "/auth/password-reset/confirm",
+        json={"token": token, "password": "New-password1"},
+    )
+
+    assert confirm_response.status_code == 200
+    sqlite_database_dependency.refresh(user)
+    assert user.is_email_verified is True
+    assert verify_password("New-password1", user.password_hash) is True
+    assert verify_password("old-password", user.password_hash) is False
 
 
 def test_session_cookie_is_secure_in_production(monkeypatch):
@@ -610,7 +714,12 @@ def test_login_returns_same_401_for_wrong_email_or_password(
     password,
 ):
     sqlite_database_dependency.add(
-        User(username="player", email="player@example.com", password_hash=hash_password("correct"))
+        User(
+            username="player",
+            email="player@example.com",
+            password_hash=hash_password("correct"),
+            is_email_verified=True,
+        )
     )
     sqlite_database_dependency.commit()
 
@@ -634,6 +743,7 @@ def test_auth_me_returns_current_user_from_cookie(sqlite_database_dependency):
         email="player@example.com",
         description="Builder of careful bots.",
         password_hash=hash_password("correct"),
+        is_email_verified=True,
     )
     sqlite_database_dependency.add(user)
     sqlite_database_dependency.commit()
@@ -752,7 +862,12 @@ def test_auth_me_returns_401_for_expired_session(sqlite_database_dependency):
 
 
 def test_logout_deletes_session_and_replayed_cookie_is_rejected(sqlite_database_dependency):
-    user = User(username="player", email="player@example.com", password_hash=hash_password("correct"))
+    user = User(
+        username="player",
+        email="player@example.com",
+        password_hash=hash_password("correct"),
+        is_email_verified=True,
+    )
     sqlite_database_dependency.add(user)
     sqlite_database_dependency.commit()
     login_response = client.post(
