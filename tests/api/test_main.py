@@ -2045,6 +2045,12 @@ def test_get_live_match_job_returns_running_moves_and_board(sqlite_database_depe
     assert body["game"] == "tictactoe"
     assert body["bot_one_name"] == "alpha"
     assert body["bot_two_name"] == "beta"
+    assert body["bot_one_rating_before"] == bot_one.rating
+    assert body["bot_two_rating_before"] == bot_two.rating
+    assert body["bot_one_rating_after"] == bot_one.rating
+    assert body["bot_two_rating_after"] == bot_two.rating
+    assert body["bot_one_rating_delta"] == 0
+    assert body["bot_two_rating_delta"] == 0
     assert body["board_state"] == [
         ["X", None, None],
         [None, "O", None],
@@ -2072,6 +2078,48 @@ def test_get_live_match_job_returns_running_moves_and_board(sqlite_database_depe
             ],
         },
     ]
+
+
+def test_get_live_match_job_returns_completed_match_rating_snapshots(
+    sqlite_database_dependency,
+):
+    bot_one = seed_bot(sqlite_database_dependency, name="alpha")
+    bot_two = seed_bot(sqlite_database_dependency, name="beta")
+    match = make_persisted_match(
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        winner_bot_id=bot_one.id,
+        bot_one_rating_before=1184,
+        bot_two_rating_before=1216,
+        bot_one_rating_after=1200,
+        bot_two_rating_after=1200,
+        bot_one_rating_delta=16,
+        bot_two_rating_delta=-16,
+    )
+    sqlite_database_dependency.add(match)
+    sqlite_database_dependency.commit()
+    job = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        status="completed",
+        match_id=match.id,
+    )
+    sqlite_database_dependency.add(job)
+    sqlite_database_dependency.commit()
+
+    response = client.get(f"/match-jobs/{job.id}/live")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["match_id"] == match.id
+    assert body["bot_one_rating_before"] == 1184
+    assert body["bot_two_rating_before"] == 1216
+    assert body["bot_one_rating_after"] == 1200
+    assert body["bot_two_rating_after"] == 1200
+    assert body["bot_one_rating_delta"] == 16
+    assert body["bot_two_rating_delta"] == -16
 
 
 def test_featured_games_returns_up_to_three_jobs_by_placeholder_heuristic(

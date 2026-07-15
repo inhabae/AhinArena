@@ -209,6 +209,12 @@ class LiveMatchDetail(BaseModel):
     bot_two_id: int
     bot_one_name: str
     bot_two_name: str
+    bot_one_rating_before: int | None = None
+    bot_two_rating_before: int | None = None
+    bot_one_rating_after: int | None = None
+    bot_two_rating_after: int | None = None
+    bot_one_rating_delta: int | None = None
+    bot_two_rating_delta: int | None = None
     winner_bot_id: int | None = None
     winner_bot_name: str | None = None
     result_reason: str | None = None

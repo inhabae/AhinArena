@@ -49,6 +49,14 @@ function getFeaturedLastMove(game) {
   return null;
 }
 
+function getFeaturedGamePath(game) {
+  if (game.status === "completed" && game.match_id) {
+    return `/matches/${game.match_id}`;
+  }
+
+  return `/match-jobs/${game.job_id}`;
+}
+
 function FeaturedPlayerMarker({ gameId, player }) {
   const marker = player === "p1" ? "X" : "O";
 
@@ -176,7 +184,7 @@ function FeaturedGamesSection() {
             <Link
               className="featured-game-card"
               key={game.job_id}
-              to={`/match-jobs/${game.job_id}`}
+              to={getFeaturedGamePath(game)}
             >
               <div className="featured-game-card-header">
                 <FeaturedMatchup game={game} />
