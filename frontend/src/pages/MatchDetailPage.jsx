@@ -1,6 +1,8 @@
 import {
-  IconPlayerPauseFilled,
-  IconPlayerPlayFilled,
+  IconChevronLeft,
+  IconChevronRight,
+  IconPlayerTrackNextFilled,
+  IconPlayerTrackPrevFilled,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -17,6 +19,10 @@ const nonStandardEndings = new Set(["timeout", "bot_error", "invalid_move"]);
 function formatDelta(value) {
   if (value > 0) {
     return `+${value}`;
+  }
+
+  if (value < 0) {
+    return `- ${Math.abs(value)}`;
   }
 
   return String(value);
@@ -89,9 +95,9 @@ function RatingLine({ label, before, after, delta, deltaClassName }) {
   return (
     <div className="match-rating-line">
       <span>{label}</span>
-      <strong>
-        {before} &rarr; {after}
-      </strong>
+      <strong>{before}</strong>
+      <span aria-hidden="true">&rarr;</span>
+      <strong>{after}</strong>
       <em className={deltaClassName}>{formatDelta(delta)}</em>
     </div>
   );
@@ -217,14 +223,12 @@ export default function MatchDetailPage() {
     error: null,
   });
   const [step, setStep] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     let ignore = false;
 
     setMatchState({ loading: true, data: null, error: null });
     setStep(0);
-    setIsPlaying(false);
 
     const loadMatch = isLiveJob ? getLiveMatchJob(jobId) : getMatch(matchId);
 
@@ -300,34 +304,41 @@ export default function MatchDetailPage() {
   }, [isLiveJob, maxStep]);
 
   useEffect(() => {
-    if (!isPlaying) {
-      return undefined;
+    function handleReplayKeyDown(event) {
+      if (
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLSelectElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setStep(0);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setStep(maxStep);
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setStep((currentStep) => Math.max(0, currentStep - 1));
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setStep((currentStep) => Math.min(maxStep, currentStep + 1));
+      }
     }
 
-    if (step >= maxStep) {
-      setIsPlaying(false);
-      return undefined;
-    }
+    window.addEventListener("keydown", handleReplayKeyDown);
 
-    const intervalId = window.setInterval(() => {
-      setStep((currentStep) => {
-        if (currentStep >= maxStep) {
-          setIsPlaying(false);
-          return currentStep;
-        }
-
-        const nextStep = currentStep + 1;
-
-        if (nextStep >= maxStep) {
-          setIsPlaying(false);
-        }
-
-        return nextStep;
-      });
-    }, 800);
-
-    return () => window.clearInterval(intervalId);
-  }, [isPlaying, maxStep, step]);
+    return () => {
+      window.removeEventListener("keydown", handleReplayKeyDown);
+    };
+  }, [maxStep]);
 
   if (matchState.loading) {
     return (
@@ -387,28 +398,38 @@ export default function MatchDetailPage() {
 
   return (
     <main className="match-detail-page">
-      <div className="page-header">
-        <h1>
-          <Link className="bot-name-link" to={`/bots/${match.bot_one_id}`}>
-            {match.bot_one_name}
-          </Link>{" "}
-          vs{" "}
-          <Link className="bot-name-link" to={`/bots/${match.bot_two_id}`}>
-            {match.bot_two_name}
-          </Link>
-        </h1>
+      <div className="page-header match-viewer-header">
+        <Link className="match-viewer-back-link" to="/matches">
+          &larr; Back to matches
+        </Link>
+        <h1>{isLiveJob ? "Live Match" : "Match Replay"}</h1>
         <p>
-          {formatGame(match.game)} {isLiveJob ? `job #${match.job_id}` : `match #${match.match_id}`}
+          {match.bot_one_name} vs {match.bot_two_name} &middot; {formatGame(match.game)}
         </p>
       </div>
 
       <section className="history-panel match-replay-panel">
-        <div className="section-heading match-detail-heading">
-          <div>
-            <h2>Replay</h2>
-            <span>Move {step} of {maxStep}</span>
-          </div>
-          <span className="result-badge">{formatResult(match)}</span>
+        <div className="match-summary-panel">
+          <PlayerSummary
+            botId={match.bot_one_id}
+            game={match.game}
+            marker="X"
+            name={match.bot_one_name}
+            before={match.bot_one_rating_before}
+            after={match.bot_one_rating_after}
+            delta={match.bot_one_rating_delta}
+            deltaClassName={getDeltaClassName(match, match.bot_one_rating_delta)}
+          />
+          <PlayerSummary
+            botId={match.bot_two_id}
+            game={match.game}
+            marker="O"
+            name={match.bot_two_name}
+            before={match.bot_two_rating_before}
+            after={match.bot_two_rating_after}
+            delta={match.bot_two_rating_delta}
+            deltaClassName={getDeltaClassName(match, match.bot_two_rating_delta)}
+          />
         </div>
 
         <div className="match-detail-grid">
@@ -424,117 +445,68 @@ export default function MatchDetailPage() {
             )}
 
             <MatchBoard game={match.game} board={board} lastMove={lastMove} />
+          </div>
+
+          <aside className="match-side-panel">
+            <div className="move-history">
+              <h3>Moves</h3>
+              {moves.length === 0 ? (
+                <p className="empty-state">No moves recorded.</p>
+              ) : (
+                <ol>
+                  {moves.map((entry) => (
+                    <li
+                      key={entry.move_number}
+                      className={step === entry.move_number ? "active-move" : undefined}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setStep(entry.move_number)}
+                      >
+                        <span>{entry.move_number}</span>
+                        <code>{formatMove(match.game, entry.move)}</code>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
 
             <div className="replay-controls" aria-label="Replay controls">
-              <button type="button" onClick={() => setStep(0)} disabled={step === 0}>
-                &lt;&lt;
+              <button
+                type="button"
+                aria-label="Go to first move"
+                onClick={() => setStep(0)}
+                disabled={step === 0}
+              >
+                <IconPlayerTrackPrevFilled size={16} aria-hidden="true" />
               </button>
               <button
                 type="button"
+                aria-label="Go to previous move"
                 onClick={() => setStep((currentStep) => Math.max(0, currentStep - 1))}
                 disabled={step === 0}
               >
-                &lt;
+                <IconChevronLeft size={18} aria-hidden="true" />
               </button>
               <button
                 type="button"
-                aria-label={isPlaying ? "Pause replay" : "Play replay"}
-                onClick={() => setIsPlaying((current) => !current)}
-                disabled={maxStep === 0 || (step === maxStep && !isPlaying)}
-              >
-                {isPlaying ? (
-                  <IconPlayerPauseFilled size={16} aria-hidden="true" />
-                ) : (
-                  <IconPlayerPlayFilled size={16} aria-hidden="true" />
-                )}
-              </button>
-              <button
-                type="button"
+                aria-label="Go to next move"
                 onClick={() =>
                   setStep((currentStep) => Math.min(maxStep, currentStep + 1))
                 }
                 disabled={step === maxStep}
               >
-                &gt;
+                <IconChevronRight size={18} aria-hidden="true" />
               </button>
               <button
                 type="button"
+                aria-label="Go to last move"
                 onClick={() => setStep(maxStep)}
                 disabled={step === maxStep}
               >
-                &gt;&gt;
+                <IconPlayerTrackNextFilled size={16} aria-hidden="true" />
               </button>
-            </div>
-
-            <label className="replay-scrubber">
-              <span>Move</span>
-              <input
-                type="range"
-                min="0"
-                max={maxStep}
-                value={step}
-                onChange={(event) => {
-                  setIsPlaying(false);
-                  setStep(Number.parseInt(event.target.value, 10));
-                }}
-              />
-            </label>
-          </div>
-
-          <aside className="match-summary-panel">
-            <PlayerSummary
-              botId={match.bot_one_id}
-              game={match.game}
-              marker="X"
-              name={match.bot_one_name}
-              before={match.bot_one_rating_before}
-              after={match.bot_one_rating_after}
-              delta={match.bot_one_rating_delta}
-              deltaClassName={getDeltaClassName(match, match.bot_one_rating_delta)}
-            />
-            <PlayerSummary
-              botId={match.bot_two_id}
-              game={match.game}
-              marker="O"
-              name={match.bot_two_name}
-              before={match.bot_two_rating_before}
-              after={match.bot_two_rating_after}
-              delta={match.bot_two_rating_delta}
-              deltaClassName={getDeltaClassName(match, match.bot_two_rating_delta)}
-            />
-
-            <div className="move-history">
-              <h3>Move history</h3>
-              {moves.length === 0 ? (
-                <p className="empty-state">No moves recorded.</p>
-              ) : (
-                <ol>
-                  {moves.map((entry, index) => {
-                    const marker = index % 2 === 0 ? "X" : "O";
-                    const botName = marker === "X" ? match.bot_one_name : match.bot_two_name;
-
-                    return (
-                      <li
-                        key={entry.move_number}
-                        className={step === entry.move_number ? "active-move" : undefined}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsPlaying(false);
-                            setStep(entry.move_number);
-                          }}
-                        >
-                          <span>{entry.move_number}</span>
-                          <strong>{marker}</strong>
-                          <em>{botName}</em>
-                          <code>{formatMove(match.game, entry.move)}</code>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ol>
-              )}
             </div>
           </aside>
         </div>
