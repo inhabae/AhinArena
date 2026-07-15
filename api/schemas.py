@@ -52,12 +52,6 @@ class MatchRequest(BaseModel):
     game: str
     players: list[PlayerConfig]
 
-class MatchCreateResponse(BaseModel):
-    match_id: int
-    game: str
-    winner_bot_id: int | None
-    result_reason: str
-
 class MatchJobCreateResponse(BaseModel):
     job_id: int
     status: str
