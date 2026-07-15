@@ -512,8 +512,14 @@ def login_user(
     response: Response,
     db: Session = Depends(get_db),
 ):
-    normalized_email = request.email.strip().lower()
-    user = db.query(User).filter(User.email == normalized_email).first()
+    login_identifier = request.login if request.login is not None else request.email
+    login_identifier = login_identifier.strip()
+    normalized_email = login_identifier.lower()
+    user = (
+        db.query(User)
+        .filter(or_(User.email == normalized_email, User.username == login_identifier))
+        .first()
+    )
 
     if user is None or not verify_password(request.password, user.password_hash):
         invalid_credentials()
