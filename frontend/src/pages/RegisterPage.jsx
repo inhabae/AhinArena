@@ -15,6 +15,72 @@ function errorMessageFor(error) {
   return error.message || "Could not create the account.";
 }
 
+function usernameErrorFor(username) {
+  const trimmedUsername = username.trim();
+
+  if (!trimmedUsername) {
+    return "Username must be 3-20 characters.";
+  }
+
+  if (trimmedUsername.length < 3 || trimmedUsername.length > 20) {
+    return "Username must be 3-20 characters.";
+  }
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(trimmedUsername)) {
+    return "Username can only use letters, numbers, periods, underscores, or hyphens.";
+  }
+
+  return "";
+}
+
+function emailErrorFor(email) {
+  const trimmedEmail = email.trim();
+  const emailPattern = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
+
+  if (!trimmedEmail) {
+    return "Email is required.";
+  }
+
+  if (trimmedEmail.length > 254) {
+    return "Email must be 254 characters or fewer.";
+  }
+
+  if (!/^[\x00-\x7F]*$/.test(trimmedEmail) || !emailPattern.test(trimmedEmail)) {
+    return "Enter a valid email address.";
+  }
+
+  const [localPart, domain] = trimmedEmail.split("@");
+  if (localPart.startsWith(".") || localPart.endsWith(".") || localPart.includes("..")) {
+    return "Enter a valid email address.";
+  }
+
+  if (domain.split(".").some((part) => part.startsWith("-") || part.endsWith("-"))) {
+    return "Enter a valid email address.";
+  }
+
+  return "";
+}
+
+function passwordErrorFor(password) {
+  if (password.length < 8 || password.length > 72) {
+    return "Password must be 8-72 characters.";
+  }
+
+  return "";
+}
+
+function isEmailOverLimit(email) {
+  return email.trim().length > 254;
+}
+
+function isUsernameOverLimit(username) {
+  return username.trim().length > 20;
+}
+
+function isPasswordOverLimit(password) {
+  return password.length > 72;
+}
+
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -25,9 +91,27 @@ export default function RegisterPage() {
     loading: false,
     error: null,
   });
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [usernameTouched, setUsernameTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const emailError = emailErrorFor(email);
+  const usernameError = usernameErrorFor(username);
+  const passwordError = passwordErrorFor(password);
+  const showEmailError = (emailTouched || isEmailOverLimit(email)) && Boolean(emailError);
+  const showUsernameError =
+    (usernameTouched || isUsernameOverLimit(username)) && Boolean(usernameError);
+  const showPasswordError =
+    (passwordTouched || isPasswordOverLimit(password)) && Boolean(passwordError);
 
   async function handleSubmit(event) {
     event.preventDefault();
+    setEmailTouched(true);
+    setUsernameTouched(true);
+    setPasswordTouched(true);
+
+    if (emailError || usernameError || passwordError) {
+      return;
+    }
 
     setSubmitState({ loading: true, error: null });
 
@@ -50,12 +134,19 @@ export default function RegisterPage() {
         <label>
           <span>Email</span>
           <input
-            type="email"
+            type="text"
             value={email}
             autoComplete="email"
             onChange={(event) => setEmail(event.target.value)}
-            required
+            onBlur={() => setEmailTouched(true)}
+            aria-describedby={showEmailError ? "email-requirements" : undefined}
+            aria-invalid={showEmailError}
           />
+          {showEmailError && (
+            <span id="email-requirements" className="field-error">
+              {emailError}
+            </span>
+          )}
         </label>
 
         <label>
@@ -65,9 +156,15 @@ export default function RegisterPage() {
             value={username}
             autoComplete="username"
             onChange={(event) => setUsername(event.target.value)}
-            maxLength={80}
-            required
+            onBlur={() => setUsernameTouched(true)}
+            aria-describedby={showUsernameError ? "username-requirements" : undefined}
+            aria-invalid={showUsernameError}
           />
+          {showUsernameError && (
+            <span id="username-requirements" className="field-error">
+              {usernameError}
+            </span>
+          )}
         </label>
 
         <label>
@@ -77,8 +174,15 @@ export default function RegisterPage() {
             value={password}
             autoComplete="new-password"
             onChange={(event) => setPassword(event.target.value)}
-            required
+            onBlur={() => setPasswordTouched(true)}
+            aria-describedby={showPasswordError ? "password-requirements" : undefined}
+            aria-invalid={showPasswordError}
           />
+          {showPasswordError && (
+            <span id="password-requirements" className="field-error">
+              {passwordError}
+            </span>
+          )}
         </label>
 
         {submitState.error && (

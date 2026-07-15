@@ -431,6 +431,8 @@ def test_register_user_returns_409_for_duplicate_username(sqlite_database_depend
         "@example.com",
         "player@example.",
         "player..example",
+        "玩家@example.com",
+        "player@例子.com",
     ],
 )
 def test_register_user_returns_422_for_invalid_email(email, sqlite_database_dependency):
@@ -452,7 +454,7 @@ def test_register_user_returns_422_for_overlong_email(sqlite_database_dependency
     response = client.post(
         "/auth/register",
         json={
-            "email": f"{'a' * 309}@example.com",
+            "email": f"{'a' * 243}@example.com",
             "username": "player",
             "password": "new-password",
         },
@@ -463,7 +465,7 @@ def test_register_user_returns_422_for_overlong_email(sqlite_database_dependency
     assert sqlite_database_dependency.query(User).count() == 0
 
 
-@pytest.mark.parametrize("username", ["", "   ", "a" * 81])
+@pytest.mark.parametrize("username", ["", "   ", "ab", "a" * 21, "player one", "玩家", "player!"])
 def test_register_user_returns_422_for_invalid_username(username, sqlite_database_dependency):
     response = client.post(
         "/auth/register",
@@ -471,6 +473,22 @@ def test_register_user_returns_422_for_invalid_username(username, sqlite_databas
             "email": "player@example.com",
             "username": username,
             "password": "new-password",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert sqlite_database_dependency.query(User).count() == 0
+
+
+@pytest.mark.parametrize("password", ["short", "a" * 73])
+def test_register_user_returns_422_for_invalid_password(password, sqlite_database_dependency):
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "player@example.com",
+            "username": "player",
+            "password": password,
         },
     )
 
@@ -1325,6 +1343,25 @@ def test_create_bot_trims_name_before_storing(sqlite_database_dependency):
     }
     assert bot.name == "custom"
     assert sqlite_database_dependency.query(BotSubmission).count() == 1
+
+
+@pytest.mark.parametrize("name", ["", "   ", "ab", "a" * 33, "玩家", "custom.bot", "custom!"])
+def test_create_bot_rejects_invalid_name(name, sqlite_database_dependency):
+    login_user(sqlite_database_dependency)
+
+    response = client.post(
+        "/bots",
+        json={
+            "game_id": "tictactoe",
+            "name": name,
+            "source_code": valid_bot_source(),
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert sqlite_database_dependency.query(Bot).count() == 0
+    assert sqlite_database_dependency.query(BotSubmission).count() == 0
 
 
 def test_create_bot_rejects_duplicate_name_after_trimming(sqlite_database_dependency):

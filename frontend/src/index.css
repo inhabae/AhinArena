@@ -740,6 +740,21 @@ select:disabled {
   font-size: 13px;
 }
 
+.form-panel .field-help,
+.form-panel .field-error {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.form-panel .field-help {
+  color: var(--text-muted);
+}
+
+.form-panel .field-error {
+  color: var(--danger);
+}
+
 .form-footer {
   color: var(--text-muted);
   font-size: 14px;
