@@ -1,3 +1,4 @@
+from api.models.auth_token import AuthToken
 from api.models.bot import Bot, BotSubmission
 from api.models.match import Match
 from api.models.match_job import MatchJob
@@ -9,6 +10,7 @@ from api.models.user import User
 
 __all__ = [
     "Bot",
+    "AuthToken",
     "BotSubmission",
     "Match",
     "MatchJob",

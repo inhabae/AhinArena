@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { useAuth } from "../useAuth";
 
@@ -62,8 +62,34 @@ function emailErrorFor(email) {
 }
 
 function passwordErrorFor(password) {
-  if (password.length < 8 || password.length > 72) {
-    return "Password must be 8-72 characters.";
+  const requirements = [];
+
+  if (password.length < 8) {
+    requirements.push("8+ characters");
+  }
+
+  if (password.length > 72) {
+    requirements.push("72 characters or fewer");
+  }
+
+  if (!/[a-z]/.test(password)) {
+    requirements.push("a lowercase letter");
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    requirements.push("an uppercase letter");
+  }
+
+  if (!/[0-9]/.test(password)) {
+    requirements.push("a number");
+  }
+
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    requirements.push("a symbol");
+  }
+
+  if (requirements.length > 0) {
+    return `Password must include ${requirements.join(", ")}.`;
   }
 
   return "";
@@ -82,7 +108,6 @@ function isPasswordOverLimit(password) {
 }
 
 export default function RegisterPage() {
-  const navigate = useNavigate();
   const { register } = useAuth();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
@@ -90,6 +115,7 @@ export default function RegisterPage() {
   const [submitState, setSubmitState] = useState({
     loading: false,
     error: null,
+    registered: null,
   });
   const [emailTouched, setEmailTouched] = useState(false);
   const [usernameTouched, setUsernameTouched] = useState(false);
@@ -113,13 +139,13 @@ export default function RegisterPage() {
       return;
     }
 
-    setSubmitState({ loading: true, error: null });
+    setSubmitState({ loading: true, error: null, registered: null });
 
     try {
-      await register({ email, username, password });
-      navigate("/login", { replace: true });
+      const registered = await register({ email, username, password });
+      setSubmitState({ loading: false, error: null, registered });
     } catch (error) {
-      setSubmitState({ loading: false, error });
+      setSubmitState({ loading: false, error, registered: null });
     }
   }
 
@@ -189,6 +215,18 @@ export default function RegisterPage() {
           <p className="error" role="alert">
             {errorMessageFor(submitState.error)}
           </p>
+        )}
+
+        {submitState.registered && (
+          <div className="form-message success" role="status">
+            <p>Account created. Verify your email before logging in.</p>
+            <p>
+              Development verification link:{" "}
+              <Link to={`/verify-email?token=${submitState.registered.verification_token}`}>
+                Verify email
+              </Link>
+            </p>
+          </div>
         )}
 
         <button type="submit" disabled={submitState.loading}>

@@ -9,7 +9,7 @@ from api.auth import hash_password, verify_password
 from api.bot_sandbox import build_bot_sandbox
 from api.database import get_db, get_sessionmaker
 from api.featured_games import select_featured_match_jobs
-from api.models import Bot, BotSubmission, Match, MatchJob, Move, Session as AuthSession, User
+from api.models import AuthToken, Bot, BotSubmission, Match, MatchJob, Move, Session as AuthSession, User
 from api.match_execution import (
     DEFAULT_BOT_MOVE_TIMEOUT_SECONDS,
     DEFAULT_BOT_STARTUP_TIMEOUT_SECONDS,
@@ -56,10 +56,15 @@ from api.schemas import (
     BotSubmissionRequest,
     BotSubmissionResponse,
     DescriptionUpdateRequest,
+    EmailVerificationRequest,
     UserLoginRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
+    PasswordResetResponse,
     UserProfile,
     UserPublic,
     UserRegisterRequest,
+    UserRegisterResponse,
 )
 
 
@@ -74,6 +79,9 @@ DEFAULT_CORS_ALLOWED_ORIGINS = (
 SESSION_COOKIE_NAME = "ahin_arena_session"
 SESSION_ID_BYTES = 48
 SESSION_TTL = timedelta(days=14)
+EMAIL_VERIFICATION_TTL = timedelta(days=2)
+PASSWORD_RESET_TTL = timedelta(hours=1)
+AUTH_TOKEN_BYTES = 32
 MAX_BOT_SUBMISSION_SOURCE_BYTES = 100_000
 
 DEFAULT_BOT_SOURCE_PATHS = {
@@ -102,8 +110,40 @@ def serialize_user_public(user: User) -> UserPublic:
         email=user.email,
         username=user.username,
         description=user.description,
+        is_email_verified=user.is_email_verified,
         created_at=user.created_at,
     )
+
+
+def make_auth_token(db: Session, *, user: User, purpose: str, ttl: timedelta) -> AuthToken:
+    token = AuthToken(
+        user_id=user.id,
+        token=secrets.token_urlsafe(AUTH_TOKEN_BYTES),
+        purpose=purpose,
+        expires_at=datetime.now(timezone.utc) + ttl,
+    )
+    db.add(token)
+    db.flush()
+    return token
+
+
+def frontend_url(path: str) -> str:
+    base_url = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+    return f"{base_url}{path}"
+
+
+def resolve_active_auth_token(db: Session, *, token: str, purpose: str) -> AuthToken:
+    auth_token = (
+        db.query(AuthToken)
+        .options(selectinload(AuthToken.user))
+        .filter(AuthToken.token == token, AuthToken.purpose == purpose)
+        .first()
+    )
+
+    if auth_token is None or auth_token.used_at is not None or is_expired(auth_token.expires_at):
+        api_error(400, "invalid_or_expired_token", "The token is invalid or expired.")
+
+    return auth_token
 
 
 def serialize_user_profile(user: User) -> UserProfile:
@@ -456,7 +496,7 @@ def health_check():
 @app.post(
     "/auth/register",
     status_code=status.HTTP_201_CREATED,
-    response_model=UserPublic,
+    response_model=UserRegisterResponse,
 )
 def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
     normalized_email = request.email.strip().lower()
@@ -493,6 +533,13 @@ def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
 
     try:
+        db.flush()
+        verification_token = make_auth_token(
+            db,
+            user=user,
+            purpose="email_verification",
+            ttl=EMAIL_VERIFICATION_TTL,
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -500,7 +547,65 @@ def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
 
     db.refresh(user)
 
-    return serialize_user_public(user)
+    return UserRegisterResponse(
+        user=serialize_user_public(user),
+        verification_token=verification_token.token,
+        verification_url=frontend_url(f"/verify-email?token={verification_token.token}"),
+    )
+
+
+@app.post("/auth/verify-email", response_model=UserPublic)
+def verify_email(request: EmailVerificationRequest, db: Session = Depends(get_db)):
+    auth_token = resolve_active_auth_token(
+        db,
+        token=request.token,
+        purpose="email_verification",
+    )
+    auth_token.user.is_email_verified = True
+    auth_token.used_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(auth_token.user)
+
+    return serialize_user_public(auth_token.user)
+
+
+@app.post("/auth/password-reset", response_model=PasswordResetResponse)
+def request_password_reset(request: PasswordResetRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == request.email).first()
+    if user is None:
+        return PasswordResetResponse()
+
+    reset_token = make_auth_token(
+        db,
+        user=user,
+        purpose="password_reset",
+        ttl=PASSWORD_RESET_TTL,
+    )
+    db.commit()
+
+    return PasswordResetResponse(
+        reset_token=reset_token.token,
+        reset_url=frontend_url(f"/reset-password?token={reset_token.token}"),
+    )
+
+
+@app.post("/auth/password-reset/confirm", response_model=UserPublic)
+def confirm_password_reset(
+    request: PasswordResetConfirmRequest,
+    db: Session = Depends(get_db),
+):
+    auth_token = resolve_active_auth_token(
+        db,
+        token=request.token,
+        purpose="password_reset",
+    )
+    auth_token.user.password_hash = hash_password(request.password)
+    auth_token.user.is_email_verified = True
+    auth_token.used_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(auth_token.user)
+
+    return serialize_user_public(auth_token.user)
 
 
 @app.post(
@@ -523,6 +628,9 @@ def login_user(
 
     if user is None or not verify_password(request.password, user.password_hash):
         invalid_credentials()
+
+    if not user.is_email_verified:
+        api_error(403, "email_not_verified", "Please verify your email before logging in.")
 
     expires_at = datetime.now(timezone.utc) + SESSION_TTL
     auth_session = AuthSession(

@@ -2,6 +2,8 @@ import re
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from api.auth import password_security_errors
+
 EMAIL_MAX_LENGTH = 254
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 72
@@ -52,6 +54,20 @@ class UserRegisterRequest(BaseModel):
 
         return username
 
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value):
+        errors = password_security_errors(value)
+        if errors:
+            raise ValueError(" ".join(errors))
+        return value
+
+
+class UserRegisterResponse(BaseModel):
+    user: "UserPublic"
+    verification_token: str
+    verification_url: str
+
 
 class UserLoginRequest(BaseModel):
     login: str | None = None
@@ -80,7 +96,35 @@ class UserPublic(BaseModel):
     email: str
     username: str
     description: str = ""
+    is_email_verified: bool = False
     created_at: datetime
+
+class EmailVerificationRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=128)
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(max_length=EMAIL_MAX_LENGTH)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value):
+        return UserRegisterRequest.validate_email(value)
+
+class PasswordResetResponse(BaseModel):
+    reset_token: str | None = None
+    reset_url: str | None = None
+
+class PasswordResetConfirmRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=128)
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value):
+        errors = password_security_errors(value)
+        if errors:
+            raise ValueError(" ".join(errors))
+        return value
 
 class UserProfile(BaseModel):
     id: int
