@@ -8,13 +8,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { getLiveMatchJob, getMatch } from "../api/client";
-import { formatGame, isSupportedGame } from "../games";
+import { formatGame, isSupportedGame, supportedGames } from "../games";
 import {
   buildConnectFourReplay,
   buildTicTacToeReplay,
 } from "./matchReplay";
-
-const nonStandardEndings = new Set(["timeout", "bot_error", "invalid_move"]);
 
 function formatDelta(value) {
   if (value > 0) {
@@ -26,6 +24,44 @@ function formatDelta(value) {
   }
 
   return String(value);
+}
+
+function formatRelativeTime(value) {
+  if (!value) {
+    return "Unknown time";
+  }
+
+  const timestamp = new Date(value).getTime();
+  const diffSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  const units = [
+    ["year", 31536000],
+    ["month", 2592000],
+    ["week", 604800],
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+  ];
+
+  for (const [unit, seconds] of units) {
+    const amount = Math.floor(diffSeconds / seconds);
+    if (amount >= 1) {
+      return `${amount} ${unit}${amount === 1 ? "" : "s"} ago`;
+    }
+  }
+
+  return "Just now";
+}
+
+function getMatchTimeLabel(match) {
+  if (match.status === "queued" || match.status === "running") {
+    return "LIVE";
+  }
+
+  return formatRelativeTime(match.completed_at ?? match.created_at);
+}
+
+function getGameIcon(gameId) {
+  return supportedGames.find((game) => game.id === gameId)?.icon;
 }
 
 function formatResult(match) {
@@ -48,6 +84,68 @@ function formatReason(reason) {
   return reason.replaceAll("_", " ");
 }
 
+function getPlayerMarkerLabel(game, marker) {
+  if (game === "connect-four") {
+    return marker === "X" ? "Red" : "Yellow";
+  }
+
+  return marker;
+}
+
+function getBotMarker(match, botId) {
+  return botId === match.bot_one_id ? "X" : "O";
+}
+
+function getVictoryReason(match) {
+  if (match.result_reason === "win") {
+    return match.game === "connect-four" ? "Four connected" : "Three in a row";
+  }
+
+  if (match.result_reason === "timeout") {
+    const losingMarker = getBotMarker(
+      match,
+      match.winner_bot_id === match.bot_one_id ? match.bot_two_id : match.bot_one_id,
+    );
+    return `${getPlayerMarkerLabel(match.game, losingMarker)} timed out`;
+  }
+
+  if (match.result_reason === "invalid_move") {
+    const losingMarker = getBotMarker(
+      match,
+      match.winner_bot_id === match.bot_one_id ? match.bot_two_id : match.bot_one_id,
+    );
+    return `${getPlayerMarkerLabel(match.game, losingMarker)} made an invalid move`;
+  }
+
+  if (match.result_reason === "bot_error") {
+    const losingMarker = getBotMarker(
+      match,
+      match.winner_bot_id === match.bot_one_id ? match.bot_two_id : match.bot_one_id,
+    );
+    return `${getPlayerMarkerLabel(match.game, losingMarker)} had a bot error`;
+  }
+
+  return formatReason(match.result_reason);
+}
+
+function getResultSummary(match) {
+  if (!match.result_reason) {
+    return null;
+  }
+
+  if (match.result_reason === "draw" || !match.winner_bot_id) {
+    return { reason: "Draw", victor: "No victor" };
+  }
+
+  const winnerMarker = getBotMarker(match, match.winner_bot_id);
+  const winnerLabel = getPlayerMarkerLabel(match.game, winnerMarker);
+
+  return {
+    reason: getVictoryReason(match),
+    victor: `${winnerLabel} is victorious`,
+  };
+}
+
 function getErrorMessage(error) {
   if (error.status === 404 || error.code === "match_job_not_found") {
     return "Match job not found.";
@@ -58,25 +156,6 @@ function getErrorMessage(error) {
   }
 
   return error.message || "The match could not be loaded.";
-}
-
-function getBotName(match, botId) {
-  if (botId === match.bot_one_id) {
-    return match.bot_one_name;
-  }
-
-  if (botId === match.bot_two_id) {
-    return match.bot_two_name;
-  }
-
-  return "Unknown bot";
-}
-
-function getForfeitingBot(match) {
-  const losingBotId =
-    match.winner_bot_id === match.bot_one_id ? match.bot_two_id : match.bot_one_id;
-
-  return getBotName(match, losingBotId);
 }
 
 function getDeltaClassName(match, delta) {
@@ -96,9 +175,29 @@ function RatingLine({ label, before, after, delta, deltaClassName }) {
     <div className="match-rating-line">
       <span>{label}</span>
       <strong>{before}</strong>
-      <span aria-hidden="true">&rarr;</span>
-      <strong>{after}</strong>
       <em className={deltaClassName}>{formatDelta(delta)}</em>
+    </div>
+  );
+}
+
+function CurrentRating({ rating }) {
+  if (rating === undefined) {
+    return null;
+  }
+
+  return <strong className="player-current-rating">{rating}</strong>;
+}
+
+function MatchInfoHeader({ match }) {
+  const GameIcon = getGameIcon(match.game);
+
+  return (
+    <div className="match-info-header">
+      {GameIcon && <GameIcon size={26} stroke={1.8} aria-hidden="true" />}
+      <div>
+        <strong>{formatGame(match.game)}</strong>
+        <span>{getMatchTimeLabel(match)}</span>
+      </div>
     </div>
   );
 }
@@ -112,6 +211,7 @@ function PlayerSummary({
   after,
   delta,
   deltaClassName,
+  compactRating = false,
 }) {
   return (
     <div className="player-summary-row">
@@ -123,13 +223,17 @@ function PlayerSummary({
           {name}
         </Link>
       </strong>
-      <RatingLine
-        label="Rating"
-        before={before}
-        after={after}
-        delta={delta}
-        deltaClassName={deltaClassName}
-      />
+      {compactRating ? (
+        <CurrentRating rating={before} />
+      ) : (
+        <RatingLine
+          label="Rating"
+          before={before}
+          after={after}
+          delta={delta}
+          deltaClassName={deltaClassName}
+        />
+      )}
     </div>
   );
 }
@@ -393,16 +497,14 @@ export default function MatchDetailPage() {
 
   const board = boards[step];
   const lastMove = lastMoves[step];
-  const showEndingBanner =
-    step === maxStep && match.result_reason && nonStandardEndings.has(match.result_reason);
+  const showCompactLiveRatings =
+    isLiveJob && (match.status === "queued" || match.status === "running");
+  const resultSummary = getResultSummary(match);
 
   return (
     <main className="match-detail-page">
       <div className="page-header match-viewer-header">
-        <Link className="match-viewer-back-link" to="/matches">
-          &larr; Back to matches
-        </Link>
-        <h1>{isLiveJob ? "Live Match" : "Match Replay"}</h1>
+        <h1>Match Viewer</h1>
         <p>
           {match.bot_one_name} vs {match.bot_two_name} &middot; {formatGame(match.game)}
         </p>
@@ -411,21 +513,12 @@ export default function MatchDetailPage() {
       <section className="history-panel match-replay-panel">
         <div className="match-detail-grid">
           <div className="replay-board-panel">
-            {showEndingBanner && (
-              <div className="ending-banner" role="status">
-                <strong>{formatReason(match.result_reason)}</strong>
-                <span>
-                  {getForfeitingBot(match)} caused the match to end by{" "}
-                  {formatReason(match.result_reason)}.
-                </span>
-              </div>
-            )}
-
             <MatchBoard game={match.game} board={board} lastMove={lastMove} />
           </div>
 
           <aside className="match-side-panel">
             <div className="match-summary-panel">
+              <MatchInfoHeader match={match} />
               <PlayerSummary
                 botId={match.bot_one_id}
                 game={match.game}
@@ -435,6 +528,7 @@ export default function MatchDetailPage() {
                 after={match.bot_one_rating_after}
                 delta={match.bot_one_rating_delta}
                 deltaClassName={getDeltaClassName(match, match.bot_one_rating_delta)}
+                compactRating={showCompactLiveRatings}
               />
               <PlayerSummary
                 botId={match.bot_two_id}
@@ -445,12 +539,13 @@ export default function MatchDetailPage() {
                 after={match.bot_two_rating_after}
                 delta={match.bot_two_rating_delta}
                 deltaClassName={getDeltaClassName(match, match.bot_two_rating_delta)}
+                compactRating={showCompactLiveRatings}
               />
             </div>
 
             <div className="move-history">
               <h3>Moves</h3>
-              {moves.length === 0 ? (
+              {moves.length === 0 && !resultSummary ? (
                 <p className="empty-state">No moves recorded.</p>
               ) : (
                 <ol>
@@ -468,6 +563,13 @@ export default function MatchDetailPage() {
                       </button>
                     </li>
                   ))}
+                  {resultSummary && (
+                    <li className="move-result-row" aria-live="polite">
+                      <span>{resultSummary.reason}</span>
+                      <span aria-hidden="true">&bull;</span>
+                      <strong>{resultSummary.victor}</strong>
+                    </li>
+                  )}
                 </ol>
               )}
             </div>
