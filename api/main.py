@@ -104,6 +104,9 @@ EMAIL_VERIFICATION_TTL = timedelta(days=2)
 PASSWORD_RESET_TTL = timedelta(hours=1)
 AUTH_TOKEN_BYTES = 32
 MAX_BOT_SUBMISSION_SOURCE_BYTES = 100_000
+DEPLOY_ENVIRONMENT_ENV_VAR = "DEPLOY_ENVIRONMENT"
+LEGACY_DEPLOY_ENVIRONMENT_ENV_VARS = ("ENVIRONMENT", "APP_ENV", "FASTAPI_ENV")
+REQUIRE_SECURE_COOKIES_ENV_VAR = "REQUIRE_SECURE_COOKIES"
 AUTH_RATE_LIMITS = {
     "register": {
         "account": (5, timedelta(hours=1)),
@@ -122,6 +125,8 @@ AUTH_RATE_LIMITS = {
         "ip": (20, timedelta(days=1)),
     },
 }
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_BOT_SOURCE_PATHS = {
     "tictactoe": Path(__file__).resolve().parent.parent / "engine" / "tictactoe" / "random_bot.py",
