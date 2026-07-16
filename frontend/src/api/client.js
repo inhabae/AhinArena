@@ -192,6 +192,16 @@ export function verifyEmail(token) {
   });
 }
 
+export function resendVerificationEmail(email) {
+  return request("/auth/verify-email/resend", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+}
+
 export function requestPasswordReset(email) {
   return request("/auth/password-reset", {
     method: "POST",

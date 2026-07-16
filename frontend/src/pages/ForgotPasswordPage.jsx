@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 
 import { requestPasswordReset } from "../api/client";
 
@@ -36,11 +36,18 @@ function isEmailOverLimit(email) {
 }
 
 export default function ForgotPasswordPage() {
+  const location = useLocation();
   const [email, setEmail] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
   const [state, setState] = useState({ loading: false, error: null, result: null });
   const emailError = emailErrorFor(email);
   const showEmailError = (emailTouched || isEmailOverLimit(email)) && Boolean(emailError);
+
+  useEffect(() => {
+    setEmail("");
+    setEmailTouched(false);
+    setState({ loading: false, error: null, result: null });
+  }, [location.key]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -93,10 +100,10 @@ export default function ForgotPasswordPage() {
         )}
 
         {state.result && (
-          <div className="form-message success" role="status">
+          <div className="inline-success" role="status">
             <p>If an account with that email exists, a password reset link has been sent.</p>
             {state.result.reset_token && (
-              <p>
+              <p className="dev-link">
                 Development reset link:{" "}
                 <Link to={`/reset-password?token=${state.result.reset_token}`}>
                   Reset password

@@ -813,6 +813,78 @@ select:disabled {
   font-weight: 500;
 }
 
+.registration-sent {
+  gap: 12px;
+}
+
+.auth-success-state {
+  color: var(--text-primary);
+  display: grid;
+  gap: 4px;
+}
+
+.auth-success-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 7px;
+}
+
+.auth-success-heading svg {
+  color: var(--success);
+  flex: 0 0 auto;
+  height: 1.35em;
+  stroke-width: 2;
+  transform: translateY(0.2em);
+  width: 1.35em;
+}
+
+.auth-success-state h2 {
+  font-size: 18px;
+  line-height: 1.25;
+  margin: 0 0 4px;
+}
+
+.auth-success-state p {
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.inline-success {
+  color: var(--success);
+  display: grid;
+  gap: 6px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.inline-success p {
+  margin: 0;
+}
+
+.inline-success .dev-link {
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.text-action {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.text-action:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
 .empty-state {
   color: var(--text-muted);
 }

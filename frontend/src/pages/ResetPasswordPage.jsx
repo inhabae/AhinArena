@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { IconCircleCheck } from "@tabler/icons-react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import { confirmPasswordReset, validatePasswordResetToken } from "../api/client";
 
@@ -26,6 +27,7 @@ function errorMessageFor(error) {
 }
 
 export default function ResetPasswordPage() {
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
   const [password, setPassword] = useState("");
@@ -65,7 +67,7 @@ export default function ResetPasswordPage() {
     return () => {
       ignore = true;
     };
-  }, [token]);
+  }, [location.key, token]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -136,9 +138,13 @@ export default function ResetPasswordPage() {
         )}
 
         {state.complete && (
-          <p className="success" role="status">
-            Password updated. You can log in now.
-          </p>
+          <div className="auth-success-state" role="status">
+            <div className="auth-success-heading">
+              <h2>Password updated</h2>
+              <IconCircleCheck aria-hidden="true" />
+            </div>
+            <p>You can log in now.</p>
+          </div>
         )}
 
         {showResetForm && (
