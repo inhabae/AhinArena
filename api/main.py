@@ -1,4 +1,5 @@
 import ast
+import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -103,6 +104,9 @@ EMAIL_VERIFICATION_TTL = timedelta(days=2)
 PASSWORD_RESET_TTL = timedelta(hours=1)
 AUTH_TOKEN_BYTES = 32
 MAX_BOT_SUBMISSION_SOURCE_BYTES = 100_000
+DEPLOY_ENVIRONMENT_ENV_VAR = "DEPLOY_ENVIRONMENT"
+LEGACY_DEPLOY_ENVIRONMENT_ENV_VARS = ("ENVIRONMENT", "APP_ENV", "FASTAPI_ENV")
+REQUIRE_SECURE_COOKIES_ENV_VAR = "REQUIRE_SECURE_COOKIES"
 AUTH_RATE_LIMITS = {
     "register": {
         "account": (5, timedelta(hours=1)),
@@ -121,6 +125,8 @@ AUTH_RATE_LIMITS = {
         "ip": (20, timedelta(days=1)),
     },
 }
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_BOT_SOURCE_PATHS = {
     "tictactoe": Path(__file__).resolve().parent.parent / "engine" / "tictactoe" / "random_bot.py",
@@ -220,14 +226,66 @@ def get_cors_allowed_origins() -> list[str]:
     return allowed_origins
 
 
+def get_deploy_environment() -> str:
+    environment = os.environ.get(DEPLOY_ENVIRONMENT_ENV_VAR)
+    if environment:
+        return environment
+
+    for env_var in LEGACY_DEPLOY_ENVIRONMENT_ENV_VARS:
+        environment = os.environ.get(env_var)
+        if environment:
+            return environment
+
+    return "development"
+
+
 def should_secure_auth_cookie() -> bool:
-    environment = (
-        os.environ.get("ENVIRONMENT")
-        or os.environ.get("APP_ENV")
-        or os.environ.get("FASTAPI_ENV")
-        or "development"
-    )
+    environment = get_deploy_environment()
     return environment.lower() in {"production", "prod"}
+
+
+def require_secure_cookies() -> bool:
+    return os.environ.get(REQUIRE_SECURE_COOKIES_ENV_VAR, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def validate_auth_cookie_security() -> None:
+    configured_environment = os.environ.get(DEPLOY_ENVIRONMENT_ENV_VAR)
+    legacy_environment = next(
+        (
+            env_var
+            for env_var in LEGACY_DEPLOY_ENVIRONMENT_ENV_VARS
+            if os.environ.get(env_var)
+        ),
+        None,
+    )
+
+    if not configured_environment:
+        logger.warning(
+            "%s is not set; auth session cookies will be issued without Secure unless "
+            "a legacy environment variable (%s) is set to production. Set %s=production "
+            "for production deploys.",
+            DEPLOY_ENVIRONMENT_ENV_VAR,
+            ", ".join(LEGACY_DEPLOY_ENVIRONMENT_ENV_VARS),
+            DEPLOY_ENVIRONMENT_ENV_VAR,
+        )
+
+    if legacy_environment and not configured_environment:
+        logger.warning(
+            "Using legacy %s to determine auth session cookie security. Prefer %s.",
+            legacy_environment,
+            DEPLOY_ENVIRONMENT_ENV_VAR,
+        )
+
+    if require_secure_cookies() and not should_secure_auth_cookie():
+        raise RuntimeError(
+            f"{REQUIRE_SECURE_COOKIES_ENV_VAR}=true but auth session cookies would be "
+            f"issued without Secure. Set {DEPLOY_ENVIRONMENT_ENV_VAR}=production."
+        )
 
 
 def set_session_cookie(response: Response, session_id: str, expires_at: datetime) -> None:
@@ -575,6 +633,7 @@ def score_for_bot_one_or_error(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_auth_cookie_security()
     db = get_sessionmaker()()
     try:
         seed_default_bots(db)
