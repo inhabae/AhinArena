@@ -57,6 +57,9 @@ The system consists of a web frontend, backend services, persistent storage, and
 - **Session Storage** — Server-side auth sessions stored in the PostgreSQL
   `sessions` table and referenced by the browser's HTTP-only
   `ahin_arena_session` cookie. Expired sessions are removed when encountered.
+  Production deploys must set `DEPLOY_ENVIRONMENT=production` so this bearer
+  session cookie is issued with `Secure`; `REQUIRE_SECURE_COOKIES=true` makes
+  startup fail if that would not happen.
 - **Job Queue** — PostgreSQL `match_jobs` rows used to track queued, running,
   completed, and failed asynchronous match requests. Workers claim queued jobs
   with `SELECT ... FOR UPDATE SKIP LOCKED`.
@@ -85,6 +88,37 @@ completed match, ordered moves, and Elo updates, stores the resulting
 See `docs/queue-and-workers.md` for the `match_jobs` schema, worker loop,
 LISTEN/NOTIFY behavior, stalled-job recovery, API shapes, configuration, and
 local development workflow.
+
+## Auth Cookie Deployment Check
+
+`DEPLOY_ENVIRONMENT` is the canonical environment variable controlling whether
+the API marks `ahin_arena_session` as `Secure`. Use
+`DEPLOY_ENVIRONMENT=development` locally and `DEPLOY_ENVIRONMENT=production` in
+production. `ENVIRONMENT`, `APP_ENV`, and `FASTAPI_ENV` are legacy fallbacks
+only.
+
+Production should also set `REQUIRE_SECURE_COOKIES=true`, which refuses startup
+if the cookie would be issued without `Secure`.
+
+This repository does not contain a production deployment manifest or platform
+configuration for the API, so verify the real production host or dashboard where
+`DATABASE_URL` is configured and confirm `DEPLOY_ENVIRONMENT=production` is set
+there explicitly.
+
+After deploy, inspect a real login response from the production URL and confirm
+the session cookie attributes:
+
+```sh
+curl -i -X POST https://<production-host>/auth/login \
+  -H 'content-type: application/json' \
+  --data '{"email":"<account-email>","password":"<account-password>"}'
+```
+
+The response must contain:
+
+```text
+Set-Cookie: ahin_arena_session=...; Secure; HttpOnly; SameSite=Lax
+```
 
 ## Frontend Flow
 

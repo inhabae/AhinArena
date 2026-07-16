@@ -505,6 +505,27 @@ The API enables credentialed CORS so browser requests can include the auth
 cookie. Because credentials are allowed, `CORS_ALLOWED_ORIGINS` must list
 explicit origins and cannot be `*`.
 
+Auth session cookies are controlled by `DEPLOY_ENVIRONMENT`. Local development
+uses `DEPLOY_ENVIRONMENT=development`, which issues the HTTP-only
+`ahin_arena_session` cookie without `Secure` so localhost HTTP works.
+Production deploys must set:
+
+```sh
+DEPLOY_ENVIRONMENT=production
+REQUIRE_SECURE_COOKIES=true
+```
+
+With `DEPLOY_ENVIRONMENT=production`, login responses must include:
+
+```text
+Set-Cookie: ahin_arena_session=...; Secure; HttpOnly; SameSite=Lax
+```
+
+`REQUIRE_SECURE_COOKIES=true` makes the API refuse startup if the session cookie
+would be issued without `Secure`. `ENVIRONMENT`, `APP_ENV`, and `FASTAPI_ENV`
+are still recognized as legacy fallbacks, but new deploys should use
+`DEPLOY_ENVIRONMENT`.
+
 Run database migrations with Alembic:
 
 ```sh

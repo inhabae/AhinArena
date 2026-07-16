@@ -759,6 +759,74 @@ def test_cors_allowed_origins_rejects_wildcard_when_credentials_are_enabled(monk
         api_main.get_cors_allowed_origins()
 
 
+def clear_deploy_environment(monkeypatch):
+    monkeypatch.delenv(api_main.DEPLOY_ENVIRONMENT_ENV_VAR, raising=False)
+    monkeypatch.delenv(api_main.REQUIRE_SECURE_COOKIES_ENV_VAR, raising=False)
+    for env_var in api_main.LEGACY_DEPLOY_ENVIRONMENT_ENV_VARS:
+        monkeypatch.delenv(env_var, raising=False)
+
+
+def test_auth_cookie_secure_flag_uses_canonical_production_env(monkeypatch):
+    clear_deploy_environment(monkeypatch)
+    monkeypatch.setenv(api_main.DEPLOY_ENVIRONMENT_ENV_VAR, "production")
+
+    assert api_main.should_secure_auth_cookie() is True
+
+
+def test_auth_cookie_secure_flag_defaults_to_false_when_environment_unset(monkeypatch):
+    clear_deploy_environment(monkeypatch)
+
+    assert api_main.should_secure_auth_cookie() is False
+
+
+def test_login_sets_secure_cookie_with_canonical_production_env(
+    monkeypatch,
+    sqlite_database_dependency,
+):
+    clear_deploy_environment(monkeypatch)
+    monkeypatch.setenv(api_main.DEPLOY_ENVIRONMENT_ENV_VAR, "production")
+    user = User(
+        username="player",
+        email="player@example.com",
+        password_hash=hash_password("correct"),
+        is_email_verified=True,
+    )
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        "/auth/login",
+        json={"email": "player@example.com", "password": "correct"},
+    )
+
+    assert response.status_code == 200
+    set_cookie = response.headers["set-cookie"]
+    assert f"{api_main.SESSION_COOKIE_NAME}=" in set_cookie
+    assert "Secure" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "SameSite=lax" in set_cookie
+
+
+def test_auth_cookie_startup_check_warns_when_canonical_env_is_unset(
+    caplog,
+    monkeypatch,
+):
+    clear_deploy_environment(monkeypatch)
+
+    api_main.validate_auth_cookie_security()
+
+    assert api_main.DEPLOY_ENVIRONMENT_ENV_VAR in caplog.text
+    assert "auth session cookies will be issued without Secure" in caplog.text
+
+
+def test_auth_cookie_startup_check_requires_secure_cookie_when_enabled(monkeypatch):
+    clear_deploy_environment(monkeypatch)
+    monkeypatch.setenv(api_main.REQUIRE_SECURE_COOKIES_ENV_VAR, "true")
+
+    with pytest.raises(RuntimeError, match="auth session cookies would be issued without Secure"):
+        api_main.validate_auth_cookie_security()
+
+
 def test_login_sets_http_only_lax_cookie(sqlite_database_dependency):
     user = User(
         username="player",
@@ -955,7 +1023,8 @@ def test_password_reset_sends_email_when_email_delivery_is_configured(
 
 
 def test_session_cookie_is_secure_in_production(monkeypatch):
-    monkeypatch.setenv("ENVIRONMENT", "production")
+    clear_deploy_environment(monkeypatch)
+    monkeypatch.setenv(api_main.DEPLOY_ENVIRONMENT_ENV_VAR, "production")
     response = Response()
 
     api_main.set_session_cookie(
