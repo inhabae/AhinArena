@@ -12,6 +12,7 @@ from api.auth import hash_password, verify_password
 import api.bot_sandbox as bot_sandbox
 from api.database import Base, get_db
 from api.models import (
+    AuthRateLimitEvent,
     AuthToken,
     Bot,
     BotSubmission,
@@ -1070,6 +1071,113 @@ def test_login_returns_same_401_for_wrong_email_or_password(
             "message": "Invalid credentials.",
         }
     }
+
+
+def test_login_rate_limit_counts_failed_attempts_by_account(sqlite_database_dependency):
+    sqlite_database_dependency.add(
+        User(
+            username="player",
+            email="player@example.com",
+            password_hash=hash_password("correct"),
+            is_email_verified=True,
+        )
+    )
+    sqlite_database_dependency.commit()
+
+    for _ in range(api_main.AUTH_RATE_LIMITS["login"]["account"][0]):
+        response = client.post(
+            "/auth/login",
+            json={"email": "PLAYER@example.com", "password": "wrong"},
+        )
+        assert response.status_code == 401
+
+    response = client.post(
+        "/auth/login",
+        json={"email": "player@example.com", "password": "correct"},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "rate_limited"
+    assert sqlite_database_dependency.query(AuthSession).count() == 0
+    assert (
+        sqlite_database_dependency.query(AuthRateLimitEvent)
+        .filter(AuthRateLimitEvent.bucket == "login:account")
+        .count()
+        == api_main.AUTH_RATE_LIMITS["login"]["account"][0]
+    )
+
+
+def test_login_rate_limit_counts_failed_attempts_by_ip(sqlite_database_dependency):
+    for index in range(api_main.AUTH_RATE_LIMITS["login"]["ip"][0]):
+        response = client.post(
+            "/auth/login",
+            json={"email": f"missing-{index}@example.com", "password": "wrong"},
+        )
+        assert response.status_code == 401
+
+    response = client.post(
+        "/auth/login",
+        json={"email": "another-missing@example.com", "password": "wrong"},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "rate_limited"
+
+
+def test_password_reset_rate_limit_counts_nonexistent_email(sqlite_database_dependency):
+    limit = api_main.AUTH_RATE_LIMITS["password_reset"]["account"][0]
+
+    for _ in range(limit):
+        response = client.post("/auth/password-reset", json={"email": "missing@example.com"})
+        assert response.status_code == 200
+        assert response.json() == {"reset_token": None, "reset_url": None}
+
+    response = client.post("/auth/password-reset", json={"email": "missing@example.com"})
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "rate_limited"
+    assert sqlite_database_dependency.query(AuthToken).count() == 0
+
+
+def test_verification_resend_daily_limit_is_separate_from_login_limit(
+    sqlite_database_dependency,
+):
+    client.post(
+        "/auth/register",
+        json={
+            "email": "player@example.com",
+            "username": "player",
+            "password": "Strong-pass1",
+        },
+    )
+    limit = api_main.AUTH_RATE_LIMITS["verification_resend_daily"]["account"][0]
+
+    for _ in range(limit):
+        response = client.post(
+            "/auth/verify-email/resend",
+            json={"email": "player@example.com"},
+        )
+        assert response.status_code == 200
+
+    response = client.post(
+        "/auth/verify-email/resend",
+        json={"email": "player@example.com"},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "rate_limited"
+    assert (
+        sqlite_database_dependency.query(AuthRateLimitEvent)
+        .filter(AuthRateLimitEvent.bucket == "verification_resend_daily:account")
+        .count()
+        == limit
+    )
+    assert (
+        sqlite_database_dependency.query(AuthRateLimitEvent)
+        .filter(AuthRateLimitEvent.bucket == "login:account")
+        .count()
+        == 0
+    )
 
 
 def test_auth_me_returns_current_user_from_cookie(sqlite_database_dependency):
