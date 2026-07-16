@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { IconCircleCheck } from "@tabler/icons-react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import { verifyEmail } from "../api/client";
 
@@ -15,6 +16,7 @@ function errorMessageFor(error) {
 }
 
 export default function VerifyEmailPage() {
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
   const [state, setState] = useState({ loading: true, error: null });
@@ -41,7 +43,7 @@ export default function VerifyEmailPage() {
     return () => {
       ignore = true;
     };
-  }, [token]);
+  }, [location.key, token]);
 
   return (
     <main className="form-page">
@@ -54,9 +56,13 @@ export default function VerifyEmailPage() {
         {state.loading && <p>Verifying email...</p>}
         {!state.loading && !state.error && (
           <>
-            <p className="success" role="status">
-              Email verified. You can log in now.
-            </p>
+            <div className="auth-success-state" role="status">
+              <div className="auth-success-heading">
+                <h2>Email verified</h2>
+                <IconCircleCheck aria-hidden="true" />
+              </div>
+              <p>You can log in now.</p>
+            </div>
             <p className="form-footer">
               Continue to <Link to="/login">log in</Link>.
             </p>

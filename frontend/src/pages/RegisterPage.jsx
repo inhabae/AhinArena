@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { IconMailOpened } from "@tabler/icons-react";
+import { Link, useLocation } from "react-router-dom";
 
+import { resendVerificationEmail } from "../api/client";
 import { useAuth } from "../useAuth";
 
 function errorMessageFor(error) {
@@ -108,6 +110,7 @@ function isPasswordOverLimit(password) {
 }
 
 export default function RegisterPage() {
+  const location = useLocation();
   const { register } = useAuth();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
@@ -116,6 +119,11 @@ export default function RegisterPage() {
     loading: false,
     error: null,
     registered: null,
+  });
+  const [resendState, setResendState] = useState({
+    loading: false,
+    error: null,
+    sent: false,
   });
   const [emailTouched, setEmailTouched] = useState(false);
   const [usernameTouched, setUsernameTouched] = useState(false);
@@ -128,6 +136,17 @@ export default function RegisterPage() {
     (usernameTouched || isUsernameOverLimit(username)) && Boolean(usernameError);
   const showPasswordError =
     (passwordTouched || isPasswordOverLimit(password)) && Boolean(passwordError);
+
+  useEffect(() => {
+    setEmail("");
+    setUsername("");
+    setPassword("");
+    setSubmitState({ loading: false, error: null, registered: null });
+    setResendState({ loading: false, error: null, sent: false });
+    setEmailTouched(false);
+    setUsernameTouched(false);
+    setPasswordTouched(false);
+  }, [location.key]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -144,9 +163,70 @@ export default function RegisterPage() {
     try {
       const registered = await register({ email, username, password });
       setSubmitState({ loading: false, error: null, registered });
+      setResendState({ loading: false, error: null, sent: false });
     } catch (error) {
       setSubmitState({ loading: false, error, registered: null });
     }
+  }
+
+  async function handleResend() {
+    setResendState({ loading: true, error: null, sent: false });
+
+    try {
+      await resendVerificationEmail(submitState.registered.user.email);
+      setResendState({ loading: false, error: null, sent: true });
+    } catch (error) {
+      setResendState({ loading: false, error, sent: false });
+    }
+  }
+
+  if (submitState.registered) {
+    return (
+      <main className="form-page">
+        <div className="page-header">
+          <h1>Register</h1>
+          <p>Create an account to register bots and start matches.</p>
+        </div>
+
+        <section className="form-panel registration-sent" aria-live="polite">
+          <div className="auth-success-state" role="status">
+            <div className="auth-success-heading">
+              <h2>Check your email</h2>
+              <IconMailOpened aria-hidden="true" />
+            </div>
+            <p>An email was sent to {submitState.registered.user.email}.</p>
+          </div>
+
+          {resendState.sent && (
+            <p className="inline-success" role="status">
+              Verification email sent again.
+            </p>
+          )}
+
+          {resendState.error && (
+            <p className="error" role="alert">
+              {resendState.error.message || "Could not send another verification email."}
+            </p>
+          )}
+
+          <p className="form-footer">
+            Didn't receive it?{" "}
+            <button
+              type="button"
+              className="text-action"
+              onClick={handleResend}
+              disabled={resendState.loading}
+            >
+              {resendState.loading ? "Sending..." : "Send again"}
+            </button>
+          </p>
+
+          <p className="form-footer">
+            Already verified? <Link to="/login">Log in</Link>
+          </p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -215,20 +295,6 @@ export default function RegisterPage() {
           <p className="error" role="alert">
             {errorMessageFor(submitState.error)}
           </p>
-        )}
-
-        {submitState.registered && (
-          <div className="form-message success" role="status">
-            <p>Account created. Verify your email before logging in.</p>
-            {submitState.registered.verification_token && (
-              <p>
-                Development verification link:{" "}
-                <Link to={`/verify-email?token=${submitState.registered.verification_token}`}>
-                  Verify email
-                </Link>
-              </p>
-            )}
-          </div>
         )}
 
         <button type="submit" disabled={submitState.loading}>

@@ -65,8 +65,6 @@ class UserRegisterRequest(BaseModel):
 
 class UserRegisterResponse(BaseModel):
     user: "UserPublic"
-    verification_token: str | None = None
-    verification_url: str | None = None
 
 
 class UserLoginRequest(BaseModel):
@@ -101,6 +99,17 @@ class UserPublic(BaseModel):
 
 class EmailVerificationRequest(BaseModel):
     token: str = Field(min_length=20, max_length=128)
+
+class EmailVerificationResendRequest(BaseModel):
+    email: str = Field(max_length=EMAIL_MAX_LENGTH)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value):
+        return value.strip().lower()
+
+class EmailVerificationResendResponse(BaseModel):
+    pass
 
 class PasswordResetRequest(BaseModel):
     email: str = Field(max_length=EMAIL_MAX_LENGTH)

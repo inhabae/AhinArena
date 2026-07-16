@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { createBot } from "../api/client";
 import { defaultGameId, supportedGames } from "../games";
@@ -93,6 +93,7 @@ function isBotNameOverLimit(name) {
 }
 
 export default function BotRegistrationPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, loading } = useAuth();
   const [selectedGame, setSelectedGame] = useState(defaultGameId);
@@ -107,6 +108,19 @@ export default function BotRegistrationPage() {
   const [nameTouched, setNameTouched] = useState(false);
   const nameError = botNameErrorFor(name);
   const showNameError = (nameTouched || isBotNameOverLimit(name)) && Boolean(nameError);
+
+  useEffect(() => {
+    setSelectedGame(defaultGameId);
+    setName("");
+    setSourceCode("");
+    setSubmitState({
+      loading: false,
+      error: null,
+      botName: "",
+      version: null,
+    });
+    setNameTouched(false);
+  }, [location.key]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -226,7 +240,7 @@ export default function BotRegistrationPage() {
             </label>
 
             {submitState.version && (
-              <p className="success" role="status">
+              <p className="inline-success" role="status">
                 {submitState.botName} is registered with source version{" "}
                 {submitState.version}.
               </p>

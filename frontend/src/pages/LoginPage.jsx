@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../useAuth";
@@ -29,6 +29,12 @@ export default function LoginPage() {
   const redirectTo = redirectFrom
     ? `${redirectFrom.pathname}${redirectFrom.search}${redirectFrom.hash}`
     : "/";
+
+  useEffect(() => {
+    setLoginIdentifier("");
+    setPassword("");
+    setSubmitState({ loading: false, error: null });
+  }, [location.key]);
 
   async function handleSubmit(event) {
     event.preventDefault();

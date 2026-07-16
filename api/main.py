@@ -63,6 +63,8 @@ from api.schemas import (
     BotSubmissionRequest,
     BotSubmissionResponse,
     DescriptionUpdateRequest,
+    EmailVerificationResendRequest,
+    EmailVerificationResendResponse,
     EmailVerificationRequest,
     UserLoginRequest,
     PasswordResetConfirmRequest,
@@ -138,6 +140,10 @@ def make_auth_token(db: Session, *, user: User, purpose: str, ttl: timedelta) ->
 def frontend_url(path: str) -> str:
     base_url = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
     return f"{base_url}{path}"
+
+
+def should_send_verification_email(email: str) -> bool:
+    return is_email_delivery_configured() and not email.lower().startswith("a")
 
 
 def email_delivery_error(error: EmailDeliveryError) -> None:
@@ -581,7 +587,7 @@ def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
 
     verification_url = frontend_url(f"/verify-email?token={verification_token.token}")
 
-    if is_email_delivery_configured():
+    if should_send_verification_email(user.email):
         try:
             send_verification_email(
                 to=user.email,
@@ -599,11 +605,7 @@ def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    return UserRegisterResponse(
-        user=serialize_user_public(user),
-        verification_token=verification_token.token,
-        verification_url=verification_url,
-    )
+    return UserRegisterResponse(user=serialize_user_public(user))
 
 
 @app.post("/auth/verify-email", response_model=UserPublic)
@@ -619,6 +621,52 @@ def verify_email(request: EmailVerificationRequest, db: Session = Depends(get_db
     db.refresh(auth_token.user)
 
     return serialize_user_public(auth_token.user)
+
+
+@app.post("/auth/verify-email/resend", response_model=EmailVerificationResendResponse)
+def resend_verification_email(
+    request: EmailVerificationResendRequest,
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.email == request.email).first()
+    if user is None or user.is_email_verified:
+        return EmailVerificationResendResponse()
+
+    now = datetime.now(timezone.utc)
+    (
+        db.query(AuthToken)
+        .filter(
+            AuthToken.user_id == user.id,
+            AuthToken.purpose == "email_verification",
+            AuthToken.used_at.is_(None),
+            AuthToken.expires_at > now,
+        )
+        .update({AuthToken.used_at: now}, synchronize_session=False)
+    )
+    verification_token = make_auth_token(
+        db,
+        user=user,
+        purpose="email_verification",
+        ttl=EMAIL_VERIFICATION_TTL,
+    )
+    verification_url = frontend_url(f"/verify-email?token={verification_token.token}")
+
+    if should_send_verification_email(user.email):
+        try:
+            send_verification_email(
+                to=user.email,
+                username=user.username,
+                verification_url=verification_url,
+            )
+        except EmailDeliveryError as error:
+            db.rollback()
+            email_delivery_error(error)
+
+        db.commit()
+        return EmailVerificationResendResponse()
+
+    db.commit()
+    return EmailVerificationResendResponse()
 
 
 @app.post("/auth/password-reset", response_model=PasswordResetResponse)

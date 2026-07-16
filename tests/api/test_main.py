@@ -349,14 +349,12 @@ def test_register_user_creates_public_user_response(sqlite_database_dependency):
 
     assert response.status_code == 201
     body = response.json()
-    assert set(body.keys()) == {"user", "verification_token", "verification_url"}
+    assert set(body.keys()) == {"user"}
     assert body["user"]["email"] == "player@example.com"
     assert body["user"]["username"] == "PlayerOne"
     assert body["user"]["description"] == ""
     assert body["user"]["is_email_verified"] is False
     assert body["user"]["created_at"]
-    assert body["verification_token"]
-    assert body["verification_token"] in body["verification_url"]
 
     user = sqlite_database_dependency.query(User).one()
     assert user.email == "player@example.com"
@@ -394,9 +392,7 @@ def test_register_user_sends_verification_email_when_email_delivery_is_configure
     )
 
     assert response.status_code == 201
-    body = response.json()
-    assert body["verification_token"] is None
-    assert body["verification_url"] is None
+    assert set(response.json().keys()) == {"user"}
     token = sqlite_database_dependency.query(AuthToken).one()
     assert sent_messages == [
         {
@@ -405,6 +401,163 @@ def test_register_user_sends_verification_email_when_email_delivery_is_configure
             "verification_url": f"https://arena.example.com/verify-email?token={token.token}",
         }
     ]
+
+
+def test_register_user_skips_verification_email_for_addresses_starting_with_a(
+    monkeypatch,
+    sqlite_database_dependency,
+):
+    sent_messages = []
+
+    def fake_send_verification_email(**message):
+        sent_messages.append(message)
+
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    monkeypatch.setenv("EMAIL_FROM", "AhinArena <noreply@example.com>")
+    monkeypatch.setattr(api_main, "send_verification_email", fake_send_verification_email)
+
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "aaa@gmail.com",
+            "username": "PlayerOne",
+            "password": "Super-secret1",
+        },
+    )
+
+    assert response.status_code == 201
+    assert set(response.json().keys()) == {"user"}
+    token = sqlite_database_dependency.query(AuthToken).one()
+    assert token.purpose == "email_verification"
+    assert token.used_at is None
+    assert sent_messages == []
+
+
+def test_resend_verification_email_reissues_token(sqlite_database_dependency):
+    register_response = client.post(
+        "/auth/register",
+        json={
+            "email": "Player@Example.com",
+            "username": "PlayerOne",
+            "password": "Super-secret1",
+        },
+    )
+    original_token = sqlite_database_dependency.query(AuthToken).one().token
+
+    response = client.post(
+        "/auth/verify-email/resend",
+        json={"email": "Player@Example.com"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {}
+
+    tokens = sqlite_database_dependency.query(AuthToken).order_by(AuthToken.id).all()
+    assert len(tokens) == 2
+    assert tokens[0].used_at is not None
+    assert tokens[1].used_at is None
+    assert tokens[1].token != original_token
+
+
+def test_resend_verification_email_sends_email_when_delivery_is_configured(
+    monkeypatch,
+    sqlite_database_dependency,
+):
+    sent_messages = []
+
+    def fake_send_verification_email(**message):
+        sent_messages.append(message)
+
+    register_response = client.post(
+        "/auth/register",
+        json={
+            "email": "Player@Example.com",
+            "username": "PlayerOne",
+            "password": "Super-secret1",
+        },
+    )
+    assert register_response.status_code == 201
+
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    monkeypatch.setenv("EMAIL_FROM", "AhinArena <noreply@example.com>")
+    monkeypatch.setenv("FRONTEND_URL", "https://arena.example.com")
+    monkeypatch.setattr(api_main, "send_verification_email", fake_send_verification_email)
+
+    response = client.post(
+        "/auth/verify-email/resend",
+        json={"email": "Player@Example.com"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {}
+    token = sqlite_database_dependency.query(AuthToken).order_by(AuthToken.id.desc()).first()
+    assert sent_messages == [
+        {
+            "to": "player@example.com",
+            "username": "PlayerOne",
+            "verification_url": f"https://arena.example.com/verify-email?token={token.token}",
+        }
+    ]
+
+
+def test_resend_verification_email_skips_email_for_addresses_starting_with_a(
+    monkeypatch,
+    sqlite_database_dependency,
+):
+    sent_messages = []
+
+    def fake_send_verification_email(**message):
+        sent_messages.append(message)
+
+    register_response = client.post(
+        "/auth/register",
+        json={
+            "email": "aaa@gmail.com",
+            "username": "PlayerOne",
+            "password": "Super-secret1",
+        },
+    )
+    assert register_response.status_code == 201
+
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    monkeypatch.setenv("EMAIL_FROM", "AhinArena <noreply@example.com>")
+    monkeypatch.setattr(api_main, "send_verification_email", fake_send_verification_email)
+
+    response = client.post(
+        "/auth/verify-email/resend",
+        json={"email": "aaa@gmail.com"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {}
+    tokens = sqlite_database_dependency.query(AuthToken).order_by(AuthToken.id).all()
+    assert len(tokens) == 2
+    assert tokens[0].used_at is not None
+    assert tokens[1].used_at is None
+    assert sent_messages == []
+
+
+def test_resend_verification_email_is_noop_for_verified_user(sqlite_database_dependency):
+    register_response = client.post(
+        "/auth/register",
+        json={
+            "email": "Player@Example.com",
+            "username": "PlayerOne",
+            "password": "Super-secret1",
+        },
+    )
+    token = sqlite_database_dependency.query(AuthToken).one().token
+    verify_response = client.post("/auth/verify-email", json={"token": token})
+    assert verify_response.status_code == 200
+
+    response = client.post(
+        "/auth/verify-email/resend",
+        json={"email": "Player@Example.com"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {}
+    assert sqlite_database_dependency.query(AuthToken).count() == 1
 
 
 def test_register_user_returns_422_for_weak_password(sqlite_database_dependency):
@@ -691,7 +844,7 @@ def test_verify_email_marks_user_verified(sqlite_database_dependency):
             "password": "Strong-pass1",
         },
     )
-    token = response.json()["verification_token"]
+    token = sqlite_database_dependency.query(AuthToken).one().token
 
     verify_response = client.post("/auth/verify-email", json={"token": token})
 
