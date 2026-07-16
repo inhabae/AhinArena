@@ -16,7 +16,17 @@ from api.email_delivery import (
     send_verification_email,
 )
 from api.featured_games import select_featured_match_jobs
-from api.models import AuthToken, Bot, BotSubmission, Match, MatchJob, Move, Session as AuthSession, User
+from api.models import (
+    AuthRateLimitEvent,
+    AuthToken,
+    Bot,
+    BotSubmission,
+    Match,
+    MatchJob,
+    Move,
+    Session as AuthSession,
+    User,
+)
 from api.match_execution import (
     DEFAULT_BOT_MOVE_TIMEOUT_SECONDS,
     DEFAULT_BOT_STARTUP_TIMEOUT_SECONDS,
@@ -27,10 +37,10 @@ from api.match_execution import (
 from api.match_execution import score_for_bot_one_or_error as _score_for_bot_one_or_error
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import or_, text
+from sqlalchemy import func, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -93,6 +103,24 @@ EMAIL_VERIFICATION_TTL = timedelta(days=2)
 PASSWORD_RESET_TTL = timedelta(hours=1)
 AUTH_TOKEN_BYTES = 32
 MAX_BOT_SUBMISSION_SOURCE_BYTES = 100_000
+AUTH_RATE_LIMITS = {
+    "register": {
+        "account": (5, timedelta(hours=1)),
+        "ip": (10, timedelta(hours=1)),
+    },
+    "login": {
+        "account": (5, timedelta(minutes=15)),
+        "ip": (30, timedelta(minutes=15)),
+    },
+    "password_reset": {
+        "account": (5, timedelta(hours=1)),
+        "ip": (20, timedelta(hours=1)),
+    },
+    "verification_resend_daily": {
+        "account": (3, timedelta(days=1)),
+        "ip": (20, timedelta(days=1)),
+    },
+}
 
 DEFAULT_BOT_SOURCE_PATHS = {
     "tictactoe": Path(__file__).resolve().parent.parent / "engine" / "tictactoe" / "random_bot.py",
@@ -235,6 +263,54 @@ def unauthorized():
 
 def invalid_credentials():
     api_error(401, "invalid_credentials", "Invalid credentials.")
+
+
+def client_rate_limit_key(request: Request) -> str:
+    if request.client is None or request.client.host is None:
+        return "unknown"
+
+    return request.client.host
+
+
+def require_auth_rate_limit(
+    db: Session,
+    *,
+    action: str,
+    account_key: str,
+    ip_key: str,
+) -> None:
+    now = datetime.now(timezone.utc)
+    longest_window = max(window for limits in AUTH_RATE_LIMITS.values() for _, window in limits.values())
+    db.query(AuthRateLimitEvent).filter(
+        AuthRateLimitEvent.created_at < now - longest_window
+    ).delete(synchronize_session=False)
+
+    for scope, key in (("account", account_key.strip().lower()), ("ip", ip_key.strip())):
+        limit, window = AUTH_RATE_LIMITS[action][scope]
+        bucket = f"{action}:{scope}"
+        window_start = now - window
+        attempts = (
+            db.query(func.count(AuthRateLimitEvent.id))
+            .filter(
+                AuthRateLimitEvent.bucket == bucket,
+                AuthRateLimitEvent.key == key,
+                AuthRateLimitEvent.created_at >= window_start,
+            )
+            .scalar()
+        )
+
+        if attempts >= limit:
+            db.rollback()
+            api_error(
+                429,
+                "rate_limited",
+                "Too many requests. Please try again later.",
+            )
+
+    for scope, key in (("account", account_key.strip().lower()), ("ip", ip_key.strip())):
+        db.add(AuthRateLimitEvent(bucket=f"{action}:{scope}", key=key))
+
+    db.commit()
 
 
 def get_current_user(
@@ -539,12 +615,23 @@ def health_check():
     status_code=status.HTTP_201_CREATED,
     response_model=UserRegisterResponse,
 )
-def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
-    normalized_email = request.email.strip().lower()
-    username = request.username.strip()
+def register_user(
+    register_request: UserRegisterRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    normalized_email = register_request.email.strip().lower()
+    username = register_request.username.strip()
 
     if not username:
         api_error(422, "validation_error", "Username is required.")
+
+    require_auth_rate_limit(
+        db,
+        action="register",
+        account_key=normalized_email,
+        ip_key=client_rate_limit_key(request),
+    )
 
     existing_user = (
         db.query(User)
@@ -569,7 +656,7 @@ def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
     user = User(
         email=normalized_email,
         username=username,
-        password_hash=hash_password(request.password),
+        password_hash=hash_password(register_request.password),
     )
     db.add(user)
 
@@ -625,10 +712,18 @@ def verify_email(request: EmailVerificationRequest, db: Session = Depends(get_db
 
 @app.post("/auth/verify-email/resend", response_model=EmailVerificationResendResponse)
 def resend_verification_email(
-    request: EmailVerificationResendRequest,
+    resend_request: EmailVerificationResendRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.email == request.email).first()
+    require_auth_rate_limit(
+        db,
+        action="verification_resend_daily",
+        account_key=resend_request.email,
+        ip_key=client_rate_limit_key(request),
+    )
+
+    user = db.query(User).filter(User.email == resend_request.email).first()
     if user is None or user.is_email_verified:
         return EmailVerificationResendResponse()
 
@@ -670,8 +765,19 @@ def resend_verification_email(
 
 
 @app.post("/auth/password-reset", response_model=PasswordResetResponse)
-def request_password_reset(request: PasswordResetRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == request.email).first()
+def request_password_reset(
+    reset_request: PasswordResetRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_auth_rate_limit(
+        db,
+        action="password_reset",
+        account_key=reset_request.email,
+        ip_key=client_rate_limit_key(request),
+    )
+
+    user = db.query(User).filter(User.email == reset_request.email).first()
     if user is None:
         return PasswordResetResponse()
 
@@ -742,20 +848,28 @@ def confirm_password_reset(
     response_model=UserPublic,
 )
 def login_user(
-    request: UserLoginRequest,
+    login_request: UserLoginRequest,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ):
-    login_identifier = request.login if request.login is not None else request.email
+    login_identifier = login_request.login if login_request.login is not None else login_request.email
     login_identifier = login_identifier.strip()
     normalized_email = login_identifier.lower()
+    require_auth_rate_limit(
+        db,
+        action="login",
+        account_key=normalized_email,
+        ip_key=client_rate_limit_key(request),
+    )
+
     user = (
         db.query(User)
         .filter(or_(User.email == normalized_email, User.username == login_identifier))
         .first()
     )
 
-    if user is None or not verify_password(request.password, user.password_hash):
+    if user is None or not verify_password(login_request.password, user.password_hash):
         invalid_credentials()
 
     if not user.is_email_verified:
