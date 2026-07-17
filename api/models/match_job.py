@@ -12,6 +12,7 @@ class MatchJob(Base):
     game_id = Column(String, nullable=False)
     bot_one_id = Column(Integer, ForeignKey("bots.id"), nullable=False)
     bot_two_id = Column(Integer, ForeignKey("bots.id"), nullable=False)
+    requester_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     status = Column(String, nullable=False, default="queued", server_default="queued")
     match_id = Column(Integer, ForeignKey("matches.id"), nullable=True)
     attempts = Column(Integer, nullable=False, default=0, server_default="0")
@@ -23,6 +24,7 @@ class MatchJob(Base):
 
     bot_one = relationship("Bot", foreign_keys=[bot_one_id])
     bot_two = relationship("Bot", foreign_keys=[bot_two_id])
+    requester = relationship("User")
     match = relationship("Match")
     moves = relationship(
         "MatchJobMove",

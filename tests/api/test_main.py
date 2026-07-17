@@ -2012,6 +2012,35 @@ def test_create_bot_sets_owner_to_authenticated_user(sqlite_database_dependency)
     assert bot.active_submission_id is not None
 
 
+def test_create_bot_rejects_user_over_bot_limit(
+    sqlite_database_dependency,
+    monkeypatch,
+):
+    user = login_user(sqlite_database_dependency)
+    monkeypatch.setenv(api_main.MAX_BOTS_PER_USER_ENV_VAR, "1")
+    existing_bot = seed_bot(sqlite_database_dependency, name="existing", game_id="tictactoe")
+    existing_bot.owner_id = user.id
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        "/bots",
+        json={
+            "game_id": "tictactoe",
+            "name": "custom",
+            "source_code": valid_bot_source(),
+        },
+    )
+
+    assert response.status_code == 429
+    assert response.json() == {
+        "error": {
+            "code": "bot_limit_exceeded",
+            "message": "User bot limit exceeded. Maximum allowed bots: 1.",
+        }
+    }
+    assert sqlite_database_dependency.query(Bot).count() == 1
+
+
 def test_create_bot_rejects_invalid_python_without_creating_bot(
     sqlite_database_dependency,
 ):
@@ -2411,9 +2440,61 @@ def test_create_match_enqueues_match_job(
     assert job.game_id == "tictactoe"
     assert job.bot_one.name == "randombot1"
     assert job.bot_two.name == "randombot2"
+    assert job.requester_user_id == 1
     assert job.status == "queued"
     assert job.match_id is None
     assert sqlite_database_dependency.query(Match).count() == 0
+
+
+def test_create_match_rejects_user_over_active_job_limit(
+    sqlite_database_dependency,
+    monkeypatch,
+):
+    authenticate_request_dependency()
+    monkeypatch.setenv(api_main.MAX_ACTIVE_MATCH_JOBS_PER_USER_ENV_VAR, "2")
+    bot_one = seed_bot(sqlite_database_dependency, name="randombot1")
+    bot_two = seed_bot(sqlite_database_dependency, name="randombot2")
+    queued = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        requester_user_id=1,
+        status="queued",
+    )
+    running = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        requester_user_id=1,
+        status="running",
+    )
+    completed = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        requester_user_id=1,
+        status="completed",
+    )
+    other_user = MatchJob(
+        game_id="tictactoe",
+        bot_one_id=bot_one.id,
+        bot_two_id=bot_two.id,
+        requester_user_id=2,
+        status="queued",
+    )
+    sqlite_database_dependency.add_all([queued, running, completed, other_user])
+    sqlite_database_dependency.commit()
+
+    response = client.post("/matches", json=valid_match_request())
+
+    assert response.status_code == 429
+    assert response.json() == {
+        "error": {
+            "code": "match_job_limit_exceeded",
+            "message": "Limit reached (2 active matches). Finish one to continue.",
+        }
+    }
+    assert sqlite_database_dependency.query(MatchJob).count() == 4
 
 
 def test_get_match_job_returns_queued_job(sqlite_database_dependency):
