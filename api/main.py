@@ -104,6 +104,10 @@ EMAIL_VERIFICATION_TTL = timedelta(days=2)
 PASSWORD_RESET_TTL = timedelta(hours=1)
 AUTH_TOKEN_BYTES = 32
 MAX_BOT_SUBMISSION_SOURCE_BYTES = 100_000
+MAX_BOTS_PER_USER_ENV_VAR = "MAX_BOTS_PER_USER"
+MAX_ACTIVE_MATCH_JOBS_PER_USER_ENV_VAR = "MAX_ACTIVE_MATCH_JOBS_PER_USER"
+DEFAULT_MAX_BOTS_PER_USER = 25
+DEFAULT_MAX_ACTIVE_MATCH_JOBS_PER_USER = 10
 DEPLOY_ENVIRONMENT_ENV_VAR = "DEPLOY_ENVIRONMENT"
 LEGACY_DEPLOY_ENVIRONMENT_ENV_VARS = ("ENVIRONMENT", "APP_ENV", "FASTAPI_ENV")
 REQUIRE_SECURE_COOKIES_ENV_VAR = "REQUIRE_SECURE_COOKIES"
@@ -237,6 +241,35 @@ def get_deploy_environment() -> str:
             return environment
 
     return "development"
+
+
+def get_positive_int_env(env_var: str, default: int) -> int:
+    raw_value = os.environ.get(env_var, "").strip()
+    if not raw_value:
+        return default
+
+    try:
+        value = int(raw_value)
+    except ValueError:
+        logger.warning("%s=%r is invalid; using default %s.", env_var, raw_value, default)
+        return default
+
+    if value < 1:
+        logger.warning("%s=%r must be at least 1; using default %s.", env_var, raw_value, default)
+        return default
+
+    return value
+
+
+def get_max_bots_per_user() -> int:
+    return get_positive_int_env(MAX_BOTS_PER_USER_ENV_VAR, DEFAULT_MAX_BOTS_PER_USER)
+
+
+def get_max_active_match_jobs_per_user() -> int:
+    return get_positive_int_env(
+        MAX_ACTIVE_MATCH_JOBS_PER_USER_ENV_VAR,
+        DEFAULT_MAX_ACTIVE_MATCH_JOBS_PER_USER,
+    )
 
 
 def should_secure_auth_cookie() -> bool:
@@ -999,6 +1032,35 @@ def bot_name_taken():
     api_error(409, "bot_name_taken", "Bot name is already taken for this game.")
 
 
+def enforce_user_bot_limit(db: Session, *, user_id: int) -> None:
+    max_bots = get_max_bots_per_user()
+    bot_count = db.query(func.count(Bot.id)).filter(Bot.owner_id == user_id).scalar()
+    if bot_count >= max_bots:
+        api_error(
+            429,
+            "bot_limit_exceeded",
+            f"User bot limit exceeded. Maximum allowed bots: {max_bots}.",
+        )
+
+
+def enforce_user_active_match_job_limit(db: Session, *, user_id: int) -> None:
+    max_jobs = get_max_active_match_jobs_per_user()
+    active_job_count = (
+        db.query(func.count(MatchJob.id))
+        .filter(
+            MatchJob.requester_user_id == user_id,
+            MatchJob.status.in_(("queued", "running")),
+        )
+        .scalar()
+    )
+    if active_job_count >= max_jobs:
+        api_error(
+            429,
+            "match_job_limit_exceeded",
+            f"Limit reached ({max_jobs} active matches). Finish one to continue.",
+        )
+
+
 def validate_python_submission_source(source_code: str) -> None:
     if not source_code.strip():
         api_error(422, "validation_error", "Source code is required.")
@@ -1031,6 +1093,8 @@ def create_bot(
     bot_name = request.name.strip()
 
     validate_python_submission_source(request.source_code)
+
+    enforce_user_bot_limit(db, user_id=current_user.id)
 
     existing_bot = (
         db.query(Bot)
@@ -1201,8 +1265,10 @@ def create_match(
         game_id=request.game,
         bot_one_id=bot_one.id,
         bot_two_id=bot_two.id,
+        requester_user_id=current_user.id,
         status="queued",
     )
+    enforce_user_active_match_job_limit(db, user_id=current_user.id)
     db.add(job)
     db.commit()
     db.refresh(job)
