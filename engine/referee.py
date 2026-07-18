@@ -139,10 +139,19 @@ class Referee:
                 f"Missing bot commands for players: {sorted(missing_players)}"
             )
 
-        self.bot_processes = {
-            player: BotProcess(player_commands[player], timeout, startup_timeout)
-            for player in self.player_ids
-        }
+        self.bot_processes = {}
+        try:
+            for player in self.player_ids:
+                self.bot_processes[player] = BotProcess(
+                    player_commands[player], timeout, startup_timeout
+                )
+        except Exception:
+            for bot_process in self.bot_processes.values():
+                try:
+                    bot_process.close()
+                except Exception:
+                    pass
+            raise
         self.on_move = on_move
 
     def run_match(self):

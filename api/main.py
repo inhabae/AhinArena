@@ -435,47 +435,58 @@ def seed_default_bots(db: Session) -> None:
     artifact_dir_value = os.environ.get(DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR, "").strip()
     artifact_dir = Path(artifact_dir_value) if artifact_dir_value else None
 
-    for game_id in SUPPORTED_GAMES:
-        existing_bots = {
-            bot.name: bot
-            for bot in (
-                db.query(Bot)
-                .filter(Bot.game_id == game_id, Bot.name.in_(DEFAULT_BOT_NAMES))
-                .all()
-            )
-        }
-
-        for bot_name in DEFAULT_BOT_NAMES:
-            bot = existing_bots.get(bot_name)
-            if bot is None:
-                bot = Bot(name=bot_name, game_id=game_id, owner_id=None)
-                db.add(bot)
-                db.flush()
-
-            if bot.active_submission_id is None:
-                artifact_path = artifact_dir / game_id if artifact_dir is not None else None
-                if artifact_path is None or not artifact_path.is_file():
-                    logger.warning(
-                        "Built-in bot executable is unavailable for %s; system bots remain inactive",
-                        game_id,
-                    )
-                    continue
-                artifact = artifact_path.read_bytes()
-                validate_bot_executable(artifact)
-                submission = BotSubmission(
-                    bot_id=bot.id,
-                    version=bot.latest_submission_version + 1,
-                    executable=artifact,
-                    executable_size=len(artifact),
-                    executable_digest=hashlib.sha256(artifact).hexdigest(),
-                    original_filename=game_id,
+    try:
+        for game_id in SUPPORTED_GAMES:
+            existing_bots = {
+                bot.name: bot
+                for bot in (
+                    db.query(Bot)
+                    .filter(Bot.game_id == game_id, Bot.name.in_(DEFAULT_BOT_NAMES))
+                    .all()
                 )
-                db.add(submission)
-                db.flush()
-                bot.active_submission_id = submission.id
-                bot.latest_submission_version = submission.version
+            }
 
-    db.commit()
+            for bot_name in DEFAULT_BOT_NAMES:
+                bot = existing_bots.get(bot_name)
+                if bot is None:
+                    bot = Bot(name=bot_name, game_id=game_id, owner_id=None)
+                    db.add(bot)
+                    db.flush()
+
+                if bot.active_submission_id is None:
+                    artifact_path = artifact_dir / game_id if artifact_dir is not None else None
+                    if artifact_path is None or not artifact_path.is_file():
+                        logger.warning(
+                            "Built-in bot executable is unavailable for %s; system bots remain inactive",
+                            game_id,
+                        )
+                        continue
+                    artifact = artifact_path.read_bytes()
+                    try:
+                        validate_bot_executable(artifact)
+                    except HTTPException as exc:
+                        detail = exc.detail
+                        message = detail.get("message", str(detail)) if isinstance(detail, dict) else str(detail)
+                        raise RuntimeError(
+                            f"Built-in bot executable for {game_id} is invalid: {message}"
+                        ) from exc
+                    submission = BotSubmission(
+                        bot_id=bot.id,
+                        version=bot.latest_submission_version + 1,
+                        executable=artifact,
+                        executable_size=len(artifact),
+                        executable_digest=hashlib.sha256(artifact).hexdigest(),
+                        original_filename=game_id,
+                    )
+                    db.add(submission)
+                    db.flush()
+                    bot.active_submission_id = submission.id
+                    bot.latest_submission_version = submission.version
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
 def serialize_match_summary(match: Match) -> MatchSummary:
@@ -1174,9 +1185,9 @@ def create_bot(
         api_error(422, "validation_error", "Bot name must be 3-32 characters.")
     if not bot_name.isascii() or not BOT_NAME_PATTERN.fullmatch(bot_name):
         api_error(422, "validation_error", "Bot name contains unsupported characters.")
-    executable_bytes, digest, filename = read_bot_executable(executable)
-
     enforce_user_bot_limit(db, user_id=current_user.id)
+
+    executable_bytes, digest, filename = read_bot_executable(executable)
 
     existing_bot = (
         db.query(Bot)

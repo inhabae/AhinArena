@@ -2034,6 +2034,40 @@ def test_create_bot_rejects_user_over_bot_limit(
     assert sqlite_database_dependency.query(Bot).count() == 1
 
 
+def test_create_bot_checks_user_limit_before_reading_the_executable(
+    sqlite_database_dependency,
+    monkeypatch,
+):
+    user = login_user(sqlite_database_dependency)
+    monkeypatch.setenv(api_main.MAX_BOTS_PER_USER_ENV_VAR, "1")
+    existing_bot = seed_bot(sqlite_database_dependency, name="existing", game_id="tictactoe")
+    existing_bot.owner_id = user.id
+    sqlite_database_dependency.commit()
+
+    def fail_if_called(_upload):
+        raise AssertionError("executable should not be read when the bot limit is reached")
+
+    monkeypatch.setattr(api_main, "read_bot_executable", fail_if_called)
+
+    response = client.post("/bots", **bot_multipart())
+
+    assert response.status_code == 429
+
+
+def test_seed_default_bots_reports_invalid_artifacts_as_startup_errors(
+    sqlite_database_dependency,
+    tmp_path,
+    monkeypatch,
+):
+    (tmp_path / "tictactoe").write_bytes(b"not an ELF")
+    monkeypatch.setenv(api_main.DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR, str(tmp_path))
+
+    with pytest.raises(RuntimeError, match="Built-in bot executable for tictactoe is invalid"):
+        api_main.seed_default_bots(sqlite_database_dependency)
+
+    assert sqlite_database_dependency.query(Bot).count() == 0
+
+
 @pytest.mark.skip(reason="source submissions were removed")
 def test_create_bot_rejects_invalid_python_without_creating_bot(
     sqlite_database_dependency,
