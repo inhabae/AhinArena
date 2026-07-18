@@ -138,11 +138,13 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR = "DEFAULT_BOT_EXECUTABLE_DIR"
 SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
+# This cannot be a username because usernames may not contain spaces.
+BUILT_IN_BOT_OWNER_NAME = "Built-in bot"
 
 
 def get_bot_owner_name(bot: Bot) -> str:
     if bot.owner is None:
-        return "System"
+        return BUILT_IN_BOT_OWNER_NAME
 
     return bot.owner.username
 

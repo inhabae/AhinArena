@@ -261,6 +261,8 @@ class LeaderboardEntry(BaseModel):
 class BotSummary(BaseModel):
     bot_id: int
     name: str
+    # List responses use null for ownerless bots so clients can distinguish
+    # ownership data from the display-only built-in-bot label used elsewhere.
     owner_name: str | None
     has_active_submission: bool
 
