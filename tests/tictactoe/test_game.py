@@ -60,3 +60,10 @@ def test_game_over_after_winner():
 
     assert game.board.winner() == "X"
     assert game.board.is_game_over() is True
+
+
+def test_parse_move_rejects_boolean_coordinates():
+    game = Game()
+
+    assert game.parse_move({"row": True, "col": 1}) is None
+    assert game.parse_move({"row": 1, "col": False}) is None

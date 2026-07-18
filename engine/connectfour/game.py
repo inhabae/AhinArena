@@ -111,7 +111,7 @@ class Game:
 
         column = response.get("col")
 
-        if not isinstance(column, int):
+        if not isinstance(column, int) or isinstance(column, bool):
             return None
 
         return column
