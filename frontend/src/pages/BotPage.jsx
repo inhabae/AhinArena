@@ -14,6 +14,7 @@ import { useAuth } from "../useAuth";
 import { formatPercent, getWinRate } from "./PlayerPage";
 
 const pageSize = 10;
+const BUILT_IN_BOT_OWNER_NAME = "Built-in bot";
 
 function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, {
@@ -238,8 +239,8 @@ export default function BotPage() {
           <span>
             Owner{" "}
             <strong>
-              {bot.owner_name === "System" ? (
-                "System"
+              {bot.owner_name === BUILT_IN_BOT_OWNER_NAME ? (
+                BUILT_IN_BOT_OWNER_NAME
               ) : (
                 <Link to={`/players/${encodeURIComponent(bot.owner_name)}`}>
                   {bot.owner_name}

@@ -1581,7 +1581,7 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
         {
             "bot_id": high.id,
             "name": "high",
-            "owner_name": "System",
+            "owner_name": api_main.BUILT_IN_BOT_OWNER_NAME,
             "rating": 1500,
             "games_played": 4,
             "wins": 3,
@@ -1591,7 +1591,7 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
         {
             "bot_id": no_games.id,
             "name": "new",
-            "owner_name": "System",
+            "owner_name": api_main.BUILT_IN_BOT_OWNER_NAME,
             "rating": 1200,
             "games_played": 0,
             "wins": 0,
@@ -1601,7 +1601,7 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
         {
             "bot_id": low.id,
             "name": "low",
-            "owner_name": "System",
+            "owner_name": api_main.BUILT_IN_BOT_OWNER_NAME,
             "rating": 1100,
             "games_played": 3,
             "wins": 1,
@@ -1625,7 +1625,7 @@ def test_leaderboard_uses_stable_tie_breaker(sqlite_database_dependency):
 
 def test_leaderboard_returns_user_and_system_bot_owners(sqlite_database_dependency):
     user = User(
-        username="owner",
+        username="System",
         email="owner@example.com",
         password_hash=hash_password("password"),
     )
@@ -1648,8 +1648,8 @@ def test_leaderboard_returns_user_and_system_bot_owners(sqlite_database_dependen
         (bot["name"], bot["owner_name"])
         for bot in response.json()
     ] == [
-        ("system", "System"),
-        ("owned", "owner"),
+        ("system", api_main.BUILT_IN_BOT_OWNER_NAME),
+        ("owned", "System"),
     ]
 
 
@@ -1669,7 +1669,7 @@ def test_leaderboard_paginates_results(sqlite_database_dependency):
         {
             "bot_id": bots[1].id,
             "name": "second",
-            "owner_name": "System",
+            "owner_name": api_main.BUILT_IN_BOT_OWNER_NAME,
             "rating": 1400,
             "games_played": 0,
             "wins": 0,
@@ -1807,7 +1807,7 @@ def test_get_bot_returns_system_owner_for_default_bot(sqlite_database_dependency
     response = client.get(f"/bots/{bot.id}")
 
     assert response.status_code == 200
-    assert response.json()["owner_name"] == "System"
+    assert response.json()["owner_name"] == api_main.BUILT_IN_BOT_OWNER_NAME
 
 
 def test_get_bot_returns_not_found(sqlite_database_dependency):
