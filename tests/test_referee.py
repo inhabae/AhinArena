@@ -1,6 +1,8 @@
 import json
 import sys
 
+import engine.referee as referee_module
+import pytest
 from engine.referee import Referee
 from engine.tictactoe import Game as TicTacToeGame
 
@@ -324,6 +326,28 @@ def test_referee_handles_partial_line_bot_timeout():
     assert result["winner"] == "O"
     assert result["reason"] == "timeout"
     assert result["player"] == "X"
+
+
+def test_referee_closes_started_bots_when_later_bot_startup_fails(monkeypatch):
+    started_bots = []
+
+    class FakeBotProcess:
+        def __init__(self, command, *_args):
+            if command == "fail":
+                raise OSError("could not start bot")
+            self.closed = False
+            started_bots.append(self)
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(referee_module, "BotProcess", FakeBotProcess)
+
+    with pytest.raises(OSError, match="could not start bot"):
+        Referee({"X": "start", "O": "fail"}, TicTacToeGame())
+
+    assert len(started_bots) == 1
+    assert started_bots[0].closed is True
 
 
 def column_bot_command(columns):
