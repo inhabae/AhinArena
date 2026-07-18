@@ -59,19 +59,9 @@ See `docs/roadmap.md` for more details.
 
 ## Local Matches
 
-Run a local Tic-Tac-Toe match between the built-in random bots:
-
-```sh
-python3 scripts/run_local_tictactoe.py --timeout 1.0
-```
-
-Run a local Connect Four match between the built-in random bots:
-
-```sh
-python3 scripts/run_local_connect_four.py --timeout 1.0
-```
-
-Both local runners print each move, the board after that move, and the final match result.
+The website accepts prebuilt static Linux x86-64 executables. It does not compile
+or package player source code; users build their bots with their own toolchain
+and upload the resulting executable.
 
 ---
 

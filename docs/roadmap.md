@@ -162,7 +162,7 @@ Allow developers to upload custom AI agents.
 - Submitted source execution through Docker sandbox commands under the existing
   referee subprocess protocol
 - Match creation rejection for bots without an active submission
-- Default random bot submissions seeded for supported games
+- Deployment-provided executable artifacts seeded for supported games
 - Frontend source-code submission flow on `/bots/new`
 - Bot submission documentation in `docs/bot-submission.md`
 

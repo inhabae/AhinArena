@@ -41,7 +41,7 @@ def test_run_match_translates_player_markers_for_result_and_moves():
 
     result = run_match(
         Game,
-        default_bot_command=[sys.executable, "-m", "engine.tictactoe.random_bot"],
+        default_bot_command=["/unused-default-bot"],
         p1_command=scripted_tictactoe_bot_command([[0, 0], [0, 1], [0, 2]]),
         p2_command=scripted_tictactoe_bot_command([[1, 0], [1, 1]]),
         timeout=1.0,
@@ -65,7 +65,7 @@ def test_run_match_translates_player_markers_for_result_and_moves():
 def test_run_match_accepts_non_python_bot_command_end_to_end():
     result = run_match(
         Game,
-        default_bot_command=[sys.executable, "-m", "engine.tictactoe.random_bot"],
+        default_bot_command=["/unused-default-bot"],
         p1_command=scripted_bash_tictactoe_bot_command([[0, 0], [0, 1], [0, 2]]),
         p2_command=scripted_tictactoe_bot_command([[1, 0], [1, 1]]),
         timeout=1.0,

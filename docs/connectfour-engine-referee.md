@@ -65,13 +65,3 @@ The result includes:
 
 - `winner`: `"X"`, `"O"`, or `null` for a draw.
 - `reason`: `"win"`, `"draw"`, `"invalid_move"`, `"bot_error"`, or `"timeout"`.
-
-## Local Runner
-
-Run a local Connect Four match between the built-in random bots:
-
-```sh
-python3 scripts/run_local_connect_four.py --timeout 1.0
-```
-
-The local runner prints each move, the board after that move, and the final match result.

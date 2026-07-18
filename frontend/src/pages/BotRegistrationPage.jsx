@@ -1,11 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { IconFileCode, IconUpload } from "@tabler/icons-react";
 
 import { createBot } from "../api/client";
 import { defaultGameId, supportedGames } from "../games";
 import { useAuth } from "../useAuth";
 
 const maxExecutableBytes = 10 * 1024 * 1024;
+const rejectedFileExtensions = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "zip", "rar", "7z", "txt",
+]);
 
 function errorMessageFor(error) {
   const messages = {
@@ -34,6 +38,16 @@ function formatBytes(bytes) {
     : `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
+function localFileError(file) {
+  if (!file) return "";
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (extension && rejectedFileExtensions.has(extension)) {
+    return "Choose a Linux executable, not a document, image, archive, or text file.";
+  }
+  if (file.size > maxExecutableBytes) return "The executable must be 10 MiB or smaller.";
+  return "";
+}
+
 export default function BotRegistrationPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -41,18 +55,46 @@ export default function BotRegistrationPage() {
   const [selectedGame, setSelectedGame] = useState(defaultGameId);
   const [name, setName] = useState("");
   const [file, setFile] = useState(null);
+  const [fileError, setFileError] = useState("");
   const [nameTouched, setNameTouched] = useState(false);
+  const fileInputRef = useRef(null);
   const [submitState, setSubmitState] = useState({ loading: false, error: null, botName: "", version: null });
   const nameError = botNameErrorFor(name);
-  const fileError = file?.size > maxExecutableBytes ? "The executable must be 10 MiB or smaller." : "";
 
   useEffect(() => {
     setSelectedGame(defaultGameId);
     setName("");
     setFile(null);
+    setFileError("");
     setNameTouched(false);
     setSubmitState({ loading: false, error: null, botName: "", version: null });
   }, [location.key]);
+
+  async function handleFileChange(event) {
+    const nextFile = event.target.files?.[0] ?? null;
+    const validationError = localFileError(nextFile);
+    if (!nextFile || validationError) {
+      setFile(null);
+      setFileError(validationError);
+      event.target.value = "";
+      return;
+    }
+
+    const header = new Uint8Array(await nextFile.slice(0, 4).arrayBuffer());
+    if (header.length !== 4 || header[0] !== 0x7f || header[1] !== 0x45 || header[2] !== 0x4c || header[3] !== 0x46) {
+      setFile(null);
+      setFileError("Choose a Linux ELF executable. Images, documents, archives, and scripts are not accepted.");
+      event.target.value = "";
+      return;
+    }
+
+    setFile(nextFile);
+    setFileError("");
+  }
+
+  function openFilePicker() {
+    fileInputRef.current?.click();
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -90,11 +132,34 @@ export default function BotRegistrationPage() {
           <label><span>Bot name</span><input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => setNameTouched(true)} />
             {nameTouched && nameError && <span className="field-error">{nameError}</span>}
           </label>
-          <label><span>Player executable</span><input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required />
-            {file && !fileError && <span>{file.name} ({formatBytes(file.size)})</span>}
-            {fileError && <span className="field-error">{fileError}</span>}
-          </label>
-          <p>Maximum 10 MiB. The executable must communicate using the documented JSON-lines protocol.</p>
+          <div className="executable-field">
+            <span className="executable-label">Player executable</span>
+            <input
+              ref={fileInputRef}
+              className="visually-hidden-file-input"
+              type="file"
+              onChange={handleFileChange}
+              aria-describedby="executable-help executable-error"
+              required
+            />
+            <button className="executable-picker" type="button" onClick={openFilePicker}>
+              <span className="executable-picker-icon"><IconUpload size={18} /></span>
+              <span className="executable-picker-copy">
+                <strong>{file ? "Replace executable" : "Choose executable"}</strong>
+                <small>Static Linux x86-64 ELF · max 10 MiB</small>
+              </span>
+              <span className="executable-picker-action">Browse</span>
+            </button>
+            {file && !fileError && (
+              <div className="selected-executable">
+                <IconFileCode size={18} aria-hidden="true" />
+                <span>{file.name}</span>
+                <small>{formatBytes(file.size)}</small>
+              </div>
+            )}
+            <span id="executable-help" className="field-help">No scripts, images, documents, or archives.</span>
+            {fileError && <span id="executable-error" className="field-error">{fileError}</span>}
+          </div>
           {submitState.version && <p className="inline-success" role="status">{submitState.botName} is registered with executable version {submitState.version}.</p>}
           {submitState.error && <p className="error" role="alert">{errorMessageFor(submitState.error)}</p>}
           <button type="submit" disabled={submitState.loading || !file || Boolean(fileError)}>{submitState.loading ? "Registering..." : "Register bot"}</button>

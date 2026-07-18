@@ -137,7 +137,6 @@ AUTH_RATE_LIMITS = {
 logger = logging.getLogger(__name__)
 
 DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR = "DEFAULT_BOT_EXECUTABLE_DIR"
-DEFAULT_BOT_EXECUTABLE_DIR = Path(__file__).resolve().parent.parent / "build" / "default-bots"
 SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
 
@@ -434,7 +433,7 @@ def get_current_user(
 
 def seed_default_bots(db: Session) -> None:
     artifact_dir_value = os.environ.get(DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR, "").strip()
-    artifact_dir = Path(artifact_dir_value) if artifact_dir_value else DEFAULT_BOT_EXECUTABLE_DIR
+    artifact_dir = Path(artifact_dir_value) if artifact_dir_value else None
 
     for game_id in SUPPORTED_GAMES:
         existing_bots = {
@@ -454,8 +453,8 @@ def seed_default_bots(db: Session) -> None:
                 db.flush()
 
             if bot.active_submission_id is None:
-                artifact_path = artifact_dir / game_id
-                if not artifact_path.is_file():
+                artifact_path = artifact_dir / game_id if artifact_dir is not None else None
+                if artifact_path is None or not artifact_path.is_file():
                     logger.warning(
                         "Built-in bot executable is unavailable for %s; system bots remain inactive",
                         game_id,
