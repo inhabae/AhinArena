@@ -791,6 +791,103 @@ select:disabled {
   color: var(--danger);
 }
 
+.executable-field {
+  color: var(--text-primary);
+  display: grid;
+  gap: 8px;
+}
+
+.executable-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.visually-hidden-file-input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.executable-picker {
+  align-items: center;
+  background: var(--surface-subtle);
+  border: 0.5px dashed var(--border-strong);
+  color: var(--text-primary);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto 1fr auto;
+  justify-content: initial;
+  min-height: 76px;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.executable-picker:hover {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+}
+
+.executable-picker-icon {
+  align-items: center;
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  color: var(--accent);
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.executable-picker-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.executable-picker-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.executable-picker-copy small,
+.selected-executable small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.executable-picker-action {
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 6px 9px;
+}
+
+.selected-executable {
+  align-items: center;
+  background: var(--bg-success);
+  border: 0.5px solid color-mix(in srgb, var(--success) 25%, var(--border));
+  border-radius: 6px;
+  color: var(--success);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto 1fr auto;
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.selected-executable > span {
+  color: var(--text-primary);
+  font-family: var(--mono);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .form-footer {
   color: var(--text-muted);
   font-size: 14px;

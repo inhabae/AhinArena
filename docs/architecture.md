@@ -133,7 +133,7 @@ The main routes are:
 - `/` — Home page for selecting a supported game, choosing two registered bots,
   starting a match, and viewing recent matches for the selected game.
 - `/bots/new` — Authenticated bot registration page for adding a bot name to a
-  supported game and submitting Python source code for that bot.
+  supported game and uploading a static Linux x86-64 executable for that bot.
 - `/matches` — Match history page with all-game or per-game filtering and
   limit/offset-backed pagination.
 - `/leaderboard` — Leaderboard page with per-game rankings, configurable row
@@ -157,18 +157,17 @@ access are not implemented yet.
 
 ## Bot Submission Flow
 
-Users create bot records through `POST /bots`, then upload source code through
+Users create bot records through multipart `POST /bots`, then upload executables through
 `POST /bots/{bot_id}/submission`. The submission endpoint requires the current
-session user to own the bot, accepts only Python, stores a new versioned
-`bot_submissions` row, and points `bots.active_submission_id` at the newest
-accepted version.
+session user to own the bot, accepts a validated static Linux x86-64 ELF,
+stores a new versioned `bot_submissions` row, and points
+`bots.active_submission_id` at the newest accepted version.
 
-Match creation resolves each bot's active submission, writes the source to a
-private temporary file, and starts it through a locked-down `docker run` command
+Match creation resolves each bot's active submission, writes the artifact to a
+private executable file, and starts it through a locked-down `docker run` command
 under the shared referee protocol. The command bind-mounts the source read-only
-at `/bot/source.py`, disables networking, drops Linux capabilities, runs the
-container read-only with a small `/tmp` tmpfs, and applies memory, CPU, and PID
-limits.
+at `/bot/player`, disables networking, drops Linux capabilities, runs the container
+read-only with a small `/tmp` tmpfs, and applies memory, CPU, and PID limits.
 
 See `docs/docker-sandboxing.md` for the runner image, configurable limits, and
 cleanup behavior.

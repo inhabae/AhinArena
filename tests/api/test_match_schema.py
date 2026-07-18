@@ -121,6 +121,7 @@ EXPECTED_BOT_COLUMNS = {
     "game_id",
     "owner_id",
     "active_submission_id",
+    "latest_submission_version",
     "rating",
     "games_played",
     "wins",
@@ -133,21 +134,28 @@ EXPECTED_BOT_COLUMNS = {
 EXPECTED_BOT_OWNER_MIGRATION_BOT_COLUMNS = EXPECTED_BOT_COLUMNS - {
     "active_submission_id",
     "description",
+    "latest_submission_version",
 }
 EXPECTED_BOT_SUBMISSIONS_MIGRATION_BOT_COLUMNS = EXPECTED_BOT_COLUMNS - {
     "description",
+    "latest_submission_version",
 }
 
 EXPECTED_BASELINE_BOT_COLUMNS = (EXPECTED_BOT_COLUMNS - {"owner_id"}) | {"created_by"}
-EXPECTED_BASELINE_BOT_COLUMNS -= {"active_submission_id", "description"}
+EXPECTED_BASELINE_BOT_COLUMNS -= {"active_submission_id", "description", "latest_submission_version"}
 
 EXPECTED_BOT_SUBMISSION_COLUMNS = {
     "id",
     "bot_id",
     "version",
-    "language",
-    "source_code",
+    "executable",
+    "executable_size",
+    "executable_digest",
+    "original_filename",
     "created_at",
+}
+EXPECTED_LEGACY_BOT_SUBMISSION_COLUMNS = {
+    "id", "bot_id", "version", "language", "source_code", "created_at"
 }
 
 EXPECTED_USER_COLUMNS = {
@@ -252,8 +260,10 @@ def test_bot_submission_model_declares_expected_columns_and_constraints():
 
     assert BotSubmission.__table__.c.bot_id.nullable is False
     assert BotSubmission.__table__.c.version.nullable is False
-    assert BotSubmission.__table__.c.language.nullable is False
-    assert BotSubmission.__table__.c.source_code.nullable is False
+    assert BotSubmission.__table__.c.executable.nullable is False
+    assert BotSubmission.__table__.c.executable_size.nullable is False
+    assert BotSubmission.__table__.c.executable_digest.nullable is False
+    assert BotSubmission.__table__.c.original_filename.nullable is True
     assert BotSubmission.__table__.c.created_at.nullable is False
     assert {
         foreign_key.target_fullname
@@ -310,14 +320,12 @@ def test_bot_submission_table_rejects_duplicate_bot_versions():
                 BotSubmission(
                     bot_id=bot.id,
                     version=1,
-                    language="python",
-                    source_code="print(1)",
+                    executable=b"one", executable_size=3, executable_digest="1" * 64,
                 ),
                 BotSubmission(
                     bot_id=bot.id,
                     version=1,
-                    language="python",
-                    source_code="print(2)",
+                    executable=b"two", executable_size=3, executable_digest="2" * 64,
                 ),
             ]
         )
@@ -751,7 +759,7 @@ def test_bot_submissions_migration_adds_submissions_and_active_pointer(monkeypat
 
         assert set(bot_columns) == EXPECTED_BOT_SUBMISSIONS_MIGRATION_BOT_COLUMNS
         assert bot_columns["active_submission_id"]["nullable"] is True
-        assert set(submission_columns) == EXPECTED_BOT_SUBMISSION_COLUMNS
+        assert set(submission_columns) == EXPECTED_LEGACY_BOT_SUBMISSION_COLUMNS
         assert submission_columns["bot_id"]["nullable"] is False
         assert submission_columns["version"]["nullable"] is False
         assert submission_columns["language"]["nullable"] is False
@@ -805,7 +813,7 @@ def test_descriptions_migration_adds_user_and_bot_descriptions(monkeypatch):
         assert set(user_columns) == EXPECTED_DESCRIPTIONS_MIGRATION_USER_COLUMNS
         assert user_columns["description"]["nullable"] is False
         assert reflected_default_value(user_columns["description"]) == ""
-        assert set(bot_columns) == EXPECTED_BOT_COLUMNS
+        assert set(bot_columns) == EXPECTED_BOT_COLUMNS - {"latest_submission_version"}
         assert bot_columns["description"]["nullable"] is False
         assert reflected_default_value(bot_columns["description"]) == ""
         assert "ck_users_description_max_length" in {

@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from engine.connectfour.runner import run_connectfour_match
 
 
-DEFAULT_BOT_COMMAND = [sys.executable, "-m", "engine.connectfour.random_bot"]
+DEFAULT_BOT_COMMAND = ["build/default-bots/connect-four"]
 
 
 def format_board(grid):

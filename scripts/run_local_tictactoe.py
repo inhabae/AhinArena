@@ -4,7 +4,7 @@ import sys
 from engine.tictactoe.runner import run_tictactoe_match
 
 
-DEFAULT_BOT_COMMAND = [sys.executable, "-m", "engine.tictactoe.random_bot"]
+DEFAULT_BOT_COMMAND = ["build/default-bots/tictactoe"]
 
 
 def format_board(grid):

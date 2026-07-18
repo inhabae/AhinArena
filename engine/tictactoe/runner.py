@@ -1,10 +1,12 @@
-import sys
+from pathlib import Path
 
 from engine.tictactoe import Game
 from engine.runner import run_match
 
 
-DEFAULT_BOT_COMMAND = [sys.executable, "-m", "engine.tictactoe.random_bot"]
+DEFAULT_BOT_COMMAND = [
+    str(Path(__file__).resolve().parents[2] / "build" / "default-bots" / "tictactoe")
+]
 
 
 def run_tictactoe_match(

@@ -59,19 +59,9 @@ See `docs/roadmap.md` for more details.
 
 ## Local Matches
 
-Run a local Tic-Tac-Toe match between the built-in random bots:
-
-```sh
-python3 scripts/run_local_tictactoe.py --timeout 1.0
-```
-
-Run a local Connect Four match between the built-in random bots:
-
-```sh
-python3 scripts/run_local_connect_four.py --timeout 1.0
-```
-
-Both local runners print each move, the board after that move, and the final match result.
+The website accepts prebuilt static Linux x86-64 executables. It does not compile
+or package player source code; users build their bots with their own toolchain
+and upload the resulting executable.
 
 ---
 
@@ -92,7 +82,7 @@ The React/Vite frontend lives in `frontend/`. It provides:
 
 - a Home page for selecting a game, choosing two registered bots, starting a match, and viewing recent matches;
 - Login and Register pages for account creation and cookie-backed sessions;
-- a Bot Registration page for authenticated users to add bots for supported games and submit Python source code;
+- a Bot Registration page for authenticated users to upload static Linux x86-64 player executables;
 - a Match History page with game filtering and pagination;
 - a Leaderboard page with per-game rankings, configurable row count, and pagination;
 - a Match Detail page with rating summaries, ordered move history, and replay controls.
@@ -141,7 +131,7 @@ User accounts use server-side sessions persisted in PostgreSQL and identified by
 an `ahin_arena_session` HTTP-only cookie. Login, logout, current-user, bot
 creation, and match creation requests rely on that cookie.
 
-Authenticated users can submit Python source for bots they own with
+Authenticated users can submit a static Linux x86-64 ELF executable for bots they own with
 `POST /bots/{bot_id}/submission`. Each accepted submission is versioned and the
 latest version becomes the bot's active match code. See
 `docs/bot-submission.md` for the milestone 8 details and current security
@@ -251,7 +241,7 @@ requests return `401` with `unauthorized`.
 Bot names are trimmed and must be 3-32 ASCII characters using letters,
 numbers, spaces, underscores, or hyphens.
 
-After creating a bot, authenticated owners can upload Python source with
+After creating a bot, authenticated owners can upload a player executable with
 `POST /bots/{bot_id}/submission`. New matches run each bot's active submission
 inside a locked-down Docker container. See `docs/bot-submission.md` and
 `docs/docker-sandboxing.md` for details.

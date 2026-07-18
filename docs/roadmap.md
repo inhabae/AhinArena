@@ -157,12 +157,12 @@ Allow developers to upload custom AI agents.
 - `bots.active_submission_id` pointer for the source used in new matches
 - Authenticated `POST /bots/{bot_id}/submission` endpoint
 - Bot ownership enforcement for source uploads
-- Python-only submission validation for non-empty source, 100 KB maximum size,
-  and parseable syntax
+- Text submission validation for Python, Node.js, and Bash, including non-empty
+  source, 100 KB maximum size, and Python syntax parsing
 - Submitted source execution through Docker sandbox commands under the existing
   referee subprocess protocol
 - Match creation rejection for bots without an active submission
-- Default random bot submissions seeded for supported games
+- Deployment-provided executable artifacts seeded for supported games
 - Frontend source-code submission flow on `/bots/new`
 - Bot submission documentation in `docs/bot-submission.md`
 
@@ -176,9 +176,9 @@ Execute uploaded AI agents securely inside isolated Docker containers.
 
 **Deliverables**
 
-- Dedicated Python bot runner image in `docker/bot_runner/Dockerfile`
+- Dedicated multi-runtime bot runner image in `docker/bot_runner/Dockerfile`
 - Non-root sandbox user inside the runner image
-- Submitted source mounted read-only at `/bot/source.py`
+- Submitted source mounted read-only under `/bot`
 - Per-bot temporary source files created from active submissions
 - Per-bot named containers for match execution
 - Container networking disabled with `--network none`

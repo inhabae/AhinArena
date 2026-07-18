@@ -6,6 +6,7 @@ import time
 from typing import Any, Protocol
 
 PROCESS_EXIT_TIMEOUT = 1.0
+MAX_BOT_STDERR_CHARS = 2048
 
 
 class BotTimeoutError(RuntimeError):
@@ -42,7 +43,11 @@ class BotProcess:
         response = self._read_response_line(response_timeout)
 
         if not response:
-            stderr = self.process.stderr.read()
+            stderr = self.process.stderr.read(MAX_BOT_STDERR_CHARS)
+            stderr = "".join(
+                character if character.isprintable() or character in "\r\n\t" else "?"
+                for character in stderr
+            )
             raise RuntimeError(f"Bot did not return a move. stderr: {stderr}")
 
         self._has_returned_move = True

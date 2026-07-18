@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
 from pathlib import Path
+import struct
 
 import pytest
 from fastapi import HTTPException, Response
@@ -93,6 +95,29 @@ def valid_bot_source():
     return "def choose_move(board):\n    return 0\n"
 
 
+def valid_bot_executable(payload=b"\x90"):
+    import struct
+    data = bytearray(120 + len(payload))
+    data[:16] = b"\x7fELF\x02\x01\x01" + b"\x00" * 9
+    struct.pack_into("<HHIQQQIHHHHHH", data, 16, 2, 62, 1, 0, 64, 0, 0, 64, 56, 1, 0, 0, 0)
+    struct.pack_into("<IIQQQQQQ", data, 64, 1, 5, 0, 0, 0, len(data), len(data), 4096)
+    data[120:] = payload
+    return bytes(data)
+
+
+def bot_multipart(name="custom", game_id="tictactoe", executable=None, filename="player"):
+    return {
+        "data": {"game_id": game_id, "name": name},
+        "files": {
+            "executable": (
+                filename,
+                executable if executable is not None else valid_bot_executable(),
+                "application/octet-stream",
+            )
+        },
+    }
+
+
 def test_score_for_bot_one_or_error_maps_unknown_winner_to_api_error():
     with pytest.raises(HTTPException) as error:
         api_main.score_for_bot_one_or_error(
@@ -114,8 +139,7 @@ def test_build_bot_sandbox_creates_locked_down_docker_command(monkeypatch):
         id=7,
         bot_id=42,
         version=1,
-        language="python",
-        source_code="print('move')\n",
+        executable=valid_bot_executable(), executable_size=len(valid_bot_executable()), executable_digest="0" * 64,
     )
     bot.active_submission_id = submission.id
     bot.active_submission = submission
@@ -144,12 +168,37 @@ def test_build_bot_sandbox_creates_locked_down_docker_command(monkeypatch):
         assert command[command.index("--cpus") + 1] == "0.25"
         assert command[command.index("--pids-limit") + 1] == "32"
         assert command[command.index("--name") + 1] == sandbox.container_name
-        assert command[-1] == "custom-runner:latest"
+        assert command[-2:] == ["custom-runner:latest", "/bot/player"]
         assert command[command.index("--mount") + 1] == (
-            f"type=bind,src={sandbox.source_path},dst=/bot/source.py,readonly"
+            f"type=bind,src={sandbox.source_path},dst=/bot/player,readonly"
         )
         assert sandbox.container_name.startswith("ahinarena-bot-42-")
-        assert sandbox.source_path.read_text(encoding="utf-8") == "print('move')\n"
+        assert sandbox.source_path.read_bytes() == valid_bot_executable()
+    finally:
+        sandbox.cleanup()
+
+
+def test_build_bot_sandbox_uses_fixed_executable_path():
+    bot = Bot(id=42, name="sandboxed", game_id="tictactoe")
+    submission = BotSubmission(
+        id=7,
+        bot_id=42,
+        version=1,
+        executable=valid_bot_executable(), executable_size=len(valid_bot_executable()), executable_digest="0" * 64,
+    )
+    bot.active_submission_id = submission.id
+    bot.active_submission = submission
+
+    sandbox = api_main.build_bot_sandbox(bot)
+
+    try:
+        command = sandbox.command
+        assert sandbox.source_path.name == "player"
+        assert command[command.index("--mount") + 1] == (
+            f"type=bind,src={sandbox.source_path},dst=/bot/player,readonly"
+        )
+        assert command[-2:] == ["ahinarena-bot-runner:latest", "/bot/player"]
+        assert sandbox.source_path.read_bytes() == valid_bot_executable()
     finally:
         sandbox.cleanup()
 
@@ -169,8 +218,7 @@ def test_cleanup_bot_sandbox_force_removes_container_and_deletes_temp_file(
         id=7,
         bot_id=42,
         version=1,
-        language="python",
-        source_code="print('move')\n",
+        executable=valid_bot_executable(), executable_size=len(valid_bot_executable()), executable_digest="0" * 64,
     )
     bot.active_submission_id = submission.id
     bot.active_submission = submission
@@ -207,15 +255,18 @@ def seed_bot(session, *, name="random", game_id="tictactoe"):
 
 
 def seed_submission(session, bot, *, source_code="print('ok')\n", version=1):
+    executable = valid_bot_executable(source_code.encode())
     submission = BotSubmission(
         bot_id=bot.id,
         version=version,
-        language="python",
-        source_code=source_code,
+        executable=executable,
+        executable_size=len(executable),
+        executable_digest="0" * 64,
     )
     session.add(submission)
     session.flush()
     bot.active_submission_id = submission.id
+    bot.latest_submission_version = max(bot.latest_submission_version, version)
     session.commit()
     session.refresh(bot)
     return submission
@@ -1650,8 +1701,8 @@ def test_list_bots_returns_bots_for_game_ordered_by_name(sqlite_database_depende
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": alpha.id, "name": "alpha", "owner_name": None},
-        {"bot_id": beta.id, "name": "beta", "owner_name": None},
+        {"bot_id": alpha.id, "name": "alpha", "owner_name": None, "has_active_submission": False},
+        {"bot_id": beta.id, "name": "beta", "owner_name": None, "has_active_submission": False},
     ]
 
 
@@ -1672,8 +1723,8 @@ def test_list_bots_returns_all_bots_without_game_id(sqlite_database_dependency):
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": alpha.id, "name": "alpha", "owner_name": None},
-        {"bot_id": beta.id, "name": "beta", "owner_name": None},
+        {"bot_id": alpha.id, "name": "alpha", "owner_name": None, "has_active_submission": True},
+        {"bot_id": beta.id, "name": "beta", "owner_name": None, "has_active_submission": True},
     ]
 
 
@@ -1685,8 +1736,8 @@ def test_list_bots_returns_all_bots_for_empty_game_id(sqlite_database_dependency
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": alpha.id, "name": "alpha", "owner_name": None},
-        {"bot_id": beta.id, "name": "beta", "owner_name": None},
+        {"bot_id": alpha.id, "name": "alpha", "owner_name": None, "has_active_submission": True},
+        {"bot_id": beta.id, "name": "beta", "owner_name": None, "has_active_submission": True},
     ]
 
 
@@ -1707,8 +1758,8 @@ def test_list_bots_returns_user_and_system_bot_owners(sqlite_database_dependency
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": system_bot.id, "name": "alpha", "owner_name": None},
-        {"bot_id": user_bot.id, "name": "beta", "owner_name": "owner"},
+        {"bot_id": system_bot.id, "name": "alpha", "owner_name": None, "has_active_submission": False},
+        {"bot_id": user_bot.id, "name": "beta", "owner_name": "owner", "has_active_submission": False},
     ]
 
 
@@ -1853,14 +1904,7 @@ def test_create_bot_requires_authentication(sqlite_database_dependency):
 def test_create_bot_rejects_unsupported_game(sqlite_database_dependency):
     login_user(sqlite_database_dependency)
 
-    response = client.post(
-        "/bots",
-        json={
-            "game_id": "missing-game",
-            "name": "custom",
-            "source_code": valid_bot_source(),
-        },
-    )
+    response = client.post("/bots", **bot_multipart(game_id="missing-game"))
 
     assert response.status_code == 400
     assert response.json() == {
@@ -1876,14 +1920,7 @@ def test_create_bot_returns_409_for_duplicate_name_within_game(sqlite_database_d
     login_user(sqlite_database_dependency)
     seed_bot(sqlite_database_dependency, name="custom", game_id="tictactoe")
 
-    response = client.post(
-        "/bots",
-        json={
-            "game_id": "tictactoe",
-            "name": "custom",
-            "source_code": valid_bot_source(),
-        },
-    )
+    response = client.post("/bots", **bot_multipart())
 
     assert response.status_code == 409
     assert response.json() == {
@@ -1898,14 +1935,7 @@ def test_create_bot_returns_409_for_duplicate_name_within_game(sqlite_database_d
 def test_create_bot_trims_name_before_storing(sqlite_database_dependency):
     user = login_user(sqlite_database_dependency)
 
-    response = client.post(
-        "/bots",
-        json={
-            "game_id": "tictactoe",
-            "name": "  custom  ",
-            "source_code": valid_bot_source(),
-        },
-    )
+    response = client.post("/bots", **bot_multipart(name="  custom  "))
 
     assert response.status_code == 201
     bot = sqlite_database_dependency.query(Bot).one()
@@ -1925,14 +1955,7 @@ def test_create_bot_trims_name_before_storing(sqlite_database_dependency):
 def test_create_bot_rejects_invalid_name(name, sqlite_database_dependency):
     login_user(sqlite_database_dependency)
 
-    response = client.post(
-        "/bots",
-        json={
-            "game_id": "tictactoe",
-            "name": name,
-            "source_code": valid_bot_source(),
-        },
-    )
+    response = client.post("/bots", **bot_multipart(name=name))
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "validation_error"
@@ -1944,14 +1967,7 @@ def test_create_bot_rejects_duplicate_name_after_trimming(sqlite_database_depend
     login_user(sqlite_database_dependency)
     seed_bot(sqlite_database_dependency, name="custom", game_id="tictactoe")
 
-    response = client.post(
-        "/bots",
-        json={
-            "game_id": "tictactoe",
-            "name": " custom ",
-            "source_code": valid_bot_source(),
-        },
-    )
+    response = client.post("/bots", **bot_multipart(name=" custom "))
 
     assert response.status_code == 409
     assert response.json() == {
@@ -1966,35 +1982,19 @@ def test_create_bot_rejects_duplicate_name_after_trimming(sqlite_database_depend
 def test_create_bot_rejects_blank_name_after_trimming(sqlite_database_dependency):
     login_user(sqlite_database_dependency)
 
-    response = client.post(
-        "/bots",
-        json={
-            "game_id": "tictactoe",
-            "name": "   ",
-            "source_code": valid_bot_source(),
-        },
-    )
+    response = client.post("/bots", **bot_multipart(name="   "))
 
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "validation_error"
-    assert body["error"]["message"] == "Request body is invalid."
-    assert body["error"]["details"][0]["loc"] == ["body", "name"]
-    assert "Bot name is required." in body["error"]["details"][0]["msg"]
+    assert body["error"]["message"] == "Bot name must be 3-32 characters."
     assert sqlite_database_dependency.query(Bot).count() == 0
 
 
 def test_create_bot_sets_owner_to_authenticated_user(sqlite_database_dependency):
     user = login_user(sqlite_database_dependency)
 
-    response = client.post(
-        "/bots",
-        json={
-            "game_id": "tictactoe",
-            "name": "custom",
-            "source_code": valid_bot_source(),
-        },
-    )
+    response = client.post("/bots", **bot_multipart())
 
     assert response.status_code == 201
     body = response.json()
@@ -2022,14 +2022,7 @@ def test_create_bot_rejects_user_over_bot_limit(
     existing_bot.owner_id = user.id
     sqlite_database_dependency.commit()
 
-    response = client.post(
-        "/bots",
-        json={
-            "game_id": "tictactoe",
-            "name": "custom",
-            "source_code": valid_bot_source(),
-        },
-    )
+    response = client.post("/bots", **bot_multipart())
 
     assert response.status_code == 429
     assert response.json() == {
@@ -2041,6 +2034,7 @@ def test_create_bot_rejects_user_over_bot_limit(
     assert sqlite_database_dependency.query(Bot).count() == 1
 
 
+@pytest.mark.skip(reason="source submissions were removed")
 def test_create_bot_rejects_invalid_python_without_creating_bot(
     sqlite_database_dependency,
 ):
@@ -2061,6 +2055,7 @@ def test_create_bot_rejects_invalid_python_without_creating_bot(
     assert sqlite_database_dependency.query(BotSubmission).count() == 0
 
 
+@pytest.mark.skip(reason="source submissions were removed")
 def test_create_bot_rejects_oversized_source_without_creating_bot(
     sqlite_database_dependency,
 ):
@@ -2081,6 +2076,7 @@ def test_create_bot_rejects_oversized_source_without_creating_bot(
     assert sqlite_database_dependency.query(BotSubmission).count() == 0
 
 
+@pytest.mark.skip(reason="language selection was removed")
 def test_create_bot_rejects_unsupported_language_without_creating_bot(
     sqlite_database_dependency,
 ):
@@ -2098,8 +2094,32 @@ def test_create_bot_rejects_unsupported_language_without_creating_bot(
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "unsupported_language"
+    assert "python, node, bash" in response.json()["error"]["message"]
     assert sqlite_database_dependency.query(Bot).count() == 0
     assert sqlite_database_dependency.query(BotSubmission).count() == 0
+
+
+@pytest.mark.skip(reason="source submissions were removed")
+def test_create_bot_accepts_node_submission(sqlite_database_dependency):
+    user = login_user(sqlite_database_dependency)
+
+    response = client.post(
+        "/bots",
+        json={
+            "game_id": "tictactoe",
+            "name": "node bot",
+            "source_code": "const move = { row: 0, col: 0 };\n",
+            "language": "node",
+        },
+    )
+
+    assert response.status_code == 201
+    submission = sqlite_database_dependency.query(BotSubmission).one()
+    bot = sqlite_database_dependency.query(Bot).one()
+    assert submission.language == "node"
+    assert submission.source_code == "const move = { row: 0, col: 0 };\n"
+    assert bot.owner_id == user.id
+    assert bot.active_submission_id == submission.id
 
 
 def test_submit_bot_source_creates_first_submission_and_sets_active(
@@ -2112,7 +2132,7 @@ def test_submit_bot_source_creates_first_submission_and_sets_active(
 
     response = client.post(
         f"/bots/{bot.id}/submission",
-        json={"source_code": "def choose_move(board):\n    return 0\n"},
+        files={"executable": ("player", valid_bot_executable(), "application/octet-stream")},
     )
 
     assert response.status_code == 201
@@ -2125,7 +2145,7 @@ def test_submit_bot_source_creates_first_submission_and_sets_active(
     }
     assert submission.bot_id == bot.id
     assert submission.version == 1
-    assert submission.language == "python"
+    assert submission.executable == valid_bot_executable()
     assert bot.active_submission_id == submission.id
 
 
@@ -2139,11 +2159,11 @@ def test_submit_bot_source_versions_successive_submissions_and_latest_is_active(
 
     first_response = client.post(
         f"/bots/{bot.id}/submission",
-        json={"source_code": "def choose_move(board):\n    return 0\n"},
+        files={"executable": ("player", valid_bot_executable(b"first"), "application/octet-stream")},
     )
     second_response = client.post(
         f"/bots/{bot.id}/submission",
-        json={"source_code": "def choose_move(board):\n    return 1\n"},
+        files={"executable": ("player", valid_bot_executable(b"second"), "application/octet-stream")},
     )
 
     submissions = (
@@ -2167,7 +2187,7 @@ def test_submit_bot_source_requires_authentication(sqlite_database_dependency):
 
     response = client.post(
         f"/bots/{bot.id}/submission",
-        json={"source_code": "def choose_move(board):\n    return 0\n"},
+        files={"executable": ("player", valid_bot_executable(), "application/octet-stream")},
     )
 
     assert response.status_code == 401
@@ -2190,7 +2210,7 @@ def test_submit_bot_source_rejects_non_owner(sqlite_database_dependency):
 
     response = client.post(
         f"/bots/{bot.id}/submission",
-        json={"source_code": "def choose_move(board):\n    return 0\n"},
+        files={"executable": ("player", valid_bot_executable(), "application/octet-stream")},
     )
 
     assert response.status_code == 403
@@ -2208,7 +2228,7 @@ def test_submit_bot_source_returns_404_for_missing_bot(sqlite_database_dependenc
 
     response = client.post(
         "/bots/999/submission",
-        json={"source_code": "def choose_move(board):\n    return 0\n"},
+        files={"executable": ("player", valid_bot_executable(), "application/octet-stream")},
     )
 
     assert response.status_code == 404
@@ -2216,6 +2236,7 @@ def test_submit_bot_source_returns_404_for_missing_bot(sqlite_database_dependenc
     assert sqlite_database_dependency.query(BotSubmission).count() == 0
 
 
+@pytest.mark.skip(reason="source submissions were removed")
 def test_submit_bot_source_rejects_invalid_python_before_insert(
     sqlite_database_dependency,
 ):
@@ -2236,6 +2257,31 @@ def test_submit_bot_source_rejects_invalid_python_before_insert(
     assert bot.active_submission_id is None
 
 
+@pytest.mark.skip(reason="source submissions were removed")
+def test_submit_bot_source_accepts_bash_without_python_syntax_validation(
+    sqlite_database_dependency,
+):
+    user = login_user(sqlite_database_dependency)
+    bot = Bot(name="custom", game_id="tictactoe", owner_id=user.id)
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+
+    response = client.post(
+        f"/bots/{bot.id}/submission",
+        json={
+            "source_code": "while read line; do echo '{\"row\":0,\"col\":0}'; done\n",
+            "language": "bash",
+        },
+    )
+
+    assert response.status_code == 201
+    submission = sqlite_database_dependency.query(BotSubmission).one()
+    assert submission.language == "bash"
+    sqlite_database_dependency.refresh(bot)
+    assert bot.active_submission_id == submission.id
+
+
+@pytest.mark.skip(reason="source submissions were removed")
 def test_submit_bot_source_rejects_oversized_source_before_insert(
     sqlite_database_dependency,
 ):
@@ -2258,23 +2304,28 @@ def test_submit_bot_source_rejects_oversized_source_before_insert(
 
 def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(
     sqlite_database_dependency,
+    tmp_path,
+    monkeypatch,
 ):
+    (tmp_path / "tictactoe").write_bytes(valid_bot_executable())
+    (tmp_path / "connect-four").write_bytes(valid_bot_executable())
+    monkeypatch.setenv(api_main.DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR, str(tmp_path))
     api_main.seed_default_bots(sqlite_database_dependency)
 
     response = client.get("/bots?game_id=tictactoe")
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": 1, "name": "randombot1", "owner_name": None},
-        {"bot_id": 2, "name": "randombot2", "owner_name": None},
+        {"bot_id": 1, "name": "randombot1", "owner_name": None, "has_active_submission": True},
+        {"bot_id": 2, "name": "randombot2", "owner_name": None, "has_active_submission": True},
     ]
 
     connectfour_response = client.get("/bots?game_id=connect-four")
 
     assert connectfour_response.status_code == 200
     assert connectfour_response.json() == [
-        {"bot_id": 3, "name": "randombot1", "owner_name": None},
-        {"bot_id": 4, "name": "randombot2", "owner_name": None},
+        {"bot_id": 3, "name": "randombot1", "owner_name": None, "has_active_submission": True},
+        {"bot_id": 4, "name": "randombot2", "owner_name": None, "has_active_submission": True},
     ]
     assert {
         bot.owner_id
@@ -2291,7 +2342,10 @@ def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(
     } == {1}
 
 
-def test_seed_default_bots_is_idempotent(sqlite_database_dependency):
+def test_seed_default_bots_is_idempotent(sqlite_database_dependency, tmp_path, monkeypatch):
+    (tmp_path / "tictactoe").write_bytes(valid_bot_executable())
+    (tmp_path / "connect-four").write_bytes(valid_bot_executable())
+    monkeypatch.setenv(api_main.DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR, str(tmp_path))
     api_main.seed_default_bots(sqlite_database_dependency)
     api_main.seed_default_bots(sqlite_database_dependency)
 
@@ -2312,7 +2366,7 @@ def test_list_bots_paginates_results(sqlite_database_dependency):
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": bots[1].id, "name": "beta", "owner_name": None}
+        {"bot_id": bots[1].id, "name": "beta", "owner_name": None, "has_active_submission": False}
     ]
 
 
@@ -2940,15 +2994,15 @@ def test_create_match_enqueues_active_submission_bots(
 
     assert client.post(
         f"/bots/{bot_one.id}/submission",
-        json={"source_code": first_source},
+        files={"executable": ("player", valid_bot_executable(first_source.encode()), "application/octet-stream")},
     ).status_code == 201
     assert client.post(
         f"/bots/{bot_one.id}/submission",
-        json={"source_code": second_source},
+        files={"executable": ("player", valid_bot_executable(second_source.encode()), "application/octet-stream")},
     ).status_code == 201
     assert client.post(
         f"/bots/{bot_two.id}/submission",
-        json={"source_code": opponent_source},
+        files={"executable": ("player", valid_bot_executable(opponent_source.encode()), "application/octet-stream")},
     ).status_code == 201
 
     def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
@@ -3166,3 +3220,59 @@ def test_unknown_route_returns_standard_http_error():
             "message": "Request failed.",
         }
     }
+
+
+def test_create_bot_accepts_static_executable_multipart(sqlite_database_dependency):
+    user = login_user(sqlite_database_dependency)
+    artifact = valid_bot_executable(b"artifact")
+    response = client.post("/bots", **bot_multipart(executable=artifact, filename="../player.bin"))
+    assert response.status_code == 201
+    bot = sqlite_database_dependency.query(Bot).one()
+    submission = sqlite_database_dependency.query(BotSubmission).one()
+    assert bot.owner_id == user.id
+    assert bot.active_submission_id == submission.id
+    assert submission.executable == artifact
+    assert submission.executable_size == len(artifact)
+    assert submission.executable_digest == hashlib.sha256(artifact).hexdigest()
+    assert submission.original_filename == "player.bin"
+
+
+def test_executable_submission_versions_and_activates(sqlite_database_dependency):
+    user = login_user(sqlite_database_dependency)
+    bot = Bot(name="custom", game_id="tictactoe", owner_id=user.id, latest_submission_version=4)
+    sqlite_database_dependency.add(bot)
+    sqlite_database_dependency.commit()
+    response = client.post(
+        f"/bots/{bot.id}/submission",
+        files={"executable": ("player", valid_bot_executable(), "application/octet-stream")},
+    )
+    assert response.status_code == 201
+    sqlite_database_dependency.refresh(bot)
+    assert response.json()["version"] == 5
+    assert bot.latest_submission_version == 5
+    assert bot.active_submission_id is not None
+
+
+def test_create_bot_rejects_non_elf(sqlite_database_dependency):
+    login_user(sqlite_database_dependency)
+    response = client.post("/bots", **bot_multipart(executable=b"#!/bin/sh\n"))
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_executable"
+
+
+def test_create_bot_rejects_wrong_architecture(sqlite_database_dependency):
+    login_user(sqlite_database_dependency)
+    artifact = bytearray(valid_bot_executable())
+    struct.pack_into("<H", artifact, 18, 183)
+    response = client.post("/bots", **bot_multipart(executable=bytes(artifact)))
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "unsupported_architecture"
+
+
+def test_create_bot_rejects_dynamic_executable(sqlite_database_dependency):
+    login_user(sqlite_database_dependency)
+    artifact = bytearray(valid_bot_executable())
+    struct.pack_into("<I", artifact, 64, 3)
+    response = client.post("/bots", **bot_multipart(executable=bytes(artifact)))
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "dynamic_executable"
