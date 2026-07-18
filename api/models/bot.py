@@ -4,6 +4,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Float,
     Index,
     Integer,
     String,
@@ -50,10 +51,10 @@ class Bot(Base):
     )
 
     rating = Column(
-        Integer,
+        Float,
         nullable=False,
         default=DEFAULT_ELO_RATING,
-        server_default=str(DEFAULT_ELO_RATING),
+        server_default="1200",
     )
     games_played = Column(Integer, nullable=False, default=0, server_default="0")
     wins = Column(Integer, nullable=False, default=0, server_default="0")

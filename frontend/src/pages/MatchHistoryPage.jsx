@@ -37,7 +37,7 @@ function getPlayerResult(match, botId) {
 function PlayerRating({ rating }) {
   return (
     <span className="player-rating">
-      ({rating})
+      ({Math.round(rating)})
     </span>
   );
 }

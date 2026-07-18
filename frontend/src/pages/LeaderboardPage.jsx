@@ -264,7 +264,7 @@ export default function LeaderboardPage() {
                         </Link>
                       </td>
                       <td>{bot.owner_name}</td>
-                      <td>{bot.rating}</td>
+                      <td>{Math.round(bot.rating)}</td>
                       <td>{bot.games_played}</td>
                       <td>{formatWinRate(bot)}</td>
                       <td>

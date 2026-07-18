@@ -191,12 +191,12 @@ class MatchSummary(BaseModel):
     bot_two_id: int
     bot_one_name: str
     bot_two_name: str
-    bot_one_rating_before: int
-    bot_two_rating_before: int
-    bot_one_rating_after: int
-    bot_two_rating_after: int
-    bot_one_rating_delta: int
-    bot_two_rating_delta: int
+    bot_one_rating_before: float
+    bot_two_rating_before: float
+    bot_one_rating_after: float
+    bot_two_rating_after: float
+    bot_one_rating_delta: float
+    bot_two_rating_delta: float
     winner_bot_id: int | None
     winner_bot_name: str | None
     result_reason: str
@@ -221,12 +221,12 @@ class LiveMatchDetail(BaseModel):
     bot_two_id: int
     bot_one_name: str
     bot_two_name: str
-    bot_one_rating_before: int | None = None
-    bot_two_rating_before: int | None = None
-    bot_one_rating_after: int | None = None
-    bot_two_rating_after: int | None = None
-    bot_one_rating_delta: int | None = None
-    bot_two_rating_delta: int | None = None
+    bot_one_rating_before: float | None = None
+    bot_two_rating_before: float | None = None
+    bot_one_rating_after: float | None = None
+    bot_two_rating_after: float | None = None
+    bot_one_rating_delta: float | None = None
+    bot_two_rating_delta: float | None = None
     winner_bot_id: int | None = None
     winner_bot_name: str | None = None
     result_reason: str | None = None
@@ -252,7 +252,7 @@ class LeaderboardEntry(BaseModel):
     bot_id: int
     name: str
     owner_name: str
-    rating: int
+    rating: float
     games_played: int
     wins: int
     losses: int
@@ -270,7 +270,7 @@ class BotDetail(BaseModel):
     description: str = ""
     game_id: str
     owner_name: str
-    rating: int
+    rating: float
     games_played: int
     wins: int
     losses: int

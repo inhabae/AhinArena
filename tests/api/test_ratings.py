@@ -55,7 +55,32 @@ def test_calculate_elo_rating_change_for_underdog_win():
         k_factor=32,
     )
 
-    assert rating_change == EloRatingChange(bot_one_rating=1224, bot_two_rating=1376)
+    assert rating_change.bot_one_rating == pytest.approx(1224.3119016900678)
+    assert rating_change.bot_two_rating == pytest.approx(1375.6880983099322)
+
+
+def test_calculate_elo_rating_change_preserves_fractional_precision():
+    rating_change = calculate_elo_rating_change(
+        bot_one_rating=1200,
+        bot_two_rating=1400,
+        bot_one_score=1.0,
+        k_factor=32,
+    )
+
+    assert rating_change.bot_one_rating % 1 != 0
+    assert rating_change.bot_two_rating % 1 != 0
+
+
+def test_calculate_elo_rating_change_clamps_a_loss_at_zero():
+    rating_change = calculate_elo_rating_change(
+        bot_one_rating=1,
+        bot_two_rating=1,
+        bot_one_score=0.0,
+        k_factor=32,
+    )
+
+    assert rating_change.bot_one_rating == 0.0
+    assert rating_change.bot_two_rating > 1
 
 
 @pytest.mark.parametrize("score", [-0.1, 1.1])

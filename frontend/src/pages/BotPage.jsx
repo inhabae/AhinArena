@@ -43,7 +43,7 @@ function stopLinkPropagation(event) {
 function PlayerRating({ rating }) {
   return (
     <span className="player-rating">
-      ({rating})
+      ({Math.round(rating)})
     </span>
   );
 }
@@ -199,7 +199,7 @@ export default function BotPage() {
   }
 
   const statCards = [
-    { label: "Rating", value: bot.rating, icon: IconTrophy },
+    { label: "Rating", value: Math.round(bot.rating), icon: IconTrophy },
     {
       label: "Games played",
       value: bot.games_played,

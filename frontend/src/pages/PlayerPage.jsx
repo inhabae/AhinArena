@@ -174,7 +174,7 @@ export default function PlayerPage() {
     },
     {
       label: "Best rating",
-      value: summary.topBot?.rating ?? "N/A",
+      value: summary.topBot ? Math.round(summary.topBot.rating) : "N/A",
       icon: IconTrophy,
       muted: !summary.topBot,
     },
@@ -310,7 +310,7 @@ export default function PlayerPage() {
                             </Link>
                           </td>
                           <td>{bot.game_label}</td>
-                          <td>{bot.rating}</td>
+                          <td>{Math.round(bot.rating)}</td>
                           <td>#{bot.rank}</td>
                           <td>{bot.games_played}</td>
                           <td>{formatPercent(getWinRate(bot))}</td>
