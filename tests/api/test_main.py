@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from starlette.requests import Request
 
 from api.auth import hash_password, verify_password
 import api.bot_sandbox as bot_sandbox
@@ -116,6 +117,21 @@ def bot_multipart(name="custom", game_id="tictactoe", executable=None, filename=
             )
         },
     }
+
+
+def rate_limit_request(client, forwarded_for=None):
+    headers = []
+    if forwarded_for is not None:
+        headers.append((b"x-forwarded-for", forwarded_for.encode()))
+    return Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/",
+            "headers": headers,
+            "client": client,
+        }
+    )
 
 
 def test_score_for_bot_one_or_error_maps_unknown_winner_to_api_error():
@@ -1173,6 +1189,22 @@ def test_login_rate_limit_counts_failed_attempts_by_ip(sqlite_database_dependenc
 
     assert response.status_code == 429
     assert response.json()["error"]["code"] == "rate_limited"
+
+
+def test_client_rate_limit_key_uses_forwarded_address_only_from_trusted_proxy(monkeypatch):
+    monkeypatch.setenv(api_main.TRUSTED_PROXY_CIDRS_ENV_VAR, "10.0.0.0/8")
+
+    assert api_main.client_rate_limit_key(
+        rate_limit_request(("10.1.2.3", 443), "203.0.113.12, 10.1.2.3")
+    ) == "203.0.113.12"
+    assert api_main.client_rate_limit_key(
+        rate_limit_request(("198.51.100.7", 443), "203.0.113.12")
+    ) == "198.51.100.7"
+
+
+def test_client_rate_limit_key_logs_and_uses_a_clear_shared_key_without_client(caplog):
+    assert api_main.client_rate_limit_key(rate_limit_request(None)) == "unavailable-client"
+    assert "no client address" in caplog.text
 
 
 def test_password_reset_rate_limit_counts_nonexistent_email(sqlite_database_dependency):

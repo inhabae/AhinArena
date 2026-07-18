@@ -246,6 +246,7 @@ and `status` can be any job state.
 | --- | --- | --- | --- |
 | `DATABASE_URL` | Required | API, worker, migrations | SQLAlchemy database URL. Local development uses `postgresql+psycopg://...`. |
 | `CORS_ALLOWED_ORIGINS` | Localhost Vite and port 3000 origins | API | Comma-separated explicit browser origins allowed to send credentialed API requests. |
+| `TRUSTED_PROXY_CIDRS` | Empty | API | Comma-separated proxy IPs or CIDRs trusted to supply `X-Forwarded-For` for auth rate limiting. Leave empty unless the deployment proxy is known and configured. |
 | `WORKER_POLL_INTERVAL_SECONDS` | `5.0` in code, `1` through `make worker` | Worker | Sleep interval for polling, notification wait timeout, and reaper cadence. |
 | `MATCH_JOB_STALL_TIMEOUT_SECONDS` | `30.0` | Worker | Age after which a `running` job is considered stalled. |
 | `MATCH_JOB_MAX_ATTEMPTS` | `3` | Worker | Maximum claim attempts before a stalled job is failed instead of requeued. |

@@ -1,4 +1,5 @@
 import hashlib
+import ipaddress
 import logging
 import os
 import re
@@ -115,6 +116,7 @@ DEFAULT_MAX_ACTIVE_MATCH_JOBS_PER_USER = 10
 DEPLOY_ENVIRONMENT_ENV_VAR = "DEPLOY_ENVIRONMENT"
 LEGACY_DEPLOY_ENVIRONMENT_ENV_VARS = ("ENVIRONMENT", "APP_ENV", "FASTAPI_ENV")
 REQUIRE_SECURE_COOKIES_ENV_VAR = "REQUIRE_SECURE_COOKIES"
+TRUSTED_PROXY_CIDRS_ENV_VAR = "TRUSTED_PROXY_CIDRS"
 AUTH_RATE_LIMITS = {
     "register": {
         "account": (5, timedelta(hours=1)),
@@ -360,7 +362,43 @@ def invalid_credentials():
 
 def client_rate_limit_key(request: Request) -> str:
     if request.client is None or request.client.host is None:
-        return "unknown"
+        logger.warning("Request has no client address; using the shared auth rate-limit bucket.")
+        return "unavailable-client"
+
+    client_host = request.client.host
+    try:
+        client_address = ipaddress.ip_address(client_host)
+    except ValueError:
+        return client_host
+
+    if not any(client_address in network for network in get_trusted_proxy_networks()):
+        return str(client_address)
+
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    forwarded_host = forwarded_for.split(",", maxsplit=1)[0].strip()
+    try:
+        return str(ipaddress.ip_address(forwarded_host))
+    except ValueError:
+        logger.warning(
+            "Trusted proxy %s did not provide a valid X-Forwarded-For address; "
+            "using the proxy address for auth rate limiting.",
+            client_address,
+        )
+        return str(client_address)
+
+
+def get_trusted_proxy_networks() -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    configured_networks = os.environ.get(TRUSTED_PROXY_CIDRS_ENV_VAR, "")
+    networks = []
+    for value in configured_networks.split(","):
+        cidr = value.strip()
+        if not cidr:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(cidr, strict=False))
+        except ValueError:
+            logger.warning("Ignoring invalid %s entry: %r", TRUSTED_PROXY_CIDRS_ENV_VAR, cidr)
+    return tuple(networks)
 
     return request.client.host
 
