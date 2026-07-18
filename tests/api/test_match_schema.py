@@ -219,6 +219,7 @@ def test_bot_model_declares_expected_columns_defaults_and_constraints():
         for foreign_key in Bot.__table__.c.active_submission_id.foreign_keys
     } == {"bot_submissions.id"}
     assert Bot.__table__.c.rating.nullable is False
+    assert isinstance(Bot.__table__.c.rating.type, sa.Float)
     assert Bot.__table__.c.games_played.nullable is False
     assert Bot.__table__.c.wins.nullable is False
     assert Bot.__table__.c.losses.nullable is False
@@ -441,6 +442,12 @@ def test_match_model_declares_expected_columns():
     assert Match.__table__.c.bot_two_rating_after.nullable is False
     assert Match.__table__.c.bot_one_rating_delta.nullable is False
     assert Match.__table__.c.bot_two_rating_delta.nullable is False
+    assert isinstance(Match.__table__.c.bot_one_rating_before.type, sa.Float)
+    assert isinstance(Match.__table__.c.bot_two_rating_before.type, sa.Float)
+    assert isinstance(Match.__table__.c.bot_one_rating_after.type, sa.Float)
+    assert isinstance(Match.__table__.c.bot_two_rating_after.type, sa.Float)
+    assert isinstance(Match.__table__.c.bot_one_rating_delta.type, sa.Float)
+    assert isinstance(Match.__table__.c.bot_two_rating_delta.type, sa.Float)
     assert isinstance(Match.__table__.c.bot_one_id.type, sa.Integer)
     assert isinstance(Match.__table__.c.bot_two_id.type, sa.Integer)
     assert isinstance(Match.__table__.c.winner_bot_id.type, sa.Integer)

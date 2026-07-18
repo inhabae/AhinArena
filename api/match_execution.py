@@ -59,8 +59,8 @@ def apply_match_record_updates(
     bot_one: Bot,
     bot_two: Bot,
     winner_bot_id: int | None,
-    bot_one_rating_after: int,
-    bot_two_rating_after: int,
+    bot_one_rating_after: float,
+    bot_two_rating_after: float,
 ) -> None:
     assert bot_one.id != bot_two.id
     assert winner_bot_id in {bot_one.id, bot_two.id, None}

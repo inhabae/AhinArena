@@ -15,15 +15,17 @@ import {
 } from "./matchReplay";
 
 function formatDelta(value) {
-  if (value > 0) {
-    return `+${value}`;
+  const rounded = Math.round(value);
+
+  if (rounded > 0) {
+    return `+${rounded}`;
   }
 
-  if (value < 0) {
-    return `-${Math.abs(value)}`;
+  if (rounded < 0) {
+    return `-${Math.abs(rounded)}`;
   }
 
-  return String(value);
+  return String(rounded);
 }
 
 function formatRelativeTime(value) {
@@ -178,7 +180,7 @@ function RatingLine({ label, before, after, delta, deltaClassName }) {
   return (
     <div className="match-rating-line">
       <span>{label}</span>
-      <strong>{before}</strong>
+      <strong>{Math.round(before)}</strong>
       <em className={deltaClassName}>{formatDelta(delta)}</em>
     </div>
   );
@@ -189,7 +191,7 @@ function CurrentRating({ rating }) {
     return null;
   }
 
-  return <strong className="player-current-rating">{rating}</strong>;
+  return <strong className="player-current-rating">{Math.round(rating)}</strong>;
 }
 
 function MatchInfoHeader({ match }) {

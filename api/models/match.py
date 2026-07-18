@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, func
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import relationship
 
 from api.database import Base
@@ -15,12 +15,12 @@ class Match(Base):
     bot_one_id = Column(Integer, ForeignKey("bots.id"), nullable=False)
     bot_two_id = Column(Integer, ForeignKey("bots.id"), nullable=False)
 
-    bot_one_rating_before = Column(Integer, nullable=False)
-    bot_two_rating_before = Column(Integer, nullable=False)
-    bot_one_rating_after = Column(Integer, nullable=False)
-    bot_two_rating_after = Column(Integer, nullable=False)
-    bot_one_rating_delta = Column(Integer, nullable=False)
-    bot_two_rating_delta = Column(Integer, nullable=False)
+    bot_one_rating_before = Column(Float, nullable=False)
+    bot_two_rating_before = Column(Float, nullable=False)
+    bot_one_rating_after = Column(Float, nullable=False)
+    bot_two_rating_after = Column(Float, nullable=False)
+    bot_one_rating_delta = Column(Float, nullable=False)
+    bot_two_rating_delta = Column(Float, nullable=False)
 
     winner_bot_id = Column(Integer, ForeignKey("bots.id"), nullable=True)
     result_reason = Column(String, nullable=False)
