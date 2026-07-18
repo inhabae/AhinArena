@@ -1,133 +1,51 @@
-# Bot Submission
+# Player Executable Submission
 
-Milestone 8 adds persistent Python bot submissions. Authenticated developers can
-create a bot record, upload source code for that bot, and use the latest accepted
-submission in matches.
+AhinArena accepts one statically linked Linux x86-64 ELF executable per bot
+version. Source code, scripts, runtime selection, dependency installation, and
+multi-file archives are not accepted.
 
-## Scope
+## Build contract
 
-Bot submission currently covers:
+The executable must be a 64-bit little-endian x86-64 ELF (`ET_EXEC` or PIE),
+must not contain `PT_INTERP` or `DT_NEEDED`, and must be no larger than 10 MiB
+by default. For example, C players can be built on Linux with
+`cc -O2 -static -o player player.c`; Go players can use
+`CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o player`.
 
-- authenticated source upload for existing bots;
-- ownership checks before accepting a submission;
-- Python-only submission validation;
-- monotonically increasing per-bot submission versions;
-- an active submission pointer on each bot;
-- match execution from the active submitted source through Docker sandboxing;
-- default source submissions for the built-in random bots.
-
-Asynchronous queues and multi-language execution are still future milestones.
-
-## Data Model
-
-Bot source is stored in the `bot_submissions` table:
-
-- `id` is the submission primary key.
-- `bot_id` references the owning bot.
-- `version` is unique per bot through `uq_bot_submissions_bot_id_version`.
-- `language` records the submitted runtime language.
-- `source_code` stores the submitted text.
-- `created_at` records insertion time.
-
-The `bots.active_submission_id` column points at the submission used for new
-matches. Creating a new submission updates this pointer after the new row is
-flushed successfully.
+The player remains running for a match. It reads one JSON game state per line
+from stdin and writes exactly one JSON move per line to stdout. It must flush
+each response. The game state and move schemas are unchanged.
 
 ## API
 
-Submit source code:
+Both endpoints require an authenticated owner and use `multipart/form-data`:
 
-```http
+```text
+POST /bots
+  game_id=tictactoe
+  name=my-player
+  executable=@player
+
 POST /bots/{bot_id}/submission
-Content-Type: application/json
-Cookie: ahin_arena_session=...
+  executable=@player
 ```
 
-```json
-{
-  "source_code": "import json\nimport sys\n\nfor line in sys.stdin:\n    state = json.loads(line)\n    print(json.dumps({\"row\": 0, \"col\": 0}), flush=True)\n",
-  "language": "python"
-}
-```
+Each accepted artifact is stored as a database BLOB with its byte size,
+SHA-256 digest, sanitized original filename, version, and creation time. New
+submissions atomically become active. The configurable upload limit is
+`MAX_BOT_EXECUTABLE_BYTES` (default 10485760).
 
-`language` defaults to `python` when omitted. A successful request returns:
+Admission errors include `invalid_executable`, `unsupported_architecture`,
+`dynamic_executable`, and `submission_too_large`. Admission validates the file
+format without executing it; protocol failures are handled as bot losses when
+a match runs.
 
-```json
-{
-  "bot_id": 1,
-  "submission_id": 10,
-  "version": 2
-}
-```
+Legacy source rows are removed by the migration. Their per-bot version
+watermark is retained, while the bots themselves, ratings, and match history
+remain. Those bots cannot enter new matches until an executable is uploaded.
 
-The endpoint requires an authenticated session and only accepts submissions for
-bots owned by the current user.
+## Built-in players
 
-## Validation
-
-The backend rejects submissions when:
-
-- the bot does not exist: `bot_not_found`;
-- the authenticated user does not own the bot: `bot_not_owned`;
-- `language` is not `python`: `unsupported_language`;
-- `source_code` is empty or whitespace: `validation_error`;
-- the UTF-8 source is larger than 100,000 bytes: `submission_too_large`;
-- Python parsing fails through `ast.parse`: `invalid_syntax`;
-- a duplicate version conflict is detected: `submission_conflict`.
-
-Syntax validation confirms that the source parses as Python. It does not prove
-that the bot follows the game protocol or behaves safely at runtime.
-
-## Match Execution
-
-Bot registration creates the bot and its first active submission in one
-transaction, so normal match creation only resolves bots that already have
-source code. Missing active source at execution time is treated as an internal
-data invariant failure rather than a public match-creation validation case.
-
-For a bot with an active submission, the backend writes the source to a private
-temporary file and starts a `docker run` command that bind-mounts that file
-read-only at `/bot/source.py`. Each bot container is started with `--rm -i
---init`, no network access, all Linux capabilities dropped, `no-new-privileges`,
-a read-only root filesystem, a small `/tmp` tmpfs, and memory, CPU, and PID
-limits. Cleanup force-removes the named container and deletes the temporary
-source directory, even if match execution fails.
-
-The default runner image also bundles the shared `engine/` package at
-`/app/engine` and sets `PYTHONPATH=/app`. This is why the seeded random bot
-submissions can import helpers such as `from engine.tictactoe import Board`
-even though only the submitted source file is mounted at `/bot/source.py`.
-
-The sandbox image and limits can be changed without code changes:
-
-- `BOT_SANDBOX_IMAGE`
-- `BOT_SANDBOX_MEMORY_LIMIT`
-- `BOT_SANDBOX_CPU_LIMIT`
-- `BOT_SANDBOX_PIDS_LIMIT`
-- `BOT_SANDBOX_TMPFS_SIZE`
-- `DOCKER_BINARY`
-- `BOT_MOVE_TIMEOUT_SECONDS`
-- `BOT_STARTUP_TIMEOUT_SECONDS`
-
-See `docs/docker-sandboxing.md` for the full Milestone 9 sandbox behavior,
-runner image, default limits, and cleanup guarantees.
-
-The existing referee still owns the game protocol. It starts each bot as a
-persistent subprocess, sends line-delimited JSON states on `stdin`, and expects
-line-delimited JSON moves on `stdout`. Timeouts, crashes, invalid JSON, and
-illegal moves are treated as bot failures.
-
-## Frontend Flow
-
-`/bots/new` first creates the named bot through `POST /bots`. After creation, it
-shows a source-code textarea and submits through `POST /bots/{bot_id}/submission`.
-The page reports the accepted submission version and maps backend error codes to
-form messages.
-
-## Current Limitations
-
-- Only Python is accepted.
-- The UI supports initial source submission after bot creation, but it does not
-yet provide a full submission history or rollback screen.
-- Temporary bot source files are created for match execution and are not part of
-the persisted submission history.
+Deployment supplies static built-in artifacts in a directory selected by
+`DEFAULT_BOT_EXECUTABLE_DIR`, named `tictactoe` and `connect-four`. Seeding
+leaves system bots inactive and logs a warning if either artifact is absent.

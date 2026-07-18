@@ -15,7 +15,7 @@ DEFAULT_BOT_SANDBOX_CPU_LIMIT = "0.5"
 DEFAULT_BOT_SANDBOX_PIDS_LIMIT = "64"
 DEFAULT_BOT_SANDBOX_TMPFS_SIZE = "16m"
 DEFAULT_DOCKER_BINARY = "docker"
-BOT_SANDBOX_SOURCE_PATH = "/bot/source.py"
+BOT_SANDBOX_EXECUTABLE_PATH = "/bot/player"
 
 
 @dataclass(frozen=True)
@@ -45,11 +45,11 @@ def build_bot_sandbox(bot: Bot) -> BotSandbox:
     temp_dir = Path(
         tempfile.mkdtemp(prefix=f"ahinarena_bot_{bot.id}_", suffix="_sandbox")
     )
-    source_path = temp_dir / "source.py"
+    source_path = temp_dir / "player"
 
     try:
-        source_path.write_text(bot.active_submission.source_code, encoding="utf-8")
-        source_path.chmod(0o444)
+        source_path.write_bytes(bot.active_submission.executable)
+        source_path.chmod(0o555)
 
         container_name = f"ahinarena-bot-{bot.id}-{secrets.token_hex(8)}"
         docker_binary = _env_setting("DOCKER_BINARY", DEFAULT_DOCKER_BINARY)
@@ -92,8 +92,9 @@ def build_bot_sandbox(bot: Bot) -> BotSandbox:
             "--name",
             container_name,
             "--mount",
-            f"type=bind,src={source_path},dst={BOT_SANDBOX_SOURCE_PATH},readonly",
+            f"type=bind,src={source_path},dst={BOT_SANDBOX_EXECUTABLE_PATH},readonly",
             image,
+            BOT_SANDBOX_EXECUTABLE_PATH,
         ]
         return BotSandbox(
             command=command,

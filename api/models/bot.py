@@ -1,5 +1,6 @@
 from sqlalchemy import (
     CheckConstraint,
+    LargeBinary,
     Column,
     DateTime,
     ForeignKey,
@@ -39,6 +40,7 @@ class Bot(Base):
         foreign_keys=[active_submission_id],
         post_update=True,
     )
+    latest_submission_version = Column(Integer, nullable=False, default=0, server_default="0")
     submissions = relationship(
         "BotSubmission",
         back_populates="bot",
@@ -92,8 +94,10 @@ class BotSubmission(Base):
     bot = relationship("Bot", back_populates="submissions", foreign_keys=[bot_id])
 
     version = Column(Integer, nullable=False)
-    language = Column(String, nullable=False)
-    source_code = Column(Text, nullable=False)
+    executable = Column(LargeBinary, nullable=False)
+    executable_size = Column(Integer, nullable=False)
+    executable_digest = Column(String(64), nullable=False)
+    original_filename = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (

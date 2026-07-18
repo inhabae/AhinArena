@@ -262,6 +262,7 @@ class BotSummary(BaseModel):
     bot_id: int
     name: str
     owner_name: str | None
+    has_active_submission: bool
 
 class BotDetail(BaseModel):
     bot_id: int
@@ -276,24 +277,6 @@ class BotDetail(BaseModel):
     draws: int
     created_at: datetime
 
-class BotCreateRequest(BaseModel):
-    game_id: str
-    name: str = Field(min_length=BOT_NAME_MIN_LENGTH, max_length=BOT_NAME_MAX_LENGTH)
-    source_code: str
-    language: str = "python"
-
-    @field_validator("name")
-    @classmethod
-    def validate_name(cls, value):
-        name = value.strip()
-        if not name:
-            raise ValueError("Bot name is required.")
-
-        if not name.isascii() or not BOT_NAME_PATTERN.fullmatch(name):
-            raise ValueError("Bot name can only contain letters, numbers, spaces, underscores, and hyphens.")
-
-        return name
-
 class BotCreateResponse(BaseModel):
     bot_id: int
     game_id: str
@@ -301,10 +284,6 @@ class BotCreateResponse(BaseModel):
     owner_id: int
     submission_id: int
     version: int
-
-class BotSubmissionRequest(BaseModel):
-    source_code: str
-    language: str = "python"
 
 class BotSubmissionResponse(BaseModel):
     bot_id: int

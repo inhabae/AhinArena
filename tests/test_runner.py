@@ -18,6 +18,21 @@ def scripted_tictactoe_bot_command(moves):
     return [sys.executable, "-c", code, json.dumps(moves)]
 
 
+def scripted_bash_tictactoe_bot_command(moves):
+    encoded_moves = [json.dumps({"row": row, "col": col}) for row, col in moves]
+    script = (
+        "moves=("
+        + " ".join("'" + move.replace("'", "'\\''") + "'" for move in encoded_moves)
+        + "); "
+        + "index=0; "
+        + "while IFS= read -r line; do "
+        + 'printf "%s\\n" "${moves[$index]}"; '
+        + "index=$((index + 1)); "
+        + "done"
+    )
+    return ["bash", "-c", script]
+
+
 def test_run_match_translates_player_markers_for_result_and_moves():
     observed_moves = []
 
@@ -45,3 +60,18 @@ def test_run_match_translates_player_markers_for_result_and_moves():
         "p1",
     ]
     assert observed_moves[-1][1] == (0, 2)
+
+
+def test_run_match_accepts_non_python_bot_command_end_to_end():
+    result = run_match(
+        Game,
+        default_bot_command=[sys.executable, "-m", "engine.tictactoe.random_bot"],
+        p1_command=scripted_bash_tictactoe_bot_command([[0, 0], [0, 1], [0, 2]]),
+        p2_command=scripted_tictactoe_bot_command([[1, 0], [1, 1]]),
+        timeout=1.0,
+    )
+
+    assert result == {
+        "winner": "p1",
+        "reason": "win",
+    }

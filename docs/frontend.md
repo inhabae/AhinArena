@@ -66,17 +66,16 @@ credential verification.
 ### Bot Registration
 
 `frontend/src/pages/BotRegistrationPage.jsx` requires an authenticated session.
-It submits `POST /bots` through `createBot`, assigning the new bot to the
-current user and selected supported game. After the bot is created, the page
-shows a source-code textarea and submits Python code through
-`submitBotCode`, which calls `POST /bots/{bot_id}/submission`. Users without a
+It submits multipart `POST /bots` through `createBot`, assigning the new bot to
+the current user and selected supported game with one static Linux x86-64
+executable. Users without a
 valid session are sent to `/login`.
 
 The bot-name input mirrors the backend's 3-32 character ASCII letters, numbers,
 spaces, underscores, and hyphens rule.
 
 The page reports the accepted submission version and maps backend submission
-errors such as `submission_too_large`, `invalid_syntax`, `unsupported_language`,
+errors such as `submission_too_large`, `invalid_executable`, `unsupported_architecture`, and `dynamic_executable`,
 `bot_not_owned`, and `bot_not_found` to user-facing form messages.
 
 ### Match History
@@ -166,7 +165,7 @@ Exported endpoint helpers are:
 - `getLeaderboard(params)` -> `GET /leaderboard`
 - `getBots(params)` -> `GET /bots`
 - `createBot(bot)` -> `POST /bots`
-- `submitBotCode(botId, submission)` -> `POST /bots/{botId}/submission`
+- `submitBotExecutable(botId, executable)` -> `POST /bots/{botId}/submission`
 - `getCurrentUser()` -> `GET /auth/me`
 - `loginUser(credentials)` -> `POST /auth/login`
 - `registerUser(credentials)` -> `POST /auth/register`

@@ -1,7 +1,9 @@
-import ast
+import hashlib
 import logging
 import os
+import re
 import secrets
+import struct
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -38,7 +40,7 @@ from api.match_execution import (
 from api.match_execution import score_for_bot_one_or_error as _score_for_bot_one_or_error
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, or_, text
@@ -69,10 +71,11 @@ from api.schemas import (
     LeaderboardEntry,
     BotDetail,
     BotSummary,
-    BotCreateRequest,
     BotCreateResponse,
-    BotSubmissionRequest,
     BotSubmissionResponse,
+    BOT_NAME_MAX_LENGTH,
+    BOT_NAME_MIN_LENGTH,
+    BOT_NAME_PATTERN,
     DescriptionUpdateRequest,
     EmailVerificationResendRequest,
     EmailVerificationResendResponse,
@@ -103,7 +106,8 @@ SESSION_TTL = timedelta(days=14)
 EMAIL_VERIFICATION_TTL = timedelta(days=2)
 PASSWORD_RESET_TTL = timedelta(hours=1)
 AUTH_TOKEN_BYTES = 32
-MAX_BOT_SUBMISSION_SOURCE_BYTES = 100_000
+DEFAULT_MAX_BOT_EXECUTABLE_BYTES = 10 * 1024 * 1024
+MAX_BOT_EXECUTABLE_BYTES_ENV_VAR = "MAX_BOT_EXECUTABLE_BYTES"
 MAX_BOTS_PER_USER_ENV_VAR = "MAX_BOTS_PER_USER"
 MAX_ACTIVE_MATCH_JOBS_PER_USER_ENV_VAR = "MAX_ACTIVE_MATCH_JOBS_PER_USER"
 DEFAULT_MAX_BOTS_PER_USER = 25
@@ -132,10 +136,9 @@ AUTH_RATE_LIMITS = {
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BOT_SOURCE_PATHS = {
-    "tictactoe": Path(__file__).resolve().parent.parent / "engine" / "tictactoe" / "random_bot.py",
-    "connect-four": Path(__file__).resolve().parent.parent / "engine" / "connectfour" / "random_bot.py",
-}
+DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR = "DEFAULT_BOT_EXECUTABLE_DIR"
+DEFAULT_BOT_EXECUTABLE_DIR = Path(__file__).resolve().parent.parent / "build" / "default-bots"
+SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def get_bot_owner_name(bot: Bot) -> str:
@@ -430,10 +433,8 @@ def get_current_user(
 
 
 def seed_default_bots(db: Session) -> None:
-    default_bot_sources = {
-        game_id: source_path.read_text(encoding="utf-8")
-        for game_id, source_path in DEFAULT_BOT_SOURCE_PATHS.items()
-    }
+    artifact_dir_value = os.environ.get(DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR, "").strip()
+    artifact_dir = Path(artifact_dir_value) if artifact_dir_value else DEFAULT_BOT_EXECUTABLE_DIR
 
     for game_id in SUPPORTED_GAMES:
         existing_bots = {
@@ -453,15 +454,27 @@ def seed_default_bots(db: Session) -> None:
                 db.flush()
 
             if bot.active_submission_id is None:
+                artifact_path = artifact_dir / game_id
+                if not artifact_path.is_file():
+                    logger.warning(
+                        "Built-in bot executable is unavailable for %s; system bots remain inactive",
+                        game_id,
+                    )
+                    continue
+                artifact = artifact_path.read_bytes()
+                validate_bot_executable(artifact)
                 submission = BotSubmission(
                     bot_id=bot.id,
-                    version=1,
-                    language="python",
-                    source_code=default_bot_sources[game_id],
+                    version=bot.latest_submission_version + 1,
+                    executable=artifact,
+                    executable_size=len(artifact),
+                    executable_digest=hashlib.sha256(artifact).hexdigest(),
+                    original_filename=game_id,
                 )
                 db.add(submission)
                 db.flush()
                 bot.active_submission_id = submission.id
+                bot.latest_submission_version = submission.version
 
     db.commit()
 
@@ -1061,17 +1074,85 @@ def enforce_user_active_match_job_limit(db: Session, *, user_id: int) -> None:
         )
 
 
-def validate_python_submission_source(source_code: str) -> None:
-    if not source_code.strip():
-        api_error(422, "validation_error", "Source code is required.")
+def get_max_bot_executable_bytes() -> int:
+    return get_positive_int_env(
+        MAX_BOT_EXECUTABLE_BYTES_ENV_VAR,
+        DEFAULT_MAX_BOT_EXECUTABLE_BYTES,
+    )
 
-    if len(source_code.encode("utf-8")) > MAX_BOT_SUBMISSION_SOURCE_BYTES:
-        api_error(413, "submission_too_large", "Submission source code is too large.")
+
+def sanitize_executable_filename(filename: str | None) -> str | None:
+    if not filename:
+        return None
+    safe = SAFE_FILENAME_PATTERN.sub("_", Path(filename).name).strip("._")
+    return safe[:255] or None
+
+
+def validate_bot_executable(executable: bytes) -> None:
+    """Validate a static, little-endian, x86-64 ELF without executing it."""
+    if len(executable) < 64 or executable[:4] != b"\x7fELF":
+        api_error(422, "invalid_executable", "Upload must be a valid ELF executable.")
+    if executable[4] != 2 or executable[5] != 1:
+        api_error(422, "unsupported_architecture", "Executable must be 64-bit little-endian x86-64 ELF.")
 
     try:
-        ast.parse(source_code)
-    except SyntaxError as error:
-        api_error(422, "invalid_syntax", f"Invalid Python syntax: {error.msg}.")
+        elf_type, machine = struct.unpack_from("<HH", executable, 16)
+        program_offset = struct.unpack_from("<Q", executable, 32)[0]
+        program_entry_size, program_count = struct.unpack_from("<HH", executable, 54)
+    except struct.error:
+        api_error(422, "invalid_executable", "ELF header is truncated.")
+
+    if machine != 62:
+        api_error(422, "unsupported_architecture", "Executable must target Linux x86-64.")
+    if elf_type not in (2, 3) or program_entry_size < 56:
+        api_error(422, "invalid_executable", "ELF file is not an executable.")
+    if program_count == 0 or program_offset > len(executable):
+        api_error(422, "invalid_executable", "ELF program headers are missing.")
+
+    dynamically_linked = False
+    for index in range(program_count):
+        offset = program_offset + index * program_entry_size
+        if offset + 56 > len(executable):
+            api_error(422, "invalid_executable", "ELF program headers are truncated.")
+        segment_type = struct.unpack_from("<I", executable, offset)[0]
+        if segment_type == 3:  # PT_INTERP
+            dynamically_linked = True
+        if segment_type == 2:  # PT_DYNAMIC
+            dynamic_offset = struct.unpack_from("<Q", executable, offset + 8)[0]
+            dynamic_size = struct.unpack_from("<Q", executable, offset + 32)[0]
+            if dynamic_offset + dynamic_size > len(executable):
+                api_error(422, "invalid_executable", "ELF dynamic segment is truncated.")
+            for item_offset in range(dynamic_offset, dynamic_offset + dynamic_size, 16):
+                if item_offset + 16 > len(executable):
+                    api_error(422, "invalid_executable", "ELF dynamic table is truncated.")
+                tag = struct.unpack_from("<Q", executable, item_offset)[0]
+                if tag == 0:
+                    break
+                if tag == 1:  # DT_NEEDED
+                    dynamically_linked = True
+    if dynamically_linked:
+        api_error(422, "dynamic_executable", "Executable must be statically linked.")
+
+
+def read_bot_executable(upload: UploadFile) -> tuple[bytes, str, str | None]:
+    limit = get_max_bot_executable_bytes()
+    chunks: list[bytes] = []
+    size = 0
+    digest = hashlib.sha256()
+    while True:
+        chunk = upload.file.read(min(1024 * 1024, limit + 1 - size))
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > limit:
+            api_error(413, "submission_too_large", f"Executable exceeds the {limit}-byte limit.")
+        digest.update(chunk)
+        chunks.append(chunk)
+    executable = b"".join(chunks)
+    if not executable:
+        api_error(422, "invalid_executable", "Executable file is required.")
+    validate_bot_executable(executable)
+    return executable, digest.hexdigest(), sanitize_executable_filename(upload.filename)
 
 
 @app.post(
@@ -1080,25 +1161,27 @@ def validate_python_submission_source(source_code: str) -> None:
     response_model=BotCreateResponse,
 )
 def create_bot(
-    request: BotCreateRequest,
+    game_id: str = Form(...),
+    name: str = Form(...),
+    executable: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if request.game_id not in SUPPORTED_GAMES:
-        api_error(400, "unsupported_game", f"Unsupported game: {request.game_id}")
+    if game_id not in SUPPORTED_GAMES:
+        api_error(400, "unsupported_game", f"Unsupported game: {game_id}")
 
-    if request.language != "python":
-        api_error(400, "unsupported_language", f"Unsupported language: {request.language}")
-
-    bot_name = request.name.strip()
-
-    validate_python_submission_source(request.source_code)
+    bot_name = name.strip()
+    if not (BOT_NAME_MIN_LENGTH <= len(bot_name) <= BOT_NAME_MAX_LENGTH):
+        api_error(422, "validation_error", "Bot name must be 3-32 characters.")
+    if not bot_name.isascii() or not BOT_NAME_PATTERN.fullmatch(bot_name):
+        api_error(422, "validation_error", "Bot name contains unsupported characters.")
+    executable_bytes, digest, filename = read_bot_executable(executable)
 
     enforce_user_bot_limit(db, user_id=current_user.id)
 
     existing_bot = (
         db.query(Bot)
-        .filter(Bot.game_id == request.game_id, Bot.name == bot_name)
+        .filter(Bot.game_id == game_id, Bot.name == bot_name)
         .first()
     )
     if existing_bot is not None:
@@ -1106,8 +1189,9 @@ def create_bot(
 
     bot = Bot(
         name=bot_name,
-        game_id=request.game_id,
+        game_id=game_id,
         owner_id=current_user.id,
+        latest_submission_version=1,
     )
     db.add(bot)
 
@@ -1116,8 +1200,10 @@ def create_bot(
         submission = BotSubmission(
             bot_id=bot.id,
             version=1,
-            language=request.language,
-            source_code=request.source_code,
+            executable=executable_bytes,
+            executable_size=len(executable_bytes),
+            executable_digest=digest,
+            original_filename=filename,
         )
         db.add(submission)
         db.flush()
@@ -1145,9 +1231,9 @@ def create_bot(
     status_code=status.HTTP_201_CREATED,
     response_model=BotSubmissionResponse,
 )
-def submit_bot_source(
+def submit_bot_executable(
     bot_id: int,
-    request: BotSubmissionRequest,
+    executable: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1158,29 +1244,23 @@ def submit_bot_source(
     if bot.owner_id != current_user.id:
         api_error(403, "bot_not_owned", "Bot is not owned by the authenticated user.")
 
-    if request.language != "python":
-        api_error(400, "unsupported_language", f"Unsupported language: {request.language}")
+    executable_bytes, digest, filename = read_bot_executable(executable)
 
-    validate_python_submission_source(request.source_code)
-
-    current_max_version = (
-        db.query(BotSubmission.version)
-        .filter(BotSubmission.bot_id == bot.id)
-        .order_by(BotSubmission.version.desc())
-        .limit(1)
-        .scalar()
-    )
+    next_version = bot.latest_submission_version + 1
     submission = BotSubmission(
         bot_id=bot.id,
-        version=(current_max_version or 0) + 1,
-        language=request.language,
-        source_code=request.source_code,
+        version=next_version,
+        executable=executable_bytes,
+        executable_size=len(executable_bytes),
+        executable_digest=digest,
+        original_filename=filename,
     )
     db.add(submission)
 
     try:
         db.flush()
         bot.active_submission_id = submission.id
+        bot.latest_submission_version = next_version
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -1468,6 +1548,7 @@ def list_bots(
             bot_id=bot.id,
             name=bot.name,
             owner_name=get_bot_owner_display_name(bot),
+            has_active_submission=bot.active_submission_id is not None,
         )
         for bot in bots
     ]

@@ -117,22 +117,22 @@ export function getMatchJobs(params) {
 }
 
 export function createBot(bot) {
+  const body = new FormData();
+  body.append("game_id", bot.game_id);
+  body.append("name", bot.name);
+  body.append("executable", bot.executable);
   return request("/bots", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(bot),
+    body,
   });
 }
 
-export function submitBotCode(botId, submission) {
+export function submitBotExecutable(botId, executable) {
+  const body = new FormData();
+  body.append("executable", executable);
   return request(`/bots/${botId}/submission`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(submission),
+    body,
   });
 }
 

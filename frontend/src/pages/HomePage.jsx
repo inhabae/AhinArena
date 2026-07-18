@@ -289,9 +289,10 @@ export default function HomePage() {
     getBots({ game_id: selectedGame })
       .then((items) => {
         if (!ignore) {
-          setBotsState({ loading: false, items, error: null });
-          setBotOne(items[0]?.name ?? "");
-          setBotTwo(items[1]?.name ?? items[0]?.name ?? "");
+          const activeItems = items.filter((bot) => bot.has_active_submission);
+          setBotsState({ loading: false, items: activeItems, error: null });
+          setBotOne(activeItems[0]?.name ?? "");
+          setBotTwo(activeItems[1]?.name ?? activeItems[0]?.name ?? "");
         }
       })
       .catch((error) => {
