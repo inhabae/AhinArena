@@ -83,7 +83,12 @@ class Game:
         row = response.get("row")
         col = response.get("col")
 
-        if not isinstance(row, int) or not isinstance(col, int):
+        if (
+            not isinstance(row, int)
+            or isinstance(row, bool)
+            or not isinstance(col, int)
+            or isinstance(col, bool)
+        ):
             return None
 
         return row, col

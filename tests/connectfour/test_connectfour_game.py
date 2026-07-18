@@ -69,3 +69,7 @@ def test_game_over_after_winner_rejects_more_moves():
     assert game.board.winner() == "X"
     assert game.board.is_game_over() is True
     assert game.make_move(2) is False
+
+
+def test_parse_move_rejects_a_boolean_column():
+    assert Game().parse_move({"col": True}) is None
