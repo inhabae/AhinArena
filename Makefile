@@ -1,4 +1,4 @@
-.PHONY: api worker frontend migrate test builtin-players sleepy-players
+.PHONY: api worker frontend migrate test production-migrate production-up builtin-players sleepy-players
 
 -include .env
 export
@@ -8,6 +8,9 @@ ALEMBIC ?= .venv/bin/alembic
 UVICORN ?= .venv/bin/uvicorn
 WORKER_POLL_INTERVAL_SECONDS ?= 1
 DOCKER ?= docker
+COMPOSE ?= $(DOCKER) compose
+PRODUCTION_ENV_FILE ?= /secure/path/ahinarena.production.env
+PRODUCTION_COMPOSE_FILE ?= deploy/compose.production.yaml
 
 api:
 	PYTHONPATH=. $(UVICORN) api.main:app --reload
@@ -23,6 +26,16 @@ migrate:
 
 test:
 	PYTHONPATH=. $(PYTHON) -m pytest
+
+# The only production command that applies Alembic migrations. It is intentionally
+# separate from application startup so API/worker replicas never migrate schemas.
+production-migrate:
+	$(COMPOSE) --env-file $(PRODUCTION_ENV_FILE) -f $(PRODUCTION_COMPOSE_FILE) up -d --wait postgres
+	$(COMPOSE) --env-file $(PRODUCTION_ENV_FILE) -f $(PRODUCTION_COMPOSE_FILE) up --no-deps --abort-on-container-exit --exit-code-from migrate migrate
+
+# Run the one-shot migration before starting or replacing API/worker containers.
+production-up: production-migrate
+	$(COMPOSE) --env-file $(PRODUCTION_ENV_FILE) -f $(PRODUCTION_COMPOSE_FILE) up -d --no-deps --wait api worker
 
 # Local developer utility only; the website never invokes this target.
 builtin-players:
