@@ -6,8 +6,9 @@ dependency lock (including transitive packages). Builds install dependencies bef
 copied, so changing application code reuses the dependency layer.
 
 The images run as UID/GID `10001` (`ahinarena`) and set
-`DEPLOY_ENVIRONMENT=production` and `REQUIRE_SECURE_COOKIES=true`. Supply a
-PostgreSQL `DATABASE_URL` and explicit `CORS_ALLOWED_ORIGINS`; do not place
+`DEPLOY_ENVIRONMENT=production` and `REQUIRE_SECURE_COOKIES=true`. Supply all
+runtime values in `.env.production.example`, including PostgreSQL, explicit
+HTTPS CORS/frontend origins, email, and worker sandbox settings; do not place
 secrets in an image or its build arguments.
 
 ## Build and tag
@@ -38,7 +39,9 @@ resulting image digest (`docker image inspect --format '{{index .RepoDigests 0}}
 
 ## Migrate and run
 
-Create a production-only environment file outside source control:
+Create a production-only environment file outside source control using
+`.env.production.example` and the secret-management guidance in
+`docs/production-configuration.md`:
 
 ```dotenv
 DATABASE_URL=postgresql+psycopg://USER:PASSWORD@postgres.example:5432/ahin_arena

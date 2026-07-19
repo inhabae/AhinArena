@@ -10,6 +10,7 @@ from pathlib import Path
 
 from api.auth import hash_password, verify_password
 from api.bot_sandbox import build_bot_sandbox
+from api.config import validate_production_configuration
 from api.database import get_db, get_sessionmaker
 from api.email_delivery import (
     EmailDeliveryConfigurationError,
@@ -691,6 +692,7 @@ def score_for_bot_one_or_error(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_production_configuration()
     validate_auth_cookie_security()
     db = get_sessionmaker()()
     try:

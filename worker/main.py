@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timezone
 
 import psycopg
-from api.config import get_database_url
+from api.config import get_database_url, validate_production_configuration
 from api.database import get_engine, get_sessionmaker
 from api.match_execution import (
     execute_match,
@@ -274,6 +274,7 @@ def run_loop(
 
 
 def main() -> None:
+    validate_production_configuration(require_sandbox=True)
     run_loop(poll_interval_seconds=get_poll_interval_seconds())
 
 
