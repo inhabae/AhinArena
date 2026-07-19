@@ -73,6 +73,7 @@ and upload the resulting executable.
 - `docs/bot-submission.md` documents uploaded bot source storage, validation, and match execution.
 - `docs/docker-sandboxing.md` documents the Docker runner image, container restrictions, configuration, and cleanup behavior.
 - `docs/queue-and-workers.md` documents asynchronous match jobs, worker execution, queue recovery, APIs, and local workflow.
+- `docs/production-images.md` documents reproducible API and worker images, production run commands, image tags, scanning, and SBOM generation.
 
 ---
 
