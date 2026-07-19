@@ -55,6 +55,10 @@ PostgreSQL data lives in the named `ahinarena-postgres-data` volume, which
 survives service and host restarts. Never run `docker compose down -v` against
 production unless intentionally deleting all database data.
 
+Automated encrypted backups, new-environment and in-place restore steps,
+recovery objectives, access controls, and quarterly restore drills are defined
+in `docs/postgresql-backup-recovery.md`. A named Docker volume is not a backup.
+
 ## Schema workflow
 
 For every schema change, use **expand, migrate, contract**:
