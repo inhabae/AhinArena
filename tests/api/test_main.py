@@ -376,6 +376,59 @@ def test_health_endpoint_returns_ok():
     assert response.json() == {"status": "ok"}
 
 
+def test_liveness_endpoint_returns_ok():
+    response = client.get("/health/live")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_readiness_endpoint_returns_ok_when_database_is_available(monkeypatch):
+    class ReadySession:
+        def __init__(self):
+            self.closed = False
+            self.statements = []
+
+        def execute(self, statement):
+            self.statements.append(str(statement))
+
+        def close(self):
+            self.closed = True
+
+    session = ReadySession()
+    monkeypatch.setattr(api_main, "get_sessionmaker", lambda: lambda: session)
+
+    response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert session.statements == ["SELECT 1"]
+    assert session.closed is True
+
+
+def test_readiness_endpoint_returns_service_unavailable_when_database_is_down(monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    class UnavailableSession:
+        def __init__(self):
+            self.closed = False
+
+        def execute(self, statement):
+            raise OperationalError("SELECT 1", {}, RuntimeError("database unavailable"))
+
+        def close(self):
+            self.closed = True
+
+    session = UnavailableSession()
+    monkeypatch.setattr(api_main, "get_sessionmaker", lambda: lambda: session)
+
+    response = client.get("/health/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "unavailable"}
+    assert session.closed is True
+
+
 def test_password_hash_verifies_round_trip():
     password_hash = hash_password("correct horse battery staple")
 

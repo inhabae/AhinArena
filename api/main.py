@@ -45,7 +45,7 @@ from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Query, 
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, or_, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -726,6 +726,31 @@ app.add_exception_handler(Exception, unexpected_exception_handler)
 
 @app.get("/health")
 def health_check():
+    """Compatibility alias for the liveness probe."""
+    return {"status": "ok"}
+
+
+@app.get("/health/live")
+def liveness_check():
+    """Report whether this API process can serve requests."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def readiness_check(response: Response):
+    """Report whether the API can reach PostgreSQL."""
+    db: Session | None = None
+    try:
+        db = get_sessionmaker()()
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        logger.warning("Readiness check could not connect to the database.", exc_info=True)
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "unavailable"}
+    finally:
+        if db is not None:
+            db.close()
+
     return {"status": "ok"}
 
 

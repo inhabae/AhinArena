@@ -119,7 +119,19 @@ and restrict firewall ingress to ports 80/443 only.
 ## Capacity and health
 
 Each service has Compose CPU/memory limits, and the long-running services use
-`unless-stopped`. PostgreSQL health checks gate migration; API health checks
-call `GET /health`. The worker has no HTTP listener, so monitor its logs,
-container restart count, and queued/running `match_jobs` age rather than using
-a synthetic health check that cannot prove job processing is healthy.
+`unless-stopped`. PostgreSQL health checks gate migration. The API exposes
+unauthenticated health endpoints for orchestration and monitoring:
+
+- `GET /health/live` returns `200 {"status":"ok"}` whenever the API process
+  can serve requests. It does not access PostgreSQL.
+- `GET /health/ready` runs `SELECT 1` against PostgreSQL. It returns
+  `200 {"status":"ok"}` when the database is reachable and
+  `503 {"status":"unavailable"}` when it is not.
+- `GET /health` remains a compatibility alias for the liveness response.
+
+The Compose API health check calls `/health/ready`, so a database outage marks
+the API container unhealthy. Use `/health/live` for a liveness probe when the
+orchestrator supports separate liveness and readiness probes. The worker has
+no HTTP listener, so monitor its logs, container restart count, and
+queued/running `match_jobs` age rather than using a synthetic health check that
+cannot prove job processing is healthy.
