@@ -79,6 +79,7 @@ and upload the resulting executable.
 - `docs/operations.md` documents structured telemetry, dashboards, alerts, log retention, and redaction expectations.
 - `docs/postgresql-backup-recovery.md` documents encrypted PostgreSQL backup, restore, recovery objectives, and restore drills.
 - `docs/deployment-smoke-test.md` documents the reproducible production-style stack smoke test and manual fallback checklist.
+- `docs/staging-production-operations.md` is the complete staging-to-production operator guide: infrastructure, DNS/TLS, deployment, verification, promotion, upgrades, rollback, monitoring, incidents, backup, and recovery.
 
 ---
 
