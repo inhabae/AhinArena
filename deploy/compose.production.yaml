@@ -1,0 +1,117 @@
+# Deploy with: docker compose --env-file /secure/path/ahinarena.production.env -f deploy/compose.production.yaml up -d
+name: ahinarena
+
+services:
+  postgres:
+    image: postgres:16-bookworm@sha256:05bb94c3949035f4da16815d91b389443f3dbc5db95d65e2cb9b1abbf8565974
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - database
+    restart: unless-stopped
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  migrate:
+    image: ${API_IMAGE:?set API_IMAGE to an immutable API image digest}
+    entrypoint: ["alembic"]
+    command: ["upgrade", "head"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - database
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+
+  api:
+    image: ${API_IMAGE:?set API_IMAGE to an immutable API image digest}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?set CORS_ALLOWED_ORIGINS}
+      DEFAULT_BOT_EXECUTABLE_DIR: ""
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - database
+      - ingress
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; assert urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  worker:
+    image: ${WORKER_IMAGE:?set WORKER_IMAGE to an immutable worker image digest}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      BOT_SANDBOX_IMAGE: ${BOT_SANDBOX_IMAGE:?set BOT_SANDBOX_IMAGE to an immutable bot-runner image digest}
+      WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:-5}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    group_add:
+      - ${DOCKER_SOCKET_GID:?set DOCKER_SOCKET_GID to the Docker socket group ID}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - database
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+        reservations:
+          memory: 128M
+
+volumes:
+  postgres-data:
+    name: ahinarena-postgres-data
+
+networks:
+  database:
+    internal: true
+  ingress:
+    name: ${INGRESS_NETWORK:-ahinarena-ingress}
