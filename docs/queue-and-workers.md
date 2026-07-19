@@ -252,6 +252,7 @@ and `status` can be any job state.
 | `BOT_MOVE_TIMEOUT_SECONDS` | `2.0` | Worker match execution | Per-move timeout after bot startup. |
 | `BOT_STARTUP_TIMEOUT_SECONDS` | `10.0` | Worker match execution | First-response timeout, including container startup and Python imports. |
 | `DOCKER_BINARY` | `docker` | Worker match execution | Container CLI used by the bot sandbox. |
+| `BOT_SANDBOX_TEMP_DIR` | Unset | Worker match execution | Host-visible directory used for each temporary player file. In Compose it is set from `BOT_SANDBOX_HOST_DIR` and bind-mounted at the same path so the Docker daemon can mount it. |
 | `BOT_SANDBOX_IMAGE` | `ahinarena-bot-runner:latest` | Worker match execution | Docker image used to run submitted bots. |
 | `BOT_SANDBOX_MEMORY_LIMIT` | `128m` | Worker match execution | Container memory limit. |
 | `BOT_SANDBOX_CPU_LIMIT` | `0.5` | Worker match execution | Container CPU limit. |

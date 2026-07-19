@@ -15,6 +15,7 @@ DEFAULT_BOT_SANDBOX_CPU_LIMIT = "0.5"
 DEFAULT_BOT_SANDBOX_PIDS_LIMIT = "64"
 DEFAULT_BOT_SANDBOX_TMPFS_SIZE = "16m"
 DEFAULT_DOCKER_BINARY = "docker"
+BOT_SANDBOX_TEMP_DIR_ENV_VAR = "BOT_SANDBOX_TEMP_DIR"
 BOT_SANDBOX_EXECUTABLE_PATH = "/bot/player"
 
 
@@ -42,8 +43,14 @@ def build_bot_sandbox(bot: Bot) -> BotSandbox:
     if bot.active_submission_id is None or bot.active_submission is None:
         raise ValueError(f"Bot has no active submission: {bot.name}")
 
+    temp_dir_value = os.environ.get(BOT_SANDBOX_TEMP_DIR_ENV_VAR, "").strip()
+    temp_dir_root = Path(temp_dir_value) if temp_dir_value else None
     temp_dir = Path(
-        tempfile.mkdtemp(prefix=f"ahinarena_bot_{bot.id}_", suffix="_sandbox")
+        tempfile.mkdtemp(
+            prefix=f"ahinarena_bot_{bot.id}_",
+            suffix="_sandbox",
+            dir=temp_dir_root,
+        )
     )
     source_path = temp_dir / "player"
 

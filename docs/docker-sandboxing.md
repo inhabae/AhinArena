@@ -74,7 +74,10 @@ Apply the following controls to every sandbox runner host or node:
   not images or environment files checked into source control; rotate them
   independently from API credentials.
 - Do not mount host paths into bot containers other than the per-match,
-  read-only player file. Never mount the Docker socket, `/proc`, `/sys`, the
+  read-only player file. The worker's `BOT_SANDBOX_HOST_DIR` is a dedicated
+  host directory bind-mounted at the same absolute path into the worker so the
+  Docker daemon can mount each generated player file; it is not mounted into a
+  bot except for that single read-only file. Never mount the Docker socket, `/proc`, `/sys`, the
   host root, application source, logs, SSH material, or cloud credential paths.
   Keep temporary bot files on a dedicated filesystem with restrictive
   permissions and remove them after each match.

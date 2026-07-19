@@ -74,7 +74,7 @@ def validate_production_configuration(*, require_sandbox: bool = False) -> None:
         sandbox_image = _required("BOT_SANDBOX_IMAGE", errors)
         if sandbox_image and "@sha256:" not in sandbox_image:
             errors.append("BOT_SANDBOX_IMAGE must be pinned by digest in production.")
-        for name in ("DOCKER_BINARY", "BOT_SANDBOX_MEMORY_LIMIT", "BOT_SANDBOX_CPU_LIMIT", "BOT_SANDBOX_PIDS_LIMIT", "BOT_SANDBOX_TMPFS_SIZE"):
+        for name in ("DOCKER_BINARY", "BOT_SANDBOX_TEMP_DIR", "BOT_SANDBOX_MEMORY_LIMIT", "BOT_SANDBOX_CPU_LIMIT", "BOT_SANDBOX_PIDS_LIMIT", "BOT_SANDBOX_TMPFS_SIZE"):
             _required(name, errors)
 
     if errors:

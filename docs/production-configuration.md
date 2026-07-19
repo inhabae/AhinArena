@@ -14,7 +14,8 @@ Required API values are `DATABASE_URL` (PostgreSQL scheme),
 recovery are production features.
 
 Workers additionally require `BOT_SANDBOX_IMAGE` pinned with `@sha256:`,
-`DOCKER_BINARY`, and sandbox memory, CPU, PID, and tmpfs limits. Optional
+`DOCKER_BINARY`, `BOT_SANDBOX_TEMP_DIR` (set by Compose from the dedicated
+`BOT_SANDBOX_HOST_DIR` bind mount), and sandbox memory, CPU, PID, and tmpfs limits. Optional
 tuning values and their defaults are listed in the template. `API_IMAGE`,
 `WORKER_IMAGE`, PostgreSQL credentials, `DOCKER_SOCKET_GID`, and
 `INGRESS_NETWORK` are Compose inputs; see `docs/production-stack.md`.

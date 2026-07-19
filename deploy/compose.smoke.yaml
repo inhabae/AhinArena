@@ -1,0 +1,11 @@
+# Disposable overrides for scripts/smoke_production_stack.sh.
+name: ${SMOKE_PROJECT_NAME:-ahinarena-smoke}
+
+services:
+  postgres:
+    volumes:
+      - smoke-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  smoke-postgres-data:
+    name: ${SMOKE_VOLUME_NAME:-ahinarena-smoke-postgres-data}
