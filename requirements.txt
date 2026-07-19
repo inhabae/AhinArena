@@ -1,9 +1,2 @@
-fastapi
-python-multipart
-uvicorn
-httpx
-pytest
-sqlalchemy
-psycopg[binary]
-alembic
-bcrypt>=5
+-r requirements-prod.txt
+pytest==8.3.5

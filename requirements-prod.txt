@@ -1,0 +1,2 @@
+# Production dependency lock, including resolved transitive dependencies.
+-r requirements-prod.lock
