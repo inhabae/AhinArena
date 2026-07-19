@@ -33,15 +33,50 @@ Validate interpolation and configuration before starting:
 
 ```sh
 docker compose --env-file /secure/path/ahinarena.production.env -f deploy/compose.production.yaml config --quiet
-docker compose --env-file /secure/path/ahinarena.production.env -f deploy/compose.production.yaml up -d
+make production-up PRODUCTION_ENV_FILE=/secure/path/ahinarena.production.env
 docker compose --env-file /secure/path/ahinarena.production.env -f deploy/compose.production.yaml ps
 ```
 
-The migration service exits successfully after applying migrations. API and
-worker start only after it succeeds; an unsuccessful migration leaves them
 stopped. PostgreSQL data lives in the named `ahinarena-postgres-data` volume,
-which survives service and host restarts. Never run `docker compose down -v`
-against production unless intentionally deleting all database data.
+`make production-migrate` is the explicit, single-run deployment step. It
+waits for PostgreSQL, runs the one-shot `migrate` service, and returns that
+service's exit status. `make production-up` runs that step before starting or
+replacing API/worker containers. Its final application command uses
+`--no-deps` intentionally: otherwise Compose restarts an exited migration
+dependency and runs it a second time. The API and worker never run Alembic;
+the documented target is the only production migration path, so scaling either
+service cannot independently migrate the schema. A failed migration prevents
+application rollout.
+
+PostgreSQL data lives in the named `ahinarena-postgres-data` volume, which
+survives service and host restarts. Never run `docker compose down -v` against
+production unless intentionally deleting all database data.
+
+## Schema workflow
+
+For every schema change, use **expand, migrate, contract**:
+
+1. **Expand:** add backward-compatible tables, columns, indexes, or nullable
+   fields in one migration; deploy code that can read both old and new shapes.
+2. **Migrate:** backfill data in bounded, observable batches. Keep old and new
+   code compatible while all API and worker replicas roll forward.
+3. **Contract:** only in a later release, after verification and rollback
+   windows have elapsed, remove the old reads/writes and then drop old schema.
+
+Create and review revisions locally, and test a clean database upgrade before
+release:
+
+```sh
+# Local development database only.
+PYTHONPATH=. .venv/bin/alembic upgrade head
+PYTHONPATH=. .venv/bin/alembic current
+```
+
+On a new production volume, `make production-migrate` applies every revision
+to `head`; the one-shot service's successful exit is the clean-database proof
+point. Take a verified backup before production migrations. Do not use an API
+or worker replica, an application startup hook, or `alembic upgrade` from a
+running application container to apply production migrations.
 
 Useful operations:
 
@@ -52,17 +87,20 @@ docker compose --env-file /secure/path/ahinarena.production.env -f deploy/compos
 # Restart a failed long-running service; its restart policy also handles host reboot.
 docker compose --env-file /secure/path/ahinarena.production.env -f deploy/compose.production.yaml restart api worker
 
-# Apply a new immutable image release. Migration reruns first.
+# Apply a new immutable image release. The migration runs exactly once first.
 docker compose --env-file /secure/path/ahinarena.production.env -f deploy/compose.production.yaml pull
-docker compose --env-file /secure/path/ahinarena.production.env -f deploy/compose.production.yaml up -d
+make production-up PRODUCTION_ENV_FILE=/secure/path/ahinarena.production.env
 
-# Roll back application images after restoring the previous environment file values.
-docker compose --env-file /secure/path/ahinarena.production.previous.env -f deploy/compose.production.yaml up -d
+# Roll back only a backward-compatible application release.
+docker compose --env-file /secure/path/ahinarena.production.previous.env -f deploy/compose.production.yaml up -d --no-deps api worker
 ```
 
-Only roll back after confirming the migration is backward-compatible. For a
+Only roll back after confirming the schema is backward-compatible. For a
 destructive or non-reversible migration, restore the database from a verified
-backup before deploying the previous application image.
+backup before deploying the previous application image. If an upgrade fails,
+leave API/worker stopped, capture migration logs, repair or restore the
+database, and rerun the explicit migration step; never force an application
+rollout past a failed migration.
 
 ## Reverse proxy, TLS, and domains
 
