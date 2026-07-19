@@ -37,7 +37,6 @@ make production-up PRODUCTION_ENV_FILE=/secure/path/ahinarena.production.env
 docker compose --env-file /secure/path/ahinarena.production.env -f deploy/compose.production.yaml ps
 ```
 
-stopped. PostgreSQL data lives in the named `ahinarena-postgres-data` volume,
 `make production-migrate` is the explicit, single-run deployment step. It
 waits for PostgreSQL, runs the one-shot `migrate` service, and returns that
 service's exit status. `make production-up` runs that step before starting or
