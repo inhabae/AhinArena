@@ -6,6 +6,23 @@ services:
     volumes:
       - smoke-postgres-data:/var/lib/postgresql/data
 
+  api:
+    environment:
+      # The disposable client reaches the API directly over HTTP. Production
+      # still enforces HTTPS and Secure cookies behind its reverse proxy.
+      DEPLOY_ENVIRONMENT: smoke
+      REQUIRE_SECURE_COOKIES: "false"
+
+  worker:
+    environment:
+      # The smoke harness builds this image locally under a temporary tag.
+      # Production still requires an immutable sandbox-image digest.
+      DEPLOY_ENVIRONMENT: smoke
+
 volumes:
   smoke-postgres-data:
     name: ${SMOKE_VOLUME_NAME:-ahinarena-smoke-postgres-data}
+
+networks:
+  ingress:
+    external: true
