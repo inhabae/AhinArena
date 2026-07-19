@@ -75,6 +75,7 @@ and upload the resulting executable.
 - `docs/queue-and-workers.md` documents asynchronous match jobs, worker execution, queue recovery, APIs, and local workflow.
 - `docs/production-images.md` documents reproducible API and worker images, production run commands, image tags, scanning, and SBOM generation.
 - `docs/production-stack.md` documents the production Compose stack, migrations, persistent PostgreSQL, ingress/TLS requirements, deployment, and rollback.
+- `docs/production-configuration.md` documents validated runtime configuration, secret-manager injection, and credential rotation.
 
 ---
 
