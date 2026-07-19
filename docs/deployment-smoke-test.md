@@ -16,6 +16,10 @@ email-token verification, login, two static bot uploads, queueing, worker
 execution, and match completion. It restarts API and worker, checks readiness
 again, and confirms the persisted `matches` row remains in PostgreSQL.
 
+The disposable client reaches the API directly over internal HTTP, so the
+smoke overlay disables secure cookies only for that stack. The production
+Compose file still requires HTTPS and secure cookies behind the reverse proxy.
+
 The script creates no host ports and removes its project, volume, temporary
 credentials, ingress network, and bot artifacts on exit. Set
 `KEEP_SMOKE_STACK=1` only while investigating a failure; the script prints the

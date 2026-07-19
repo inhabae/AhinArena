@@ -74,6 +74,7 @@ def main():
     parser.add_argument("--verification-token")
     parser.add_argument("--bot-dir", type=Path)
     parser.add_argument("--register-only", action="store_true")
+    parser.add_argument("--already-registered", action="store_true")
     parser.add_argument("--check-only", action="store_true")
     arguments = parser.parse_args()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
@@ -85,17 +86,18 @@ def main():
         print(json.dumps({"smoke": "restart_check_passed", "readiness": readiness}))
         return
 
-    status, registration = request(
-        opener,
-        arguments.base_url,
-        "/auth/register",
-        method="POST",
-        payload={"email": arguments.email, "username": arguments.username, "password": arguments.password},
-    )
-    assert status == 201, registration
-    if arguments.register_only:
-        print(json.dumps({"smoke": "registered", "user": registration["user"]}))
-        return
+    if not arguments.already_registered:
+        status, registration = request(
+            opener,
+            arguments.base_url,
+            "/auth/register",
+            method="POST",
+            payload={"email": arguments.email, "username": arguments.username, "password": arguments.password},
+        )
+        assert status == 201, registration
+        if arguments.register_only:
+            print(json.dumps({"smoke": "registered", "user": registration["user"]}))
+            return
 
     if not arguments.verification_token or arguments.bot_dir is None:
         raise ValueError("--verification-token and --bot-dir are required after registration")
