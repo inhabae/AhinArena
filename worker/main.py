@@ -1,5 +1,6 @@
 import os
 import time
+import logging
 from datetime import datetime, timezone
 
 import psycopg
@@ -11,7 +12,8 @@ from api.match_execution import (
     get_bot_startup_timeout_seconds,
 )
 from api.models import MatchJob, MatchJobMove
-from sqlalchemy import text
+from api.observability import get_structured_logger, log_event
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 
@@ -19,6 +21,9 @@ MATCH_JOBS_CHANNEL = "match_jobs_channel"
 DEFAULT_POLL_INTERVAL_SECONDS = 5.0
 DEFAULT_MATCH_JOB_STALL_TIMEOUT_SECONDS = 30.0
 DEFAULT_MATCH_JOB_MAX_ATTEMPTS = 3
+DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 60.0
+
+logger = get_structured_logger("worker")
 
 
 class PollingJobNotifier:
@@ -61,6 +66,12 @@ def get_match_job_stall_timeout_seconds() -> float:
 
 def get_match_job_max_attempts() -> int:
     return int(os.environ.get("MATCH_JOB_MAX_ATTEMPTS", DEFAULT_MATCH_JOB_MAX_ATTEMPTS))
+
+
+def get_heartbeat_interval_seconds() -> float:
+    return float(
+        os.environ.get("WORKER_HEARTBEAT_INTERVAL_SECONDS", DEFAULT_HEARTBEAT_INTERVAL_SECONDS)
+    )
 
 
 def create_job_notifier():
@@ -109,6 +120,15 @@ def claim_next_job(db: Session) -> MatchJob | None:
     job.error_message = None
     db.commit()
     db.refresh(job)
+    log_event(
+        logger,
+        "match_job_claimed",
+        job_id=job.id,
+        game_id=job.game_id,
+        bot_one_id=job.bot_one_id,
+        bot_two_id=job.bot_two_id,
+        attempt=job.attempts,
+    )
     return job
 
 
@@ -169,10 +189,28 @@ def reap_stalled_jobs(
             job.completed_at = now
             job.error_message = "Match job stalled after maximum attempts."
             failed_count += 1
+            log_event(
+                logger,
+                "match_job_failed",
+                level=logging.ERROR,
+                job_id=job.id,
+                game_id=job.game_id,
+                attempt=job.attempts,
+                failure_reason="stalled_max_attempts",
+            )
         else:
             job.status = "queued"
             job.error_message = None
             requeued_count += 1
+            log_event(
+                logger,
+                "match_job_retried",
+                level=logging.WARNING,
+                job_id=job.id,
+                game_id=job.game_id,
+                attempt=job.attempts,
+                retry_reason="stalled",
+            )
 
         job.started_at = None
 
@@ -235,6 +273,30 @@ def mark_job_failed(db: Session, job_id: int, exc: Exception) -> None:
     db.commit()
 
 
+def log_heartbeat() -> None:
+    """Report queue activity without exposing job inputs or sandbox details."""
+    SessionLocal = get_sessionmaker()
+    db = SessionLocal()
+    try:
+        queue_depth = db.query(func.count(MatchJob.id)).filter(MatchJob.status == "queued").scalar()
+        running_jobs = db.query(func.count(MatchJob.id)).filter(MatchJob.status == "running").scalar()
+        log_event(
+            logger,
+            "worker_heartbeat",
+            queue_depth=queue_depth or 0,
+            running_jobs=running_jobs or 0,
+        )
+    except Exception as exc:
+        log_event(
+            logger,
+            "worker_heartbeat_failed",
+            level=logging.ERROR,
+            error_type=type(exc).__name__,
+        )
+    finally:
+        db.close()
+
+
 def run_once() -> bool:
     SessionLocal = get_sessionmaker()
     db = SessionLocal()
@@ -244,10 +306,31 @@ def run_once() -> bool:
             return False
 
         job_id = job.id
+        started_at = time.monotonic()
         try:
-            run_job(db, job)
+            match_id = run_job(db, job)
+            log_event(
+                logger,
+                "match_job_completed",
+                job_id=job.id,
+                match_id=match_id,
+                game_id=job.game_id,
+                attempt=job.attempts,
+                match_duration_ms=round((time.monotonic() - started_at) * 1000, 2),
+            )
         except Exception as exc:
             mark_job_failed(db, job_id, exc)
+            log_event(
+                logger,
+                "match_job_failed",
+                level=logging.ERROR,
+                job_id=job.id,
+                game_id=job.game_id,
+                attempt=job.attempts,
+                failure_reason="execution_error",
+                error_type=type(exc).__name__,
+                match_duration_ms=round((time.monotonic() - started_at) * 1000, 2),
+            )
         return True
     finally:
         db.close()
@@ -259,12 +342,26 @@ def run_loop(
 ) -> None:
     job_notifier = notifier or create_job_notifier()
     next_reaper_at = 0.0
+    next_heartbeat_at: float | None = None
+    log_event(
+        logger,
+        "worker_started",
+        poll_interval_seconds=poll_interval_seconds,
+        heartbeat_interval_seconds=get_heartbeat_interval_seconds(),
+        notifier=type(job_notifier).__name__,
+    )
     try:
         while True:
             now = time.monotonic()
+            if next_heartbeat_at is None:
+                next_heartbeat_at = now + get_heartbeat_interval_seconds()
             if now >= next_reaper_at:
                 run_reaper_once()
                 next_reaper_at = now + poll_interval_seconds
+
+            if now >= next_heartbeat_at:
+                log_heartbeat()
+                next_heartbeat_at = now + get_heartbeat_interval_seconds()
 
             processed = run_once()
             if not processed:

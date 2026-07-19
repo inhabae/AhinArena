@@ -76,6 +76,7 @@ and upload the resulting executable.
 - `docs/production-images.md` documents reproducible API and worker images, production run commands, image tags, scanning, and SBOM generation.
 - `docs/production-stack.md` documents the production Compose stack, migrations, persistent PostgreSQL, ingress/TLS requirements, deployment, and rollback.
 - `docs/production-configuration.md` documents validated runtime configuration, secret-manager injection, and credential rotation.
+- `docs/operations.md` documents structured telemetry, dashboards, alerts, log retention, and redaction expectations.
 
 ---
 

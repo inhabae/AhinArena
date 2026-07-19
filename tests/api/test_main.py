@@ -381,6 +381,14 @@ def test_liveness_endpoint_returns_ok():
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    assert response.headers["X-Request-ID"]
+
+
+def test_api_preserves_client_request_id():
+    response = client.get("/health/live", headers={"X-Request-ID": "request-123"})
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == "request-123"
 
 
 def test_readiness_endpoint_returns_ok_when_database_is_available(monkeypatch):
