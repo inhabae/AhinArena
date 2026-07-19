@@ -71,7 +71,7 @@ and upload the resulting executable.
 - `docs/connectfour-engine-referee.md` documents Connect Four bot/referee communication.
 - `docs/frontend.md` documents the React web interface routes, replay behavior, and API client conventions.
 - `docs/bot-submission.md` documents uploaded bot source storage, validation, and match execution.
-- `docs/docker-sandboxing.md` documents the Docker runner image, container restrictions, configuration, and cleanup behavior.
+- `docs/docker-sandboxing.md` documents the Docker runner image, container restrictions, trust boundaries, runner-host controls, image updates, and incident response.
 - `docs/queue-and-workers.md` documents asynchronous match jobs, worker execution, queue recovery, APIs, and local workflow.
 - `docs/production-images.md` documents reproducible API and worker images, production run commands, image tags, scanning, and SBOM generation.
 - `docs/production-stack.md` documents the production Compose stack, migrations, persistent PostgreSQL, ingress/TLS requirements, deployment, and rollback.
