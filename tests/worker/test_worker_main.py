@@ -479,3 +479,28 @@ def test_run_loop_runs_reaper_periodically(monkeypatch):
 
     assert reaper_calls == ["reap", "reap"]
     assert run_calls == ["run", "run", "run"]
+
+
+def test_log_heartbeat_reports_queue_depth(monkeypatch):
+    SessionLocal = make_sessionmaker()
+    db = SessionLocal()
+    db.add_all(
+        [
+            MatchJob(game_id="tictactoe", bot_one_id=1, bot_two_id=2, status="queued"),
+            MatchJob(game_id="tictactoe", bot_one_id=1, bot_two_id=2, status="queued"),
+            MatchJob(game_id="tictactoe", bot_one_id=1, bot_two_id=2, status="running"),
+        ]
+    )
+    db.commit()
+    db.close()
+    events = []
+    monkeypatch.setattr(worker_main, "get_sessionmaker", lambda: SessionLocal)
+    monkeypatch.setattr(
+        worker_main,
+        "log_event",
+        lambda _logger, event, **fields: events.append((event, fields)),
+    )
+
+    worker_main.log_heartbeat()
+
+    assert events == [("worker_heartbeat", {"queue_depth": 2, "running_jobs": 1})]

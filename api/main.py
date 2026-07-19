@@ -4,6 +4,8 @@ import os
 import re
 import secrets
 import struct
+import time
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -38,6 +40,7 @@ from api.match_execution import (
     get_bot_move_timeout_seconds,
     get_bot_startup_timeout_seconds,
 )
+from api.observability import get_structured_logger, log_event, request_id_context
 from api.match_execution import score_for_bot_one_or_error as _score_for_bot_one_or_error
 from engine.connectfour.runner import run_connectfour_match
 from engine.tictactoe.runner import run_tictactoe_match
@@ -136,6 +139,7 @@ AUTH_RATE_LIMITS = {
 }
 
 logger = logging.getLogger(__name__)
+telemetry_logger = get_structured_logger("api")
 
 DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR = "DEFAULT_BOT_EXECUTABLE_DIR"
 SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
@@ -722,6 +726,32 @@ app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, unexpected_exception_handler)
+
+
+@app.middleware("http")
+async def log_request(request: Request, call_next):
+    """Attach a correlation ID and emit one structured event per API request."""
+    supplied_request_id = request.headers.get("X-Request-ID", "")
+    request_id = supplied_request_id if len(supplied_request_id) <= 128 else ""
+    request_id = request_id or str(uuid.uuid4())
+    token = request_id_context.set(request_id)
+    started_at = time.perf_counter()
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        log_event(
+            telemetry_logger,
+            "api_request_completed",
+            method=request.method,
+            path=request.url.path,
+            status_code=status_code,
+            duration_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
+        request_id_context.reset(token)
 
 
 @app.get("/health")
@@ -1397,6 +1427,14 @@ def create_match(
         db.execute(text("NOTIFY match_jobs_channel"))
         db.commit()
 
+    log_event(
+        telemetry_logger,
+        "match_job_enqueued",
+        job_id=job.id,
+        game_id=job.game_id,
+        bot_one_id=job.bot_one_id,
+        bot_two_id=job.bot_two_id,
+    )
     response.headers["Location"] = f"/match-jobs/{job.id}"
 
     return MatchJobCreateResponse(job_id=job.id, status=job.status)
