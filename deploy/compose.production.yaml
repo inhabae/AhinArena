@@ -91,6 +91,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM:?set EMAIL_FROM}
       DOCKER_BINARY: ${DOCKER_BINARY:-docker}
+      BOT_SANDBOX_TEMP_DIR: ${BOT_SANDBOX_HOST_DIR:?set BOT_SANDBOX_HOST_DIR to a dedicated host directory}
       BOT_SANDBOX_MEMORY_LIMIT: ${BOT_SANDBOX_MEMORY_LIMIT:-128m}
       BOT_SANDBOX_CPU_LIMIT: ${BOT_SANDBOX_CPU_LIMIT:-0.5}
       BOT_SANDBOX_PIDS_LIMIT: ${BOT_SANDBOX_PIDS_LIMIT:-64}
@@ -103,6 +104,9 @@ services:
       - ${DOCKER_SOCKET_GID:?set DOCKER_SOCKET_GID to the Docker socket group ID}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ${BOT_SANDBOX_HOST_DIR:?set BOT_SANDBOX_HOST_DIR to a dedicated host directory}
+        target: ${BOT_SANDBOX_HOST_DIR:?set BOT_SANDBOX_HOST_DIR to a dedicated host directory}
     networks:
       - database
     restart: unless-stopped

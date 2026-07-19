@@ -15,6 +15,7 @@ def production_environment(monkeypatch):
         "EMAIL_FROM": "AhinArena <noreply@arena.example.com>",
         "BOT_SANDBOX_IMAGE": "registry.example/runner@sha256:" + "a" * 64,
         "DOCKER_BINARY": "docker",
+        "BOT_SANDBOX_TEMP_DIR": "/var/lib/ahinarena/bot-sandbox",
         "BOT_SANDBOX_MEMORY_LIMIT": "128m",
         "BOT_SANDBOX_CPU_LIMIT": "0.5",
         "BOT_SANDBOX_PIDS_LIMIT": "64",

@@ -25,11 +25,16 @@ docker network create ahinarena-ingress
 install -m 600 /dev/null /secure/path/ahinarena.production.env
 # Copy values from deploy/production.env.example into that file.
 DOCKER_SOCKET_GID=$(stat -c '%g' /var/run/docker.sock)
+# Create the configured BOT_SANDBOX_HOST_DIR once. The worker image uses UID/GID 10001.
+install -d -o 10001 -g 10001 -m 700 /var/lib/ahinarena/bot-sandbox
 ```
 
 Use immutable image digests in `API_IMAGE`, `WORKER_IMAGE`, and
 `BOT_SANDBOX_IMAGE`. `DATABASE_URL` must use `postgres` as its host and must
-URL-encode the password if needed.
+URL-encode the password if needed. `BOT_SANDBOX_HOST_DIR` must be an absolute,
+dedicated host directory writable by UID/GID 10001; Compose bind-mounts it at
+the same path into the worker so Docker can mount a per-match executable into
+the bot container.
 
 ## Deploy and operate
 
