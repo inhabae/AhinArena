@@ -10,8 +10,12 @@ application or database ports to the host.
 
 Use Docker Engine with Compose v2 on a Linux host. The worker needs access to
 the Docker socket to create the separately restricted bot containers; this is
-equivalent to host-root access. Prefer a dedicated worker host or a narrowly
-scoped Docker API proxy.
+equivalent to host-root access. The Compose file deliberately mounts that
+socket only into `worker`, never `api`, `migrate`, or PostgreSQL. Prefer a
+dedicated sandbox-runner host/node or a separate sandbox-execution service;
+do not colocate a socket-enabled worker with the public API or database host.
+When a separate runner is impractical, use a narrowly scoped Docker API proxy
+and host/network controls described in `docs/docker-sandboxing.md`.
 
 Create the proxy network once, then create a secret environment file outside
 the repository from `deploy/production.env.example`:
