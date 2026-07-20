@@ -347,6 +347,16 @@ def seed_submission(
     return submission
 
 
+def seed_default_bot_submissions(session, *, game_id="tictactoe"):
+    for bot_name in ("randombot1", "randombot2"):
+        bot = (
+            session.query(Bot)
+            .filter(Bot.game_id == game_id, Bot.name == bot_name)
+            .one()
+        )
+        seed_submission(session, bot)
+
+
 def mounted_source_path(command):
     mount_index = command.index("--mount") + 1
     mount = command[mount_index]
@@ -2756,6 +2766,7 @@ def test_create_match_uses_overridden_database_session(
 ):
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
+    seed_default_bot_submissions(sqlite_database_dependency)
 
     def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         raise AssertionError("runner should not be called")
@@ -2775,6 +2786,7 @@ def test_create_match_enqueues_match_job(
 ):
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
+    seed_default_bot_submissions(sqlite_database_dependency)
 
     def fake_run_tictactoe_match(p1_command, p2_command, on_move, **_kwargs):
         raise AssertionError("runner should not be called")
@@ -3339,6 +3351,31 @@ def test_create_match_enqueues_active_submission_bots(
     assert job.status == "queued"
 
 
+def test_create_match_rejects_bot_without_active_submission(sqlite_database_dependency):
+    user = login_user(sqlite_database_dependency)
+    bot_one = Bot(name="empty", game_id="tictactoe", owner_id=user.id)
+    sqlite_database_dependency.add(bot_one)
+    sqlite_database_dependency.commit()
+    seed_bot(sqlite_database_dependency, name="ready")
+
+    response = client.post(
+        "/matches",
+        json={
+            "game": "tictactoe",
+            "players": [{"bot": "empty"}, {"bot": "ready"}],
+        },
+    )
+
+    assert response.status_code == 400
+    assert sqlite_database_dependency.query(MatchJob).count() == 0
+    assert response.json() == {
+        "error": {
+            "code": "bot_has_no_active_submission",
+            "message": "Bot has no active submission: empty",
+        }
+    }
+
+
 def test_create_match_rejects_bot_missing_from_database(sqlite_database_dependency):
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
@@ -3429,6 +3466,7 @@ def test_create_match_enqueues_connectfour_match_job(
 ):
     authenticate_request_dependency()
     api_main.seed_default_bots(sqlite_database_dependency)
+    seed_default_bot_submissions(sqlite_database_dependency, game_id="connect-four")
 
     def fake_run_connectfour_match(p1_command, p2_command, on_move, **_kwargs):
         raise AssertionError("runner should not be called")
