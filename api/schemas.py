@@ -120,8 +120,7 @@ class PasswordResetRequest(BaseModel):
         return UserRegisterRequest.validate_email(value)
 
 class PasswordResetResponse(BaseModel):
-    reset_token: str | None = None
-    reset_url: str | None = None
+    pass
 
 class PasswordResetValidationRequest(BaseModel):
     token: str = Field(min_length=20, max_length=128)

@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 from api.auth import hash_password, verify_password
 import api.bot_sandbox as bot_sandbox
 from api.database import Base, get_db
+from api.email_delivery import is_email_delivery_configured
 from api.models import (
     AuthRateLimitEvent,
     AuthToken,
@@ -448,6 +449,23 @@ def test_password_hash_rejects_wrong_password():
     password_hash = hash_password("correct horse battery staple")
 
     assert verify_password("wrong password", password_hash) is False
+
+
+@pytest.mark.parametrize(
+    ("environment_variable", "value"),
+    [
+        ("RESEND_API_KEY", "test-key"),
+        ("EMAIL_FROM", "AhinArena <noreply@example.com>"),
+    ],
+)
+def test_email_delivery_is_not_configured_with_only_one_required_value(
+    monkeypatch,
+    environment_variable,
+    value,
+):
+    monkeypatch.setenv(environment_variable, value)
+
+    assert is_email_delivery_configured() is False
 
 
 def test_register_user_creates_public_user_response(sqlite_database_dependency):
@@ -1061,8 +1079,13 @@ def test_password_reset_confirm_updates_password_and_verifies_user(sqlite_databa
     sqlite_database_dependency.add(user)
     sqlite_database_dependency.commit()
 
-    reset_response = client.post("/auth/password-reset", json={"email": "player@example.com"})
-    token = reset_response.json()["reset_token"]
+    token = api_main.make_auth_token(
+        sqlite_database_dependency,
+        user=user,
+        purpose="password_reset",
+        ttl=api_main.PASSWORD_RESET_TTL,
+    ).token
+    sqlite_database_dependency.commit()
 
     confirm_response = client.post(
         "/auth/password-reset/confirm",
@@ -1085,8 +1108,13 @@ def test_password_reset_validate_accepts_active_token(sqlite_database_dependency
     sqlite_database_dependency.add(user)
     sqlite_database_dependency.commit()
 
-    reset_response = client.post("/auth/password-reset", json={"email": "player@example.com"})
-    token = reset_response.json()["reset_token"]
+    token = api_main.make_auth_token(
+        sqlite_database_dependency,
+        user=user,
+        purpose="password_reset",
+        ttl=api_main.PASSWORD_RESET_TTL,
+    ).token
+    sqlite_database_dependency.commit()
 
     validate_response = client.post("/auth/password-reset/validate", json={"token": token})
 
@@ -1102,8 +1130,13 @@ def test_password_reset_validate_rejects_used_token(sqlite_database_dependency):
     sqlite_database_dependency.add(user)
     sqlite_database_dependency.commit()
 
-    reset_response = client.post("/auth/password-reset", json={"email": "player@example.com"})
-    token = reset_response.json()["reset_token"]
+    token = api_main.make_auth_token(
+        sqlite_database_dependency,
+        user=user,
+        purpose="password_reset",
+        ttl=api_main.PASSWORD_RESET_TTL,
+    ).token
+    sqlite_database_dependency.commit()
     client.post(
         "/auth/password-reset/confirm",
         json={"token": token, "password": "New-password1"},
@@ -1113,6 +1146,22 @@ def test_password_reset_validate_rejects_used_token(sqlite_database_dependency):
 
     assert validate_response.status_code == 400
     assert validate_response.json()["error"]["code"] == "invalid_or_expired_token"
+
+
+def test_password_reset_does_not_return_a_token_without_email_delivery(sqlite_database_dependency):
+    user = User(
+        username="player",
+        email="player@example.com",
+        password_hash=hash_password("old-password"),
+    )
+    sqlite_database_dependency.add(user)
+    sqlite_database_dependency.commit()
+
+    response = client.post("/auth/password-reset", json={"email": "player@example.com"})
+
+    assert response.status_code == 200
+    assert response.json() == {}
+    assert sqlite_database_dependency.query(AuthToken).one().purpose == "password_reset"
 
 
 def test_password_reset_sends_email_when_email_delivery_is_configured(
@@ -1139,7 +1188,7 @@ def test_password_reset_sends_email_when_email_delivery_is_configured(
     response = client.post("/auth/password-reset", json={"email": "player@example.com"})
 
     assert response.status_code == 200
-    assert response.json() == {"reset_token": None, "reset_url": None}
+    assert response.json() == {}
     token = sqlite_database_dependency.query(AuthToken).one()
     assert sent_messages == [
         {
@@ -1257,7 +1306,7 @@ def test_password_reset_rate_limit_counts_nonexistent_email(sqlite_database_depe
     for _ in range(limit):
         response = client.post("/auth/password-reset", json={"email": "missing@example.com"})
         assert response.status_code == 200
-        assert response.json() == {"reset_token": None, "reset_url": None}
+        assert response.json() == {}
 
     response = client.post("/auth/password-reset", json={"email": "missing@example.com"})
 

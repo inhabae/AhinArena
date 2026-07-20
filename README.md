@@ -480,11 +480,9 @@ EMAIL_FROM="AhinArena <noreply@mail.example.com>"
 FRONTEND_URL="https://arena.example.com"
 ```
 
-When email delivery is configured, registration and password reset endpoints
-send links by email and do not return raw auth tokens. When it is not
-configured, the API returns development links so local auth flows remain
-testable. `FRONTEND_URL` controls the link host and defaults to
-`http://localhost:5173`.
+When email delivery is configured, registration and password-reset endpoints
+send links by email. They never return raw auth tokens. `FRONTEND_URL` controls
+the link host and defaults to `http://localhost:5173`.
 
 The API also reads allowed browser origins for CORS from
 `CORS_ALLOWED_ORIGINS`. Use a comma-separated list when the frontend runs on a
