@@ -178,7 +178,7 @@ migration exited successfully. Then use dedicated disposable test accounts to:
 
 1. Register, verify email, log in, and confirm the session cookie is `Secure`,
    `HttpOnly`, and sent only over HTTPS.
-2. Upload two known-good static Linux x86-64 bot executables and request a
+2. Upload two known-good static Linux ARM64 bot executables and request a
    match.
 3. Verify the job moves from queued to completed, a match ID and replay are
    visible, and no unexpected sandbox errors occur.

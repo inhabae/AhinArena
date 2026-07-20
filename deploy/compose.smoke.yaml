@@ -12,6 +12,7 @@ services:
       # still enforces HTTPS and Secure cookies behind its reverse proxy.
       DEPLOY_ENVIRONMENT: smoke
       REQUIRE_SECURE_COOKIES: "false"
+      EMAIL_DELIVERY_MODE: disabled
 
   worker:
     environment:
