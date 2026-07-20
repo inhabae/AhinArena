@@ -15,7 +15,7 @@ class EmailDeliveryConfigurationError(EmailDeliveryError):
 
 
 def is_email_delivery_configured() -> bool:
-    return bool(os.environ.get("RESEND_API_KEY") or os.environ.get("EMAIL_FROM"))
+    return bool(os.environ.get("RESEND_API_KEY") and os.environ.get("EMAIL_FROM"))
 
 
 def _resend_config() -> tuple[str, str]:

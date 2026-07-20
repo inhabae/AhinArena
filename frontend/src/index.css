@@ -958,13 +958,6 @@ select:disabled {
   margin: 0;
 }
 
-.inline-success .dev-link {
-  color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 13px;
-  font-weight: 400;
-}
-
 .text-action {
   background: none;
   border: 0;

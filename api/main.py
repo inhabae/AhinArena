@@ -978,11 +978,7 @@ def request_password_reset(
         return PasswordResetResponse()
 
     db.commit()
-
-    return PasswordResetResponse(
-        reset_token=reset_token.token,
-        reset_url=reset_url,
-    )
+    return PasswordResetResponse()
 
 
 @app.post("/auth/password-reset/validate", status_code=status.HTTP_204_NO_CONTENT)
