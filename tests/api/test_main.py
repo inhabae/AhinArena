@@ -516,7 +516,7 @@ def test_register_user_sends_verification_email_when_email_delivery_is_configure
     ]
 
 
-def test_register_user_skips_verification_email_for_addresses_starting_with_a(
+def test_register_user_sends_verification_email_for_addresses_starting_with_a(
     monkeypatch,
     sqlite_database_dependency,
 ):
@@ -527,6 +527,7 @@ def test_register_user_skips_verification_email_for_addresses_starting_with_a(
 
     monkeypatch.setenv("RESEND_API_KEY", "test-key")
     monkeypatch.setenv("EMAIL_FROM", "AhinArena <noreply@example.com>")
+    monkeypatch.setenv("FRONTEND_URL", "https://arena.example.com")
     monkeypatch.setattr(api_main, "send_verification_email", fake_send_verification_email)
 
     response = client.post(
@@ -543,7 +544,13 @@ def test_register_user_skips_verification_email_for_addresses_starting_with_a(
     token = sqlite_database_dependency.query(AuthToken).one()
     assert token.purpose == "email_verification"
     assert token.used_at is None
-    assert sent_messages == []
+    assert sent_messages == [
+        {
+            "to": "aaa@gmail.com",
+            "username": "PlayerOne",
+            "verification_url": f"https://arena.example.com/verify-email?token={token.token}",
+        }
+    ]
 
 
 def test_resend_verification_email_reissues_token(sqlite_database_dependency):
@@ -613,7 +620,7 @@ def test_resend_verification_email_sends_email_when_delivery_is_configured(
     ]
 
 
-def test_resend_verification_email_skips_email_for_addresses_starting_with_a(
+def test_resend_verification_email_sends_email_for_addresses_starting_with_a(
     monkeypatch,
     sqlite_database_dependency,
 ):
@@ -621,6 +628,11 @@ def test_resend_verification_email_skips_email_for_addresses_starting_with_a(
 
     def fake_send_verification_email(**message):
         sent_messages.append(message)
+
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    monkeypatch.setenv("EMAIL_FROM", "AhinArena <noreply@example.com>")
+    monkeypatch.setenv("FRONTEND_URL", "https://arena.example.com")
+    monkeypatch.setattr(api_main, "send_verification_email", fake_send_verification_email)
 
     register_response = client.post(
         "/auth/register",
@@ -631,10 +643,7 @@ def test_resend_verification_email_skips_email_for_addresses_starting_with_a(
         },
     )
     assert register_response.status_code == 201
-
-    monkeypatch.setenv("RESEND_API_KEY", "test-key")
-    monkeypatch.setenv("EMAIL_FROM", "AhinArena <noreply@example.com>")
-    monkeypatch.setattr(api_main, "send_verification_email", fake_send_verification_email)
+    sent_messages.clear()
 
     response = client.post(
         "/auth/verify-email/resend",
@@ -647,7 +656,13 @@ def test_resend_verification_email_skips_email_for_addresses_starting_with_a(
     assert len(tokens) == 2
     assert tokens[0].used_at is not None
     assert tokens[1].used_at is None
-    assert sent_messages == []
+    assert sent_messages == [
+        {
+            "to": "aaa@gmail.com",
+            "username": "PlayerOne",
+            "verification_url": f"https://arena.example.com/verify-email?token={tokens[1].token}",
+        }
+    ]
 
 
 def test_resend_verification_email_is_noop_for_verified_user(sqlite_database_dependency):
