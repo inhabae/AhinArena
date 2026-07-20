@@ -42,6 +42,15 @@ function PlayerRating({ rating }) {
   );
 }
 
+function VersionedBotName({ name, version }) {
+  return (
+    <>
+      {name}
+      {version && <span className="bot-version-suffix">v{version}</span>}
+    </>
+  );
+}
+
 function stopLinkPropagation(event) {
   event.stopPropagation();
 }
@@ -249,7 +258,10 @@ export default function MatchHistoryPage() {
                               to={`/bots/${match.bot_one_id}`}
                               onClick={stopLinkPropagation}
                             >
-                              {match.bot_one_name}
+                              <VersionedBotName
+                                name={match.bot_one_name}
+                                version={match.bot_one_version}
+                              />
                             </Link>
                             <PlayerRating
                               rating={match.bot_one_rating_before}
@@ -265,7 +277,10 @@ export default function MatchHistoryPage() {
                               to={`/bots/${match.bot_two_id}`}
                               onClick={stopLinkPropagation}
                             >
-                              {match.bot_two_name}
+                              <VersionedBotName
+                                name={match.bot_two_name}
+                                version={match.bot_two_version}
+                              />
                             </Link>
                             <PlayerRating
                               rating={match.bot_two_rating_before}

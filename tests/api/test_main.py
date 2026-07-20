@@ -313,7 +313,18 @@ def seed_bot(session, *, name="random", game_id="tictactoe"):
     return bot
 
 
-def seed_submission(session, bot, *, source_code="print('ok')\n", version=1):
+def seed_submission(
+    session,
+    bot,
+    *,
+    source_code="print('ok')\n",
+    version=1,
+    rating=1200,
+    games_played=0,
+    wins=0,
+    losses=0,
+    draws=0,
+):
     executable = valid_bot_executable(source_code.encode())
     submission = BotSubmission(
         bot_id=bot.id,
@@ -321,6 +332,11 @@ def seed_submission(session, bot, *, source_code="print('ok')\n", version=1):
         executable=executable,
         executable_size=len(executable),
         executable_digest="0" * 64,
+        rating=rating,
+        games_played=games_played,
+        wins=wins,
+        losses=losses,
+        draws=draws,
     )
     session.add(submission)
     session.flush()
@@ -1757,32 +1773,30 @@ def test_list_matches_validates_pagination_parameters(query):
 
 
 def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
-    low = Bot(
-        name="low",
-        game_id="tictactoe",
+    low = Bot(name="low", game_id="tictactoe")
+    high = Bot(name="high", game_id="tictactoe")
+    no_games = Bot(name="new", game_id="tictactoe")
+    other_game = Bot(name="connect-four-high", game_id="connect-four")
+    sqlite_database_dependency.add_all([low, high, no_games, other_game])
+    sqlite_database_dependency.commit()
+    low_submission = seed_submission(
+        sqlite_database_dependency,
+        low,
         rating=1100,
         games_played=3,
         wins=1,
         losses=2,
-        draws=0,
     )
-    high = Bot(
-        name="high",
-        game_id="tictactoe",
+    high_submission = seed_submission(
+        sqlite_database_dependency,
+        high,
         rating=1500,
         games_played=4,
         wins=3,
         losses=1,
-        draws=0,
     )
-    no_games = Bot(name="new", game_id="tictactoe")
-    other_game = Bot(
-        name="connect-four-high",
-        game_id="connect-four",
-        rating=1800,
-    )
-    sqlite_database_dependency.add_all([low, high, no_games, other_game])
-    sqlite_database_dependency.commit()
+    no_games_submission = seed_submission(sqlite_database_dependency, no_games)
+    seed_submission(sqlite_database_dependency, other_game, rating=1800)
 
     response = client.get("/leaderboard?game_id=tictactoe")
 
@@ -1790,6 +1804,8 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
     assert response.json() == [
         {
             "bot_id": high.id,
+            "submission_id": high_submission.id,
+            "version": 1,
             "name": "high",
             "owner_name": api_main.BUILT_IN_BOT_OWNER_NAME,
             "rating": 1500,
@@ -1800,6 +1816,8 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
         },
         {
             "bot_id": no_games.id,
+            "submission_id": no_games_submission.id,
+            "version": 1,
             "name": "new",
             "owner_name": api_main.BUILT_IN_BOT_OWNER_NAME,
             "rating": 1200,
@@ -1810,6 +1828,8 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
         },
         {
             "bot_id": low.id,
+            "submission_id": low_submission.id,
+            "version": 1,
             "name": "low",
             "owner_name": api_main.BUILT_IN_BOT_OWNER_NAME,
             "rating": 1100,
@@ -1822,10 +1842,12 @@ def test_leaderboard_returns_bots_ordered_by_rating(sqlite_database_dependency):
 
 
 def test_leaderboard_uses_stable_tie_breaker(sqlite_database_dependency):
-    second = Bot(name="second", game_id="tictactoe", rating=1300)
-    first = Bot(name="first", game_id="tictactoe", rating=1300)
+    second = Bot(name="second", game_id="tictactoe")
+    first = Bot(name="first", game_id="tictactoe")
     sqlite_database_dependency.add_all([second, first])
     sqlite_database_dependency.commit()
+    seed_submission(sqlite_database_dependency, second, rating=1300)
+    seed_submission(sqlite_database_dependency, first, rating=1300)
 
     response = client.get("/leaderboard?game_id=tictactoe")
 
@@ -1841,15 +1863,16 @@ def test_leaderboard_returns_user_and_system_bot_owners(sqlite_database_dependen
     )
     sqlite_database_dependency.add(user)
     sqlite_database_dependency.flush()
-    system_bot = Bot(name="system", game_id="tictactoe", rating=1400)
+    system_bot = Bot(name="system", game_id="tictactoe")
     user_bot = Bot(
         name="owned",
         game_id="tictactoe",
-        rating=1300,
         owner_id=user.id,
     )
     sqlite_database_dependency.add_all([system_bot, user_bot])
     sqlite_database_dependency.commit()
+    seed_submission(sqlite_database_dependency, system_bot, rating=1400)
+    seed_submission(sqlite_database_dependency, user_bot, rating=1300)
 
     response = client.get("/leaderboard?game_id=tictactoe")
 
@@ -1865,12 +1888,15 @@ def test_leaderboard_returns_user_and_system_bot_owners(sqlite_database_dependen
 
 def test_leaderboard_paginates_results(sqlite_database_dependency):
     bots = [
-        Bot(name="first", game_id="tictactoe", rating=1500),
-        Bot(name="second", game_id="tictactoe", rating=1400),
-        Bot(name="third", game_id="tictactoe", rating=1300),
+        Bot(name="first", game_id="tictactoe"),
+        Bot(name="second", game_id="tictactoe"),
+        Bot(name="third", game_id="tictactoe"),
     ]
     sqlite_database_dependency.add_all(bots)
     sqlite_database_dependency.commit()
+    seed_submission(sqlite_database_dependency, bots[0], rating=1500)
+    second_submission = seed_submission(sqlite_database_dependency, bots[1], rating=1400)
+    seed_submission(sqlite_database_dependency, bots[2], rating=1300)
 
     response = client.get("/leaderboard?game_id=tictactoe&limit=1&offset=1")
 
@@ -1878,6 +1904,8 @@ def test_leaderboard_paginates_results(sqlite_database_dependency):
     assert response.json() == [
         {
             "bot_id": bots[1].id,
+            "submission_id": second_submission.id,
+            "version": 1,
             "name": "second",
             "owner_name": api_main.BUILT_IN_BOT_OWNER_NAME,
             "rating": 1400,
@@ -2561,13 +2589,15 @@ def test_submit_bot_source_rejects_oversized_source_before_insert(
     assert bot.active_submission_id is None
 
 
-def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(
+def test_seed_default_bots_creates_random_and_sleepy_bots_for_each_game(
     sqlite_database_dependency,
     tmp_path,
     monkeypatch,
 ):
     (tmp_path / "tictactoe").write_bytes(valid_bot_executable())
+    (tmp_path / "tictactoe-sleepy").write_bytes(valid_bot_executable(b"sleepy-ttt"))
     (tmp_path / "connect-four").write_bytes(valid_bot_executable())
+    (tmp_path / "connect-four-sleepy").write_bytes(valid_bot_executable(b"sleepy-c4"))
     monkeypatch.setenv(api_main.DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR, str(tmp_path))
     api_main.seed_default_bots(sqlite_database_dependency)
 
@@ -2575,26 +2605,34 @@ def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(
 
     assert response.status_code == 200
     assert response.json() == [
+        {"bot_id": 3, "name": "random", "owner_name": None, "has_active_submission": True},
         {"bot_id": 1, "name": "randombot1", "owner_name": None, "has_active_submission": True},
         {"bot_id": 2, "name": "randombot2", "owner_name": None, "has_active_submission": True},
+        {"bot_id": 4, "name": "sleepy", "owner_name": None, "has_active_submission": True},
     ]
 
     connectfour_response = client.get("/bots?game_id=connect-four")
 
     assert connectfour_response.status_code == 200
     assert connectfour_response.json() == [
-        {"bot_id": 3, "name": "randombot1", "owner_name": None, "has_active_submission": True},
-        {"bot_id": 4, "name": "randombot2", "owner_name": None, "has_active_submission": True},
+        {"bot_id": 7, "name": "random", "owner_name": None, "has_active_submission": True},
+        {"bot_id": 5, "name": "randombot1", "owner_name": None, "has_active_submission": True},
+        {"bot_id": 6, "name": "randombot2", "owner_name": None, "has_active_submission": True},
+        {"bot_id": 8, "name": "sleepy", "owner_name": None, "has_active_submission": True},
     ]
     assert {
         bot.owner_id
         for bot in sqlite_database_dependency.query(Bot)
-        .filter(Bot.name.in_(("randombot1", "randombot2")))
+        .filter(Bot.name.in_(("randombot1", "randombot2", "random", "sleepy")))
         .all()
     } == {None}
     seeded_bots = sqlite_database_dependency.query(Bot).all()
     assert all(bot.active_submission_id is not None for bot in seeded_bots)
-    assert sqlite_database_dependency.query(BotSubmission).count() == 4
+    assert sqlite_database_dependency.query(BotSubmission).count() == 8
+    assert {
+        submission.original_filename
+        for submission in sqlite_database_dependency.query(BotSubmission).all()
+    } == {"tictactoe", "tictactoe-sleepy", "connect-four", "connect-four-sleepy"}
     assert {
         submission.version
         for submission in sqlite_database_dependency.query(BotSubmission).all()
@@ -2603,13 +2641,15 @@ def test_seed_default_bots_creates_two_random_bot_aliases_for_each_game(
 
 def test_seed_default_bots_is_idempotent(sqlite_database_dependency, tmp_path, monkeypatch):
     (tmp_path / "tictactoe").write_bytes(valid_bot_executable())
+    (tmp_path / "tictactoe-sleepy").write_bytes(valid_bot_executable(b"sleepy-ttt"))
     (tmp_path / "connect-four").write_bytes(valid_bot_executable())
+    (tmp_path / "connect-four-sleepy").write_bytes(valid_bot_executable(b"sleepy-c4"))
     monkeypatch.setenv(api_main.DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR, str(tmp_path))
     api_main.seed_default_bots(sqlite_database_dependency)
     api_main.seed_default_bots(sqlite_database_dependency)
 
-    assert sqlite_database_dependency.query(Bot).count() == 4
-    assert sqlite_database_dependency.query(BotSubmission).count() == 4
+    assert sqlite_database_dependency.query(Bot).count() == 8
+    assert sqlite_database_dependency.query(BotSubmission).count() == 8
 
 
 def test_list_bots_paginates_results(sqlite_database_dependency):

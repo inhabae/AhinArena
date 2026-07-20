@@ -1,7 +1,7 @@
 import os
 
 from api.bot_sandbox import BotSandbox, build_bot_sandbox
-from api.models import Bot, Match, Move
+from api.models import Bot, BotSubmission, Match, Move
 from api.ratings import DEFAULT_ELO_K_FACTOR, calculate_elo_rating_change
 from api.ratings import score_for_bot_one as calculate_score_for_bot_one
 from engine.connectfour.runner import run_connectfour_match
@@ -58,6 +58,8 @@ def apply_match_record_updates(
     *,
     bot_one: Bot,
     bot_two: Bot,
+    bot_one_submission: BotSubmission,
+    bot_two_submission: BotSubmission,
     winner_bot_id: int | None,
     bot_one_rating_after: float,
     bot_two_rating_after: float,
@@ -65,20 +67,20 @@ def apply_match_record_updates(
     assert bot_one.id != bot_two.id
     assert winner_bot_id in {bot_one.id, bot_two.id, None}
 
-    bot_one.rating = bot_one_rating_after
-    bot_two.rating = bot_two_rating_after
-    bot_one.games_played += 1
-    bot_two.games_played += 1
+    bot_one_submission.rating = bot_one_rating_after
+    bot_two_submission.rating = bot_two_rating_after
+    bot_one_submission.games_played += 1
+    bot_two_submission.games_played += 1
 
     if winner_bot_id is None:
-        bot_one.draws += 1
-        bot_two.draws += 1
+        bot_one_submission.draws += 1
+        bot_two_submission.draws += 1
     elif winner_bot_id == bot_one.id:
-        bot_one.wins += 1
-        bot_two.losses += 1
+        bot_one_submission.wins += 1
+        bot_two_submission.losses += 1
     elif winner_bot_id == bot_two.id:
-        bot_two.wins += 1
-        bot_one.losses += 1
+        bot_two_submission.wins += 1
+        bot_one_submission.losses += 1
 
 
 def execute_match(
@@ -99,8 +101,10 @@ def execute_match(
     if bot_one.game_id != game_id or bot_two.game_id != game_id:
         raise ValueError("Match job bot game does not match job game")
 
-    bot_one_rating_before = bot_one.rating
-    bot_two_rating_before = bot_two.rating
+    bot_one_submission = bot_one.active_submission
+    bot_two_submission = bot_two.active_submission
+    bot_one_rating_before = bot_one_submission.rating
+    bot_two_rating_before = bot_two_submission.rating
     moves: list[tuple[str, object]] = []
     bot_one_sandbox: BotSandbox | None = None
     bot_two_sandbox: BotSandbox | None = None
@@ -157,6 +161,8 @@ def execute_match(
         game_id=game_id,
         bot_one_id=bot_one.id,
         bot_two_id=bot_two.id,
+        bot_one_submission_id=bot_one_submission.id,
+        bot_two_submission_id=bot_two_submission.id,
         bot_one_rating_before=bot_one_rating_before,
         bot_two_rating_before=bot_two_rating_before,
         bot_one_rating_after=bot_one_rating_after,
@@ -182,6 +188,8 @@ def execute_match(
     apply_match_record_updates(
         bot_one=bot_one,
         bot_two=bot_two,
+        bot_one_submission=bot_one_submission,
+        bot_two_submission=bot_two_submission,
         winner_bot_id=winner_bot_id,
         bot_one_rating_after=bot_one_rating_after,
         bot_two_rating_after=bot_two_rating_after,

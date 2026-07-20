@@ -458,6 +458,13 @@ th {
   color: var(--accent);
 }
 
+.bot-version-suffix {
+  color: var(--text-muted);
+  font: 500 0.88em/1 var(--mono);
+  margin-left: 0.35em;
+  white-space: nowrap;
+}
+
 .match-history-meta {
   display: flex;
   justify-content: flex-end;
@@ -473,7 +480,8 @@ th {
   align-items: end;
 }
 
-.page-size-control {
+.page-size-control,
+.version-filter-control {
   align-items: center;
   color: var(--text-muted);
   display: inline-flex;
@@ -481,7 +489,8 @@ th {
   gap: 8px;
 }
 
-.page-size-control select {
+.page-size-control select,
+.version-filter-control select {
   color: var(--text-primary);
   font: 13px/1.2 var(--sans);
   min-height: 34px;
@@ -1356,6 +1365,79 @@ select:disabled {
 
 .leaderboard-table {
   min-width: 820px;
+}
+
+.bot-version-table {
+  min-width: 680px;
+}
+
+.version-upload-form {
+  display: grid;
+  gap: 8px;
+}
+
+.version-upload-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.version-file-button {
+  background: var(--surface-subtle);
+  border-color: var(--border);
+  color: var(--text-secondary);
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.version-file-button:hover {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.version-selected-file {
+  align-items: center;
+  color: var(--text-secondary);
+  display: inline-grid;
+  gap: 6px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  max-width: min(420px, 100%);
+  min-height: 32px;
+}
+
+.version-selected-file > span {
+  color: var(--text-primary);
+  font: 12px/1.2 var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-selected-file small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.version-submit-button {
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+.version-active-badge {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 999px;
+  color: var(--accent);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 8px;
+  padding: 4px 7px;
+  text-transform: uppercase;
 }
 
 .match-history-table th:nth-child(2),

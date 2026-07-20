@@ -36,6 +36,15 @@ export function getRecord(bot) {
   ];
 }
 
+function VersionedBotName({ bot }) {
+  return (
+    <>
+      {bot.name}
+      {bot.version && <span className="bot-version-suffix">v{bot.version}</span>}
+    </>
+  );
+}
+
 function getRankedBots(leaderboards, username) {
   return leaderboards.flatMap(({ gameId, bots }) =>
     bots
@@ -306,7 +315,7 @@ export default function PlayerPage() {
                         <tr key={`${bot.game_id}-${bot.bot_id}`}>
                           <td className="player-name">
                             <Link className="bot-name-link" to={`/bots/${bot.bot_id}`}>
-                              {bot.name}
+                              <VersionedBotName bot={bot} />
                             </Link>
                           </td>
                           <td>{bot.game_label}</td>

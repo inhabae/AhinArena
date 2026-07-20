@@ -188,8 +188,12 @@ class MatchSummary(BaseModel):
     game: str
     bot_one_id: int
     bot_two_id: int
+    bot_one_submission_id: int | None = None
+    bot_two_submission_id: int | None = None
     bot_one_name: str
     bot_two_name: str
+    bot_one_version: int | None = None
+    bot_two_version: int | None = None
     bot_one_rating_before: float
     bot_two_rating_before: float
     bot_one_rating_after: float
@@ -218,8 +222,12 @@ class LiveMatchDetail(BaseModel):
     game: str
     bot_one_id: int
     bot_two_id: int
+    bot_one_submission_id: int | None = None
+    bot_two_submission_id: int | None = None
     bot_one_name: str
     bot_two_name: str
+    bot_one_version: int | None = None
+    bot_two_version: int | None = None
     bot_one_rating_before: float | None = None
     bot_two_rating_before: float | None = None
     bot_one_rating_after: float | None = None
@@ -249,6 +257,8 @@ class MatchListResponse(BaseModel):
 
 class LeaderboardEntry(BaseModel):
     bot_id: int
+    submission_id: int
+    version: int
     name: str
     owner_name: str
     rating: float
@@ -271,6 +281,23 @@ class BotDetail(BaseModel):
     description: str = ""
     game_id: str
     owner_name: str
+    active_submission_id: int | None = None
+    active_version: int | None = None
+    versions: list["BotVersionDetail"] = []
+    rating: float
+    games_played: int
+    wins: int
+    losses: int
+    draws: int
+    created_at: datetime
+
+class BotVersionDetail(BaseModel):
+    submission_id: int
+    version: int
+    is_active: bool
+    executable_size: int
+    executable_digest: str
+    original_filename: str | None = None
     rating: float
     games_played: int
     wins: int

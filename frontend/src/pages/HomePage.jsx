@@ -34,6 +34,19 @@ function errorMessageFor(error) {
   return error.message || "The match could not be started.";
 }
 
+function formatBotVersion(name, version) {
+  return version ? `${name} v${version}` : name;
+}
+
+function VersionedBotName({ name, version }) {
+  return (
+    <>
+      {name}
+      {version && <span className="bot-version-suffix">v{version}</span>}
+    </>
+  );
+}
+
 function getFeaturedLastMove(game) {
   if (game.game === "tictactoe") {
     const replay = buildTicTacToeReplay(game.moves ?? []);
@@ -120,15 +133,21 @@ function FeaturedMatchup({ game }) {
     <strong className="featured-matchup">
       <span className="featured-player-name">
         <FeaturedPlayerMarker gameId={game.game} player="p1" />
-        <span className="featured-player-name-text" title={game.bot_one_name}>
-          {game.bot_one_name}
+        <span
+          className="featured-player-name-text"
+          title={formatBotVersion(game.bot_one_name, game.bot_one_version)}
+        >
+          <VersionedBotName name={game.bot_one_name} version={game.bot_one_version} />
         </span>
         <FeaturedResultBadge result={botOneResult} />
       </span>
       <span className="featured-player-name">
         <FeaturedPlayerMarker gameId={game.game} player="p2" />
-        <span className="featured-player-name-text" title={game.bot_two_name}>
-          {game.bot_two_name}
+        <span
+          className="featured-player-name-text"
+          title={formatBotVersion(game.bot_two_name, game.bot_two_version)}
+        >
+          <VersionedBotName name={game.bot_two_name} version={game.bot_two_version} />
         </span>
         <FeaturedResultBadge result={botTwoResult} />
       </span>
