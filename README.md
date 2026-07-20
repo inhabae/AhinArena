@@ -70,7 +70,7 @@ and upload the resulting executable.
 - `docs/tictactoe-engine-referee.md` documents Tic-Tac-Toe bot/referee communication.
 - `docs/connectfour-engine-referee.md` documents Connect Four bot/referee communication.
 - `docs/frontend.md` documents the React web interface routes, replay behavior, and API client conventions.
-- `docs/bot-submission.md` documents uploaded bot source storage, validation, and match execution.
+- `docs/bot-submission.md` documents uploaded bot executable storage, validation, and match execution.
 - `docs/docker-sandboxing.md` documents the Docker runner image, container restrictions, trust boundaries, runner-host controls, image updates, and incident response.
 - `docs/queue-and-workers.md` documents asynchronous match jobs, worker execution, queue recovery, APIs, and local workflow.
 - `docs/production-images.md` documents reproducible API and worker images, production run commands, image tags, scanning, and SBOM generation.
@@ -162,10 +162,14 @@ Successful registration returns `201 Created` with the public user shape:
 
 ```json
 {
-  "id": 1,
-  "email": "player@example.com",
-  "username": "player",
-  "created_at": "2026-07-10T17:00:00Z"
+  "user": {
+    "id": 1,
+    "email": "player@example.com",
+    "username": "player",
+    "description": "",
+    "is_email_verified": false,
+    "created_at": "2026-07-10T17:00:00Z"
+  }
 }
 ```
 
@@ -199,7 +203,8 @@ legacy `email` field is still accepted for clients that already use it.
 
 Successful login returns the same public user shape and sets the
 `ahin_arena_session` cookie. Invalid credentials return `401` with
-`invalid_credentials`.
+`invalid_credentials`. Unverified accounts return `403` with
+`email_not_verified`; use the email verification flow before logging in.
 
 Fetch the authenticated user:
 
@@ -223,11 +228,11 @@ Create a bot for the authenticated user:
 POST /bots
 ```
 
-```json
-{
-  "game_id": "tictactoe",
-  "name": "my-bot"
-}
+```text
+multipart/form-data
+game_id=tictactoe
+name=my-bot
+executable=@player
 ```
 
 Successful bot creation returns `201 Created`:
@@ -237,7 +242,9 @@ Successful bot creation returns `201 Created`:
   "bot_id": 3,
   "game_id": "tictactoe",
   "name": "my-bot",
-  "owner_id": 1
+  "owner_id": 1,
+  "submission_id": 9,
+  "version": 1
 }
 ```
 
@@ -248,7 +255,7 @@ requests return `401` with `unauthorized`.
 Bot names are trimmed and must be 3-32 ASCII characters using letters,
 numbers, spaces, underscores, or hyphens.
 
-After creating a bot, authenticated owners can upload a player executable with
+Authenticated owners can upload replacement player executables with
 `POST /bots/{bot_id}/submission`. New matches run each bot's active submission
 inside a locked-down Docker container. See `docs/bot-submission.md` and
 `docs/docker-sandboxing.md` for details.
@@ -267,8 +274,8 @@ Tic-Tac-Toe:
 {
   "game": "tictactoe",
   "players": [
-    {"bot": "random"},
-    {"bot": "random"}
+    {"bot": "randombot1"},
+    {"bot": "randombot2"}
   ]
 }
 ```
@@ -279,8 +286,8 @@ Connect Four:
 {
   "game": "connect-four",
   "players": [
-    {"bot": "random"},
-    {"bot": "random"}
+    {"bot": "randombot1"},
+    {"bot": "randombot2"}
   ]
 }
 ```

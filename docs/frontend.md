@@ -26,9 +26,15 @@ Routes are defined in `frontend/src/App.jsx`:
 - `/matches` renders `MatchHistoryPage`.
 - `/leaderboard` renders `LeaderboardPage`.
 - `/bots/new` renders `BotRegistrationPage`.
+- `/bots/:botId` renders `BotPage`.
+- `/players/:username` renders `PlayerPage`.
 - `/login` renders `LoginPage`.
 - `/register` renders `RegisterPage`.
+- `/verify-email` renders `VerifyEmailPage`.
+- `/forgot-password` renders `ForgotPasswordPage`.
+- `/reset-password` renders `ResetPasswordPage`.
 - `/matches/:matchId` renders `MatchDetailPage`.
+- `/match-jobs/:jobId` renders `MatchDetailPage` in live job mode.
 
 All routes share `AppLayout`, which provides the common application shell.
 
@@ -43,9 +49,10 @@ successful match creation navigates directly to the persisted match detail page.
 Starting a match requires an authenticated session; unauthenticated users are
 sent to `/login`.
 
-The page also loads a small recent-match list with `getMatches`, filtered to the
-selected game and limited to five rows. It displays basic totals for matches
-played and bots registered.
+The page also polls featured games with `getFeaturedGames` and queued/running
+jobs with `getMatchJobs`, so users can open live games, notable replays, or
+active queue entries. It displays basic totals for queued/running jobs and
+available bots.
 
 ### Login and Register
 
@@ -54,14 +61,20 @@ and password through `loginUser`. A successful login stores the session in the
 backend's HTTP-only cookie and refreshes the shared auth context.
 
 `frontend/src/pages/RegisterPage.jsx` creates an account through `registerUser`
-and then sends the user to `/login`. Registration errors map backend auth error
-codes such as `email_already_registered` and `username_already_taken` to form
-messages.
+and then sends the user to email verification/login flow. Registration errors
+map backend auth error codes such as `email_already_registered` and
+`username_already_taken` to form messages.
 
 The registration form mirrors backend limits for email length, username length
 and characters, and password length. Login caps password length but does not
 enforce the registration minimum so existing credentials can still reach normal
 credential verification.
+
+`frontend/src/pages/VerifyEmailPage.jsx`,
+`frontend/src/pages/ForgotPasswordPage.jsx`, and
+`frontend/src/pages/ResetPasswordPage.jsx` cover email verification,
+verification resend, password reset request, reset-token validation, and reset
+confirmation. Login maps `email_not_verified` to a verification prompt.
 
 ### Bot Registration
 
@@ -77,6 +90,17 @@ spaces, underscores, and hyphens rule.
 The page reports the accepted submission version and maps backend submission
 errors such as `submission_too_large`, `invalid_executable`, `unsupported_architecture`, and `dynamic_executable`,
 `bot_not_owned`, and `bot_not_found` to user-facing form messages.
+
+### Player and Bot Profiles
+
+`frontend/src/pages/PlayerPage.jsx` loads public player data with
+`getUserProfile`, shows that player's per-game leaderboard rows, and lets the
+current user edit their own 280-character description through
+`updateCurrentUser`.
+
+`frontend/src/pages/BotPage.jsx` loads one bot with `getBot`, shows ownership,
+game, rating, record, and active submission details, and lets the owner edit the
+bot description through `updateBot`.
 
 ### Match History
 
@@ -101,9 +125,10 @@ rank numbering across offsets.
 
 ### Match Detail and Replay
 
-`frontend/src/pages/MatchDetailPage.jsx` loads one persisted match with
-`GET /matches/{match_id}`. It displays player names, result, rating before/after
-values, rating deltas, and ordered move history.
+`frontend/src/pages/MatchDetailPage.jsx` loads either one persisted match with
+`GET /matches/{match_id}` or a live queued/running job with
+`GET /match-jobs/{job_id}/live`. It displays player names, result, rating
+before/after values, rating deltas, and ordered move history when available.
 
 For `tictactoe` and `connect-four`, the page builds replay boards from the move
 history and supports:
@@ -161,19 +186,32 @@ Exported endpoint helpers are:
 - `getHealth()` -> `GET /health`
 - `getMatches(params)` -> `GET /matches`
 - `getMatch(matchId)` -> `GET /matches/{matchId}`
+- `getFeaturedGames()` -> `GET /featured-games`
+- `getBot(botId)` -> `GET /bots/{botId}`
+- `updateBot(botId, bot)` -> `PATCH /bots/{botId}`
 - `createMatch(match)` -> `POST /matches`
+- `getMatchJob(jobId)` -> `GET /match-jobs/{jobId}`
+- `getLiveMatchJob(jobId)` -> `GET /match-jobs/{jobId}/live`
+- `getMatchJobs(params)` -> `GET /match-jobs`
 - `getLeaderboard(params)` -> `GET /leaderboard`
 - `getBots(params)` -> `GET /bots`
 - `createBot(bot)` -> `POST /bots`
 - `submitBotExecutable(botId, executable)` -> `POST /bots/{botId}/submission`
 - `getCurrentUser()` -> `GET /auth/me`
+- `getUserProfile(username)` -> `GET /users/{username}`
+- `updateCurrentUser(user)` -> `PATCH /auth/me`
 - `loginUser(credentials)` -> `POST /auth/login`
 - `registerUser(credentials)` -> `POST /auth/register`
+- `verifyEmail(token)` -> `POST /auth/verify-email`
+- `resendVerificationEmail(email)` -> `POST /auth/verify-email/resend`
+- `requestPasswordReset(email)` -> `POST /auth/password-reset`
+- `validatePasswordResetToken(token)` -> `POST /auth/password-reset/validate`
+- `confirmPasswordReset({ token, password })` -> `POST /auth/password-reset/confirm`
 - `logoutUser()` -> `POST /auth/logout`
 
 Pages should use these helpers instead of calling `fetch` directly so error
 handling and `/api` URL construction stay consistent.
 
 Known gap: auth-aware pages use the shared session context, but the frontend
-does not yet provide password reset, email verification, or full account
-management screens.
+does not yet provide broader account management beyond email verification,
+password reset, and editable profile descriptions.

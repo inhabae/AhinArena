@@ -12,7 +12,7 @@ The system consists of a web frontend, backend services, persistent storage, and
 
 ```text
         Frontend (React + Vite)
- Auth / Home / History / Leaderboard / Replay
+ Auth / Home / Profiles / History / Leaderboard / Replay
                         │
                         │ /api via frontend/src/api/client.js
                         ▼
@@ -42,15 +42,16 @@ The system consists of a web frontend, backend services, persistent storage, and
 ## Components
 
 - **Frontend** — React/Vite web interface in `frontend/`. It uses React Router
-  for the Login, Register, Home, Bot Registration, Match History, Leaderboard,
-  and Match Detail/Replay pages.
+  for auth, Home, Bot Registration, Player Profile, Bot Profile, Match History,
+  Leaderboard, queued/live match, and Match Detail/Replay pages.
 - **Frontend API client** — `frontend/src/api/client.js` centralizes browser
   calls to the Backend API. It prefixes requests with `/api`, serializes query
   params, parses JSON responses, and raises `ApiError` instances for normalized
   backend errors.
 - **Backend API** — FastAPI application logic for health checks, registration,
-  login/logout, current-user lookup, bot lookup and creation, match creation,
-  bot source submission, match history, match detail, and leaderboard data.
+  email verification, password reset, login/logout, current-user lookup,
+  profile updates, bot lookup and creation, bot executable submission, match
+  job creation, match history, match detail, and leaderboard data.
 - **PostgreSQL** — Persistent data for bots, completed matches, ordered moves,
   ratings, records, users, sessions, bot submissions, active bot submission
   pointers, queued match jobs, and per-match rating snapshots.
@@ -66,9 +67,10 @@ The system consists of a web frontend, backend services, persistent storage, and
 - **Worker Pool** — One or more `python3 -m worker.main` processes that claim
   queued match jobs, run matches, persist results, and update ratings.
 - **Game Runner** — Executes matches through the registered game engines.
-- **Docker** — Secure execution boundary for submitted bot source. Each active
-  submission is written to a temporary source file and run in a locked-down
-  container with no network access, dropped capabilities, a read-only root
+- **Docker** — Secure execution boundary for submitted bot executables. Each
+  active static Linux x86-64 ELF artifact is written to a temporary executable
+  file and run in a locked-down container with no network access, dropped
+  capabilities, a read-only root
   filesystem, and resource limits.
 
 ## Asynchronous Match Execution
@@ -130,16 +132,25 @@ The main routes are:
 
 - `/login` — Login page that posts credentials and receives the session cookie.
 - `/register` — Registration page that creates an account before login.
+- `/verify-email` — Email verification page for emailed verification tokens.
+- `/forgot-password` and `/reset-password` — Password reset request and
+  confirmation pages.
 - `/` — Home page for selecting a supported game, choosing two registered bots,
   starting a match, and viewing recent matches for the selected game.
 - `/bots/new` — Authenticated bot registration page for adding a bot name to a
   supported game and uploading a static Linux x86-64 executable for that bot.
+- `/bots/:botId` — Public bot profile with rating, record, submission metadata,
+  and owner-editable description.
+- `/players/:username` — Public player profile with per-game rankings and
+  owner-editable description.
 - `/matches` — Match history page with all-game or per-game filtering and
   limit/offset-backed pagination.
 - `/leaderboard` — Leaderboard page with per-game rankings, configurable row
   count, and pagination.
 - `/matches/:matchId` — Match detail page with result summary, rating deltas,
   move history, and replay controls for supported games.
+- `/match-jobs/:jobId` — Live queued/running match view that polls job state
+  until the match completes or fails.
 
 Replay state is rebuilt entirely in the browser from the move list returned by
 `GET /matches/{match_id}`. Tic-Tac-Toe moves are applied to a 3x3 board and
@@ -151,9 +162,9 @@ Known frontend gap: replay rendering currently supports `tictactoe` and
 `connect-four`. Other persisted game IDs fall back to a match summary with a
 message that replay is not supported yet.
 
-Known auth gap: sessions are durable and cookie-backed, but account management
-is intentionally minimal. Password reset, email verification, and role-based
-access are not implemented yet.
+Known auth gap: sessions, email verification, password reset, and editable
+profile descriptions are implemented, but broader account management and
+role-based access are not implemented yet.
 
 ## Bot Submission Flow
 
@@ -164,10 +175,11 @@ stores a new versioned `bot_submissions` row, and points
 `bots.active_submission_id` at the newest accepted version.
 
 Match creation resolves each bot's active submission, writes the artifact to a
-private executable file, and starts it through a locked-down `docker run` command
-under the shared referee protocol. The command bind-mounts the source read-only
-at `/bot/player`, disables networking, drops Linux capabilities, runs the container
-read-only with a small `/tmp` tmpfs, and applies memory, CPU, and PID limits.
+private executable file, and starts it through a locked-down `docker run`
+command under the shared referee protocol. The command bind-mounts the
+executable read-only at `/bot/player`, disables networking, drops Linux
+capabilities, runs the container read-only with a small `/tmp` tmpfs, and
+applies memory, CPU, and PID limits.
 
 See `docs/docker-sandboxing.md` for the runner image, configurable limits, and
 cleanup behavior.
