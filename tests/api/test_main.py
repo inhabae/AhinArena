@@ -117,6 +117,7 @@ def override_database_dependency(monkeypatch):
     client.cookies.clear()
     monkeypatch.delenv("RESEND_API_KEY", raising=False)
     monkeypatch.delenv("EMAIL_FROM", raising=False)
+    monkeypatch.delenv("EMAIL_DELIVERY_MODE", raising=False)
     session = DummySession()
 
     def fake_get_db():
@@ -158,7 +159,7 @@ def valid_bot_executable(payload=b"\x90"):
     import struct
     data = bytearray(120 + len(payload))
     data[:16] = b"\x7fELF\x02\x01\x01" + b"\x00" * 9
-    struct.pack_into("<HHIQQQIHHHHHH", data, 16, 2, 62, 1, 0, 64, 0, 0, 64, 56, 1, 0, 0, 0)
+    struct.pack_into("<HHIQQQIHHHHHH", data, 16, 2, 183, 1, 0, 64, 0, 0, 64, 56, 1, 0, 0, 0)
     struct.pack_into("<IIQQQQQQ", data, 64, 1, 5, 0, 0, 0, len(data), len(data), 4096)
     data[120:] = payload
     return bytes(data)
@@ -616,6 +617,33 @@ def test_register_user_sends_verification_email_when_email_delivery_is_configure
             "verification_url": f"https://arena.example.com/verify-email?token={token.token}",
         }
     ]
+
+
+def test_register_user_skips_verification_email_when_delivery_is_disabled(
+    monkeypatch,
+    sqlite_database_dependency,
+):
+    def fail_send_verification_email(**message):
+        raise AssertionError(f"unexpected email delivery: {message}")
+
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    monkeypatch.setenv("EMAIL_FROM", "AhinArena <noreply@example.com>")
+    monkeypatch.setenv("EMAIL_DELIVERY_MODE", "disabled")
+    monkeypatch.setattr(api_main, "send_verification_email", fail_send_verification_email)
+
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "Player@Example.com",
+            "username": "PlayerOne",
+            "password": "Super-secret1",
+        },
+    )
+
+    assert response.status_code == 201
+    assert set(response.json().keys()) == {"user"}
+    token = sqlite_database_dependency.query(AuthToken).one()
+    assert token.purpose == "email_verification"
 
 
 def test_register_user_sends_verification_email_for_addresses_starting_with_a(
@@ -3615,7 +3643,7 @@ def test_create_bot_rejects_non_elf(sqlite_database_dependency):
 def test_create_bot_rejects_wrong_architecture(sqlite_database_dependency):
     login_user(sqlite_database_dependency)
     artifact = bytearray(valid_bot_executable())
-    struct.pack_into("<H", artifact, 18, 183)
+    struct.pack_into("<H", artifact, 18, 62)
     response = client.post("/bots", **bot_multipart(executable=bytes(artifact)))
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "unsupported_architecture"

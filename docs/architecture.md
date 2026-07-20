@@ -133,7 +133,7 @@ The main routes are:
 - `/` — Home page for selecting a supported game, choosing two registered bots,
   starting a match, and viewing recent matches for the selected game.
 - `/bots/new` — Authenticated bot registration page for adding a bot name to a
-  supported game and uploading a static Linux x86-64 executable for that bot.
+  supported game and uploading a static Linux ARM64 executable for that bot.
 - `/matches` — Match history page with all-game or per-game filtering and
   limit/offset-backed pagination.
 - `/leaderboard` — Leaderboard page with per-game rankings, configurable row
@@ -159,7 +159,7 @@ access are not implemented yet.
 
 Users create bot records through multipart `POST /bots`, then upload executables through
 `POST /bots/{bot_id}/submission`. The submission endpoint requires the current
-session user to own the bot, accepts a validated static Linux x86-64 ELF,
+session user to own the bot, accepts a validated static Linux ARM64 ELF,
 stores a new versioned `bot_submissions` row, and points
 `bots.active_submission_id` at the newest accepted version.
 

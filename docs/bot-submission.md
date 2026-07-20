@@ -1,16 +1,16 @@
 # Player Executable Submission
 
-AhinArena accepts one statically linked Linux x86-64 ELF executable per bot
+AhinArena accepts one statically linked Linux ARM64 ELF executable per bot
 version. Source code, scripts, runtime selection, dependency installation, and
 multi-file archives are not accepted.
 
 ## Build contract
 
-The executable must be a 64-bit little-endian x86-64 ELF (`ET_EXEC` or PIE),
+The executable must be a 64-bit little-endian ARM64 ELF (`ET_EXEC` or PIE),
 must not contain `PT_INTERP` or `DT_NEEDED`, and must be no larger than 10 MiB
 by default. For example, C players can be built on Linux with
 `cc -O2 -static -o player player.c`; Go players can use
-`CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o player`.
+`CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o player`.
 
 The player remains running for a match. It reads one JSON game state per line
 from stdin and writes exactly one JSON move per line to stdout. It must flush
