@@ -11,7 +11,6 @@ import {
 } from "./matchReplay";
 
 const matchJobLimit = 100;
-const testMatchSubmitCount = 10;
 const matchJobPollIntervalMs = 1500;
 const featuredGamesPollIntervalMs = 750;
 
@@ -465,17 +464,14 @@ export default function HomePage() {
         game: selectedGame,
         players: [{ bot: botOne }, { bot: botTwo }],
       };
-      const jobs = await Promise.all(
-        Array.from({ length: testMatchSubmitCount }, () => createMatch(matchRequest)),
-      );
-      const job = jobs[0];
+      const job = await createMatch(matchRequest);
 
       setSubmitState({ loading: true, error: null, jobId: job.job_id });
       setJobsState((current) => ({
         ...current,
         items: [
-          ...jobs.map((createdJob) => ({
-            ...createdJob,
+          {
+            ...job,
             game: selectedGame,
             bot_one_name: botOne,
             bot_two_name: botTwo,
@@ -484,12 +480,12 @@ export default function HomePage() {
             created_at: new Date().toISOString(),
             started_at: null,
             completed_at: null,
-          })),
+          },
           ...current.items.filter(
-            (item) => !jobs.some((createdJob) => createdJob.job_id === item.job_id),
+            (item) => item.job_id !== job.job_id,
           ),
         ].slice(0, matchJobLimit),
-        total: current.total + jobs.length,
+        total: current.total + 1,
       }));
     } catch (error) {
       if (error.status === 401) {

@@ -189,8 +189,8 @@ def frontend_url(path: str) -> str:
     return f"{base_url}{path}"
 
 
-def should_send_verification_email(email: str) -> bool:
-    return is_email_delivery_configured() and not email.lower().startswith("a")
+def should_send_verification_email() -> bool:
+    return is_email_delivery_configured()
 
 
 def email_delivery_error(error: EmailDeliveryError) -> None:
@@ -848,7 +848,7 @@ def register_user(
 
     verification_url = frontend_url(f"/verify-email?token={verification_token.token}")
 
-    if should_send_verification_email(user.email):
+    if should_send_verification_email():
         try:
             send_verification_email(
                 to=user.email,
@@ -920,7 +920,7 @@ def resend_verification_email(
     )
     verification_url = frontend_url(f"/verify-email?token={verification_token.token}")
 
-    if should_send_verification_email(user.email):
+    if should_send_verification_email():
         try:
             send_verification_email(
                 to=user.email,
