@@ -14,6 +14,8 @@ class Match(Base):
 
     bot_one_id = Column(Integer, ForeignKey("bots.id"), nullable=False)
     bot_two_id = Column(Integer, ForeignKey("bots.id"), nullable=False)
+    bot_one_submission_id = Column(Integer, ForeignKey("bot_submissions.id"), nullable=True)
+    bot_two_submission_id = Column(Integer, ForeignKey("bot_submissions.id"), nullable=True)
 
     bot_one_rating_before = Column(Float, nullable=False)
     bot_two_rating_before = Column(Float, nullable=False)
@@ -30,6 +32,8 @@ class Match(Base):
 
     bot_one = relationship("Bot", foreign_keys=[bot_one_id])
     bot_two = relationship("Bot", foreign_keys=[bot_two_id])
+    bot_one_submission = relationship("BotSubmission", foreign_keys=[bot_one_submission_id])
+    bot_two_submission = relationship("BotSubmission", foreign_keys=[bot_two_submission_id])
     winner_bot = relationship("Bot", foreign_keys=[winner_bot_id])
 
     moves = relationship(

@@ -1,4 +1,4 @@
-from api.models import Match, MatchJob
+from api.models import Bot, MatchJob, Match
 from sqlalchemy import case
 from sqlalchemy.orm import Session, selectinload
 
@@ -19,13 +19,15 @@ def select_featured_match_jobs(db: Session, *, limit: int = 3) -> list[MatchJob]
     return (
         db.query(MatchJob)
         .options(
-            selectinload(MatchJob.bot_one),
-            selectinload(MatchJob.bot_two),
+            selectinload(MatchJob.bot_one).selectinload(Bot.active_submission),
+            selectinload(MatchJob.bot_two).selectinload(Bot.active_submission),
             selectinload(MatchJob.moves),
             selectinload(MatchJob.match),
             selectinload(MatchJob.match).selectinload(Match.moves),
             selectinload(MatchJob.match).selectinload(Match.bot_one),
             selectinload(MatchJob.match).selectinload(Match.bot_two),
+            selectinload(MatchJob.match).selectinload(Match.bot_one_submission),
+            selectinload(MatchJob.match).selectinload(Match.bot_two_submission),
         )
         .filter(MatchJob.status.in_(("running", "completed")))
         .order_by(status_rank, MatchJob.created_at.desc(), MatchJob.id.desc())

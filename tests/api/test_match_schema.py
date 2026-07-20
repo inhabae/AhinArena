@@ -94,6 +94,8 @@ EXPECTED_MATCH_COLUMNS = {
     "game_id",
     "bot_one_id",
     "bot_two_id",
+    "bot_one_submission_id",
+    "bot_two_submission_id",
     "bot_one_rating_before",
     "bot_two_rating_before",
     "bot_one_rating_after",
@@ -104,6 +106,10 @@ EXPECTED_MATCH_COLUMNS = {
     "result_reason",
     "created_at",
     "completed_at",
+}
+EXPECTED_BASELINE_MATCH_COLUMNS = EXPECTED_MATCH_COLUMNS - {
+    "bot_one_submission_id",
+    "bot_two_submission_id",
 }
 
 EXPECTED_MOVE_COLUMNS = {
@@ -152,6 +158,11 @@ EXPECTED_BOT_SUBMISSION_COLUMNS = {
     "executable_size",
     "executable_digest",
     "original_filename",
+    "rating",
+    "games_played",
+    "wins",
+    "losses",
+    "draws",
     "created_at",
 }
 EXPECTED_LEGACY_BOT_SUBMISSION_COLUMNS = {
@@ -265,6 +276,11 @@ def test_bot_submission_model_declares_expected_columns_and_constraints():
     assert BotSubmission.__table__.c.executable_size.nullable is False
     assert BotSubmission.__table__.c.executable_digest.nullable is False
     assert BotSubmission.__table__.c.original_filename.nullable is True
+    assert BotSubmission.__table__.c.rating.nullable is False
+    assert BotSubmission.__table__.c.games_played.nullable is False
+    assert BotSubmission.__table__.c.wins.nullable is False
+    assert BotSubmission.__table__.c.losses.nullable is False
+    assert BotSubmission.__table__.c.draws.nullable is False
     assert BotSubmission.__table__.c.created_at.nullable is False
     assert {
         foreign_key.target_fullname
@@ -278,6 +294,12 @@ def test_bot_submission_model_declares_expected_columns_and_constraints():
         "bot_id",
         "version",
     ]
+    assert "ck_bot_submissions_rating_non_negative" in constraints
+    assert "ck_bot_submissions_games_played_non_negative" in constraints
+    assert "ck_bot_submissions_wins_non_negative" in constraints
+    assert "ck_bot_submissions_losses_non_negative" in constraints
+    assert "ck_bot_submissions_draws_non_negative" in constraints
+    assert "ck_bot_submissions_record_matches_games_played" in constraints
 
 
 def test_bot_table_applies_defaults_and_unique_names_within_game():
@@ -436,6 +458,8 @@ def test_match_model_declares_expected_columns():
     assert Match.__table__.c.game_id.nullable is False
     assert Match.__table__.c.bot_one_id.nullable is False
     assert Match.__table__.c.bot_two_id.nullable is False
+    assert Match.__table__.c.bot_one_submission_id.nullable is True
+    assert Match.__table__.c.bot_two_submission_id.nullable is True
     assert Match.__table__.c.bot_one_rating_before.nullable is False
     assert Match.__table__.c.bot_two_rating_before.nullable is False
     assert Match.__table__.c.bot_one_rating_after.nullable is False
@@ -459,6 +483,14 @@ def test_match_model_declares_expected_columns():
         foreign_key.target_fullname
         for foreign_key in Match.__table__.c.bot_two_id.foreign_keys
     } == {"bots.id"}
+    assert {
+        foreign_key.target_fullname
+        for foreign_key in Match.__table__.c.bot_one_submission_id.foreign_keys
+    } == {"bot_submissions.id"}
+    assert {
+        foreign_key.target_fullname
+        for foreign_key in Match.__table__.c.bot_two_submission_id.foreign_keys
+    } == {"bot_submissions.id"}
     assert {
         foreign_key.target_fullname
         for foreign_key in Match.__table__.c.winner_bot_id.foreign_keys
@@ -511,7 +543,7 @@ def test_baseline_migration_creates_expected_schema(monkeypatch):
         bot_unique_constraints = inspector.get_unique_constraints("bots")
 
         assert set(bot_columns) == EXPECTED_BASELINE_BOT_COLUMNS
-        assert set(match_columns) == EXPECTED_MATCH_COLUMNS
+        assert set(match_columns) == EXPECTED_BASELINE_MATCH_COLUMNS
         assert set(move_columns) == EXPECTED_MOVE_COLUMNS
 
         assert reflected_default_value(bot_columns["rating"]) == "1200"

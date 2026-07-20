@@ -36,7 +36,6 @@ from api.models import (
 from api.match_execution import (
     DEFAULT_BOT_MOVE_TIMEOUT_SECONDS,
     DEFAULT_BOT_STARTUP_TIMEOUT_SECONDS,
-    apply_match_record_updates,
     get_bot_move_timeout_seconds,
     get_bot_startup_timeout_seconds,
 )
@@ -96,7 +95,13 @@ from api.schemas import (
 )
 
 
-DEFAULT_BOT_NAMES = ("randombot1", "randombot2")
+DEFAULT_BOT_SPECS = (
+    {"name": "randombot1", "artifact_suffix": ""},
+    {"name": "randombot2", "artifact_suffix": ""},
+    {"name": "random", "artifact_suffix": ""},
+    {"name": "sleepy", "artifact_suffix": "-sleepy"},
+)
+DEFAULT_BOT_NAMES = tuple(spec["name"] for spec in DEFAULT_BOT_SPECS)
 SUPPORTED_GAMES = ("tictactoe", "connect-four")
 DEFAULT_CORS_ALLOWED_ORIGINS = (
     "http://localhost:5173,"
@@ -485,7 +490,8 @@ def seed_default_bots(db: Session) -> None:
                 )
             }
 
-            for bot_name in DEFAULT_BOT_NAMES:
+            for spec in DEFAULT_BOT_SPECS:
+                bot_name = spec["name"]
                 bot = existing_bots.get(bot_name)
                 if bot is None:
                     bot = Bot(name=bot_name, game_id=game_id, owner_id=None)
@@ -493,11 +499,13 @@ def seed_default_bots(db: Session) -> None:
                     db.flush()
 
                 if bot.active_submission_id is None:
-                    artifact_path = artifact_dir / game_id if artifact_dir is not None else None
+                    artifact_name = f"{game_id}{spec['artifact_suffix']}"
+                    artifact_path = artifact_dir / artifact_name if artifact_dir is not None else None
                     if artifact_path is None or not artifact_path.is_file():
                         logger.warning(
-                            "Built-in bot executable is unavailable for %s; system bots remain inactive",
+                            "Built-in bot executable is unavailable for %s %s; system bot remains inactive",
                             game_id,
+                            bot_name,
                         )
                         continue
                     artifact = artifact_path.read_bytes()
@@ -515,7 +523,7 @@ def seed_default_bots(db: Session) -> None:
                         executable=artifact,
                         executable_size=len(artifact),
                         executable_digest=hashlib.sha256(artifact).hexdigest(),
-                        original_filename=game_id,
+                        original_filename=artifact_name,
                     )
                     db.add(submission)
                     db.flush()
@@ -540,8 +548,12 @@ def serialize_match_summary(match: Match) -> MatchSummary:
         game=match.game_id,
         bot_one_id=match.bot_one_id,
         bot_two_id=match.bot_two_id,
+        bot_one_submission_id=match.bot_one_submission_id,
+        bot_two_submission_id=match.bot_two_submission_id,
         bot_one_name=match.bot_one.name,
         bot_two_name=match.bot_two.name,
+        bot_one_version=match.bot_one_submission.version if match.bot_one_submission else None,
+        bot_two_version=match.bot_two_submission.version if match.bot_two_submission else None,
         bot_one_rating_before=match.bot_one_rating_before,
         bot_two_rating_before=match.bot_two_rating_before,
         bot_one_rating_after=match.bot_one_rating_after,
@@ -568,6 +580,47 @@ def serialize_match_detail(match: Match) -> MatchDetail:
             for move in match.moves
         ],
     )
+
+
+def serialize_bot_version(submission: BotSubmission, *, active_submission_id: int | None) -> dict:
+    return {
+        "submission_id": submission.id,
+        "version": submission.version,
+        "is_active": submission.id == active_submission_id,
+        "executable_size": submission.executable_size,
+        "executable_digest": submission.executable_digest,
+        "original_filename": submission.original_filename,
+        "rating": submission.rating,
+        "games_played": submission.games_played,
+        "wins": submission.wins,
+        "losses": submission.losses,
+        "draws": submission.draws,
+        "created_at": submission.created_at,
+    }
+
+
+def serialize_bot_detail(bot: Bot) -> BotDetail:
+    active_submission = bot.active_submission if bot.active_submission_id is not None else None
+    return BotDetail(
+        bot_id=bot.id,
+        name=bot.name,
+        description=bot.description,
+        game_id=bot.game_id,
+        owner_name=get_bot_owner_name(bot),
+        active_submission_id=active_submission.id if active_submission else None,
+        active_version=active_submission.version if active_submission else None,
+        versions=[
+            serialize_bot_version(submission, active_submission_id=bot.active_submission_id)
+            for submission in bot.submissions
+        ],
+        rating=active_submission.rating if active_submission else bot.rating,
+        games_played=active_submission.games_played if active_submission else bot.games_played,
+        wins=active_submission.wins if active_submission else bot.wins,
+        losses=active_submission.losses if active_submission else bot.losses,
+        draws=active_submission.draws if active_submission else bot.draws,
+        created_at=bot.created_at,
+    )
+
 
 def empty_board_state(game_id: str) -> list[list[str | None]]:
     if game_id == "connect-four":
@@ -633,8 +686,12 @@ def serialize_live_match_job(job: MatchJob) -> LiveMatchDetail:
             game=match.game_id,
             bot_one_id=match.bot_one_id,
             bot_two_id=match.bot_two_id,
+            bot_one_submission_id=match.bot_one_submission_id,
+            bot_two_submission_id=match.bot_two_submission_id,
             bot_one_name=match.bot_one.name,
             bot_two_name=match.bot_two.name,
+            bot_one_version=match.bot_one_submission.version if match.bot_one_submission else None,
+            bot_two_version=match.bot_two_submission.version if match.bot_two_submission else None,
             bot_one_rating_before=match.bot_one_rating_before,
             bot_two_rating_before=match.bot_two_rating_before,
             bot_one_rating_after=match.bot_one_rating_after,
@@ -669,12 +726,16 @@ def serialize_live_match_job(job: MatchJob) -> LiveMatchDetail:
         game=job.game_id,
         bot_one_id=job.bot_one_id,
         bot_two_id=job.bot_two_id,
+        bot_one_submission_id=job.bot_one.active_submission_id,
+        bot_two_submission_id=job.bot_two.active_submission_id,
         bot_one_name=job.bot_one.name,
         bot_two_name=job.bot_two.name,
-        bot_one_rating_before=job.bot_one.rating,
-        bot_two_rating_before=job.bot_two.rating,
-        bot_one_rating_after=job.bot_one.rating,
-        bot_two_rating_after=job.bot_two.rating,
+        bot_one_version=job.bot_one.active_submission.version if job.bot_one.active_submission else None,
+        bot_two_version=job.bot_two.active_submission.version if job.bot_two.active_submission else None,
+        bot_one_rating_before=job.bot_one.active_submission.rating if job.bot_one.active_submission else job.bot_one.rating,
+        bot_two_rating_before=job.bot_two.active_submission.rating if job.bot_two.active_submission else job.bot_two.rating,
+        bot_one_rating_after=job.bot_one.active_submission.rating if job.bot_one.active_submission else job.bot_one.rating,
+        bot_two_rating_after=job.bot_two.active_submission.rating if job.bot_two.active_submission else job.bot_two.rating,
         bot_one_rating_delta=0,
         bot_two_rating_delta=0,
         created_at=job.created_at,
@@ -1384,7 +1445,11 @@ def update_bot(
 ):
     bot = (
         db.query(Bot)
-        .options(selectinload(Bot.owner))
+        .options(
+            selectinload(Bot.owner),
+            selectinload(Bot.active_submission),
+            selectinload(Bot.submissions),
+        )
         .filter(Bot.id == bot_id)
         .first()
     )
@@ -1398,19 +1463,7 @@ def update_bot(
     db.commit()
     db.refresh(bot)
 
-    return BotDetail(
-        bot_id=bot.id,
-        name=bot.name,
-        description=bot.description,
-        game_id=bot.game_id,
-        owner_name=get_bot_owner_name(bot),
-        rating=bot.rating,
-        games_played=bot.games_played,
-        wins=bot.wins,
-        losses=bot.losses,
-        draws=bot.draws,
-        created_at=bot.created_at,
-    )
+    return serialize_bot_detail(bot)
 
 
 @app.post(
@@ -1531,12 +1584,14 @@ def get_live_match_job(job_id: int, db: Session = Depends(get_db)):
     job = (
         db.query(MatchJob)
         .options(
-            selectinload(MatchJob.bot_one),
-            selectinload(MatchJob.bot_two),
+            selectinload(MatchJob.bot_one).selectinload(Bot.active_submission),
+            selectinload(MatchJob.bot_two).selectinload(Bot.active_submission),
             selectinload(MatchJob.moves),
             selectinload(MatchJob.match).selectinload(Match.moves),
             selectinload(MatchJob.match).selectinload(Match.bot_one),
             selectinload(MatchJob.match).selectinload(Match.bot_two),
+            selectinload(MatchJob.match).selectinload(Match.bot_one_submission),
+            selectinload(MatchJob.match).selectinload(Match.bot_two_submission),
         )
         .filter(MatchJob.id == job_id)
         .first()
@@ -1553,6 +1608,7 @@ def list_matches(
     offset: int = Query(0, ge=0),
     game_id: str = Query(default=""),
     bot_id: int | None = Query(default=None),
+    bot_submission_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     query = db.query(Match)
@@ -1563,11 +1619,24 @@ def list_matches(
     if bot_id is not None:
         query = query.filter(or_(Match.bot_one_id == bot_id, Match.bot_two_id == bot_id))
 
+    if bot_submission_id is not None:
+        query = query.filter(
+            or_(
+                Match.bot_one_submission_id == bot_submission_id,
+                Match.bot_two_submission_id == bot_submission_id,
+            )
+        )
+
     total = query.count()
 
     matches = (
         query
-        .options(selectinload(Match.bot_one), selectinload(Match.bot_two))
+        .options(
+            selectinload(Match.bot_one),
+            selectinload(Match.bot_two),
+            selectinload(Match.bot_one_submission),
+            selectinload(Match.bot_two_submission),
+        )
         .order_by(Match.completed_at.desc(), Match.id.desc())
         .offset(offset)
         .limit(limit)
@@ -1588,6 +1657,8 @@ def get_match(match_id: int, db: Session = Depends(get_db)):
         .options(
             selectinload(Match.bot_one),
             selectinload(Match.bot_two),
+            selectinload(Match.bot_one_submission),
+            selectinload(Match.bot_two_submission),
             selectinload(Match.moves),
         )
         .filter(Match.id == match_id)
@@ -1606,11 +1677,12 @@ def get_leaderboard(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    bots = (
-        db.query(Bot)
-        .options(selectinload(Bot.owner))
+    submissions = (
+        db.query(BotSubmission)
+        .join(Bot, Bot.active_submission_id == BotSubmission.id)
+        .options(selectinload(BotSubmission.bot).selectinload(Bot.owner))
         .filter(Bot.game_id == game_id)
-        .order_by(Bot.rating.desc(), Bot.id.asc())
+        .order_by(BotSubmission.rating.desc(), BotSubmission.id.asc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -1618,16 +1690,18 @@ def get_leaderboard(
 
     return [
         {
-            "bot_id": bot.id,
-            "name": bot.name,
-            "owner_name": get_bot_owner_name(bot),
-            "rating": bot.rating,
-            "games_played": bot.games_played,
-            "wins": bot.wins,
-            "losses": bot.losses,
-            "draws": bot.draws,
+            "bot_id": submission.bot.id,
+            "submission_id": submission.id,
+            "version": submission.version,
+            "name": submission.bot.name,
+            "owner_name": get_bot_owner_name(submission.bot),
+            "rating": submission.rating,
+            "games_played": submission.games_played,
+            "wins": submission.wins,
+            "losses": submission.losses,
+            "draws": submission.draws,
         }
-        for bot in bots
+        for submission in submissions
     ]
 
 @app.get("/bots", response_model=list[BotSummary])
@@ -1664,7 +1738,11 @@ def list_bots(
 def get_bot(bot_id: int, db: Session = Depends(get_db)):
     bot = (
         db.query(Bot)
-        .options(selectinload(Bot.owner))
+        .options(
+            selectinload(Bot.owner),
+            selectinload(Bot.active_submission),
+            selectinload(Bot.submissions),
+        )
         .filter(Bot.id == bot_id)
         .first()
     )
@@ -1672,16 +1750,4 @@ def get_bot(bot_id: int, db: Session = Depends(get_db)):
     if bot is None:
         api_error(404, "bot_not_found", f"Bot not found: {bot_id}")
 
-    return BotDetail(
-        bot_id=bot.id,
-        name=bot.name,
-        description=bot.description,
-        game_id=bot.game_id,
-        owner_name=get_bot_owner_name(bot),
-        rating=bot.rating,
-        games_played=bot.games_played,
-        wins=bot.wins,
-        losses=bot.losses,
-        draws=bot.draws,
-        created_at=bot.created_at,
-    )
+    return serialize_bot_detail(bot)

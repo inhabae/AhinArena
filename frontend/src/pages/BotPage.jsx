@@ -1,13 +1,15 @@
 import {
   IconDeviceGamepad2,
+  IconFileCode,
   IconPercentage,
   IconRobot,
   IconTrophy,
+  IconUpload,
 } from "@tabler/icons-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { getBot, getMatches, updateBot } from "../api/client";
+import { getBot, getMatches, submitBotExecutable, updateBot } from "../api/client";
 import DescriptionEditor from "../components/DescriptionEditor";
 import { formatGame } from "../games";
 import { useAuth } from "../useAuth";
@@ -15,6 +17,10 @@ import { formatPercent, getWinRate } from "./PlayerPage";
 
 const pageSize = 10;
 const BUILT_IN_BOT_OWNER_NAME = "Built-in bot";
+const maxExecutableBytes = 10 * 1024 * 1024;
+const rejectedFileExtensions = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "zip", "rar", "7z", "txt",
+]);
 
 function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, {
@@ -29,12 +35,28 @@ function formatHeaderDate(value) {
   }).format(new Date(value));
 }
 
+function formatBytes(bytes) {
+  return bytes < 1024 * 1024
+    ? `${Math.ceil(bytes / 1024)} KiB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
 function getErrorMessage(error) {
   if (error.status === 404 || error.code === "bot_not_found") {
     return "Bot not found.";
   }
 
   return error.message || "The bot could not be loaded.";
+}
+
+function localFileError(file) {
+  if (!file) return "";
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (extension && rejectedFileExtensions.has(extension)) {
+    return "Choose a Linux executable, not a document, image, archive, or text file.";
+  }
+  if (file.size > maxExecutableBytes) return "The executable must be 10 MiB or smaller.";
+  return "";
 }
 
 function stopLinkPropagation(event) {
@@ -46,6 +68,15 @@ function PlayerRating({ rating }) {
     <span className="player-rating">
       ({Math.round(rating)})
     </span>
+  );
+}
+
+function VersionedBotName({ name, version }) {
+  return (
+    <>
+      {name}
+      {version && <span className="bot-version-suffix">v{version}</span>}
+    </>
   );
 }
 
@@ -74,6 +105,7 @@ export default function BotPage() {
   const navigate = useNavigate();
   const { botId } = useParams();
   const { user } = useAuth();
+  const fileInputRef = useRef(null);
   const [botState, setBotState] = useState({
     loading: true,
     data: null,
@@ -86,6 +118,10 @@ export default function BotPage() {
     error: null,
   });
   const [offset, setOffset] = useState(0);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState("");
+  const [uploadState, setUploadState] = useState({ loading: false, error: null, version: null });
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadFileError, setUploadFileError] = useState("");
 
   useEffect(() => {
     let ignore = false;
@@ -111,6 +147,10 @@ export default function BotPage() {
 
   useEffect(() => {
     setOffset(0);
+    setSelectedSubmissionId("");
+    setUploadFile(null);
+    setUploadFileError("");
+    setUploadState({ loading: false, error: null, version: null });
   }, [botId]);
 
   useEffect(() => {
@@ -125,6 +165,7 @@ export default function BotPage() {
 
     getMatches({
       bot_id: botId,
+      bot_submission_id: selectedSubmissionId,
       limit: pageSize,
       offset,
     })
@@ -152,7 +193,7 @@ export default function BotPage() {
     return () => {
       ignore = true;
     };
-  }, [botId, offset]);
+  }, [botId, selectedSubmissionId, offset]);
 
   const bot = botState.data;
   const rangeText = useMemo(() => {
@@ -179,6 +220,57 @@ export default function BotPage() {
   async function handleSaveDescription(description) {
     const updatedBot = await updateBot(botId, { description });
     setBotState({ loading: false, data: updatedBot, error: null });
+  }
+
+  async function handleFileChange(event) {
+    const nextFile = event.target.files?.[0] ?? null;
+    const validationError = localFileError(nextFile);
+    if (!nextFile || validationError) {
+      setUploadFile(null);
+      setUploadFileError(validationError);
+      event.target.value = "";
+      return;
+    }
+
+    const header = new Uint8Array(await nextFile.slice(0, 4).arrayBuffer());
+    if (header.length !== 4 || header[0] !== 0x7f || header[1] !== 0x45 || header[2] !== 0x4c || header[3] !== 0x46) {
+      setUploadFile(null);
+      setUploadFileError("Choose a Linux ELF executable. Images, documents, archives, and scripts are not accepted.");
+      event.target.value = "";
+      return;
+    }
+
+    setUploadFile(nextFile);
+    setUploadFileError("");
+    setUploadState({ loading: false, error: null, version: null });
+  }
+
+  function openFilePicker() {
+    fileInputRef.current?.click();
+  }
+
+  async function handleUploadVersion(event) {
+    event.preventDefault();
+    if (!uploadFile || uploadFileError) {
+      return;
+    }
+
+    setUploadState({ loading: true, error: null, version: null });
+    try {
+      const submission = await submitBotExecutable(botId, uploadFile);
+      const updatedBot = await getBot(botId);
+      setBotState({ loading: false, data: updatedBot, error: null });
+      setSelectedSubmissionId("");
+      setOffset(0);
+      setUploadFile(null);
+      setUploadFileError("");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      setUploadState({ loading: false, error: null, version: submission.version });
+    } catch (error) {
+      setUploadState({ loading: false, error, version: null });
+    }
   }
 
   if (botState.loading) {
@@ -252,6 +344,14 @@ export default function BotPage() {
           <span>
             Created <strong>{formatHeaderDate(bot.created_at)}</strong>
           </span>
+          {bot.active_version && (
+            <>
+              <span aria-hidden="true">&middot;</span>
+              <span>
+                Active <strong>v{bot.active_version}</strong>
+              </span>
+            </>
+          )}
         </p>
       </section>
 
@@ -272,8 +372,115 @@ export default function BotPage() {
       <section className="history-panel">
         <div className="section-heading player-section-heading">
           <div>
+            <h2>Versions</h2>
+          </div>
+          <span>{bot.versions.length} total</span>
+        </div>
+
+        {isOwnBot && (
+          <form className="version-upload-form" onSubmit={handleUploadVersion}>
+            <div className="version-upload-row">
+              <input
+                ref={fileInputRef}
+                className="visually-hidden-file-input"
+                type="file"
+                onChange={handleFileChange}
+                aria-describedby="version-executable-error"
+                disabled={uploadState.loading}
+                required
+              />
+              <button
+                className="version-file-button"
+                type="button"
+                onClick={openFilePicker}
+                disabled={uploadState.loading}
+              >
+                <IconUpload size={15} aria-hidden="true" />
+                {uploadFile ? "Change file" : "Choose file"}
+              </button>
+              {uploadFile && !uploadFileError && (
+                <div className="version-selected-file">
+                  <IconFileCode size={15} aria-hidden="true" />
+                  <span>{uploadFile.name}</span>
+                  <small>{formatBytes(uploadFile.size)}</small>
+                </div>
+              )}
+              <button
+                className="version-submit-button"
+                type="submit"
+                disabled={uploadState.loading || !uploadFile || Boolean(uploadFileError)}
+              >
+                {uploadState.loading ? "Uploading..." : "Upload"}
+              </button>
+            </div>
+            {uploadFileError && <span id="version-executable-error" className="field-error">{uploadFileError}</span>}
+          </form>
+        )}
+        {uploadState.error && (
+          <p className="error" role="alert">
+            Could not upload version: {uploadState.error.message}
+          </p>
+        )}
+        {uploadState.version && (
+          <p className="inline-success" role="status">
+            Version {uploadState.version} is now active.
+          </p>
+        )}
+
+        {bot.versions.length > 0 && (
+          <div className="table-scroll">
+            <table className="data-table bot-version-table">
+              <thead>
+                <tr>
+                  <th scope="col">Version</th>
+                  <th scope="col">Rating</th>
+                  <th scope="col">Games</th>
+                  <th scope="col">W/L/D</th>
+                  <th scope="col">Uploaded</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bot.versions.map((version) => (
+                  <tr key={version.submission_id}>
+                    <td>
+                      v{version.version}
+                      {version.is_active && <span className="version-active-badge">Active</span>}
+                    </td>
+                    <td>{Math.round(version.rating)}</td>
+                    <td>{version.games_played}</td>
+                    <td>{version.wins}/{version.losses}/{version.draws}</td>
+                    <td>{formatHeaderDate(version.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="history-panel">
+        <div className="section-heading player-section-heading">
+          <div>
             <h2>Matches</h2>
           </div>
+          <label className="version-filter-control">
+            <span>Version</span>
+            <select
+              value={selectedSubmissionId}
+              onChange={(event) => {
+                setSelectedSubmissionId(event.target.value);
+                setOffset(0);
+              }}
+              disabled={matchesState.loading}
+            >
+              <option value="">All versions</option>
+              {bot.versions.map((version) => (
+                <option key={version.submission_id} value={version.submission_id}>
+                  v{version.version}
+                </option>
+              ))}
+            </select>
+          </label>
           <span>{rangeText}</span>
         </div>
 
@@ -325,7 +532,10 @@ export default function BotPage() {
                                 to={`/bots/${match.bot_one_id}`}
                                 onClick={stopLinkPropagation}
                               >
-                                {match.bot_one_name}
+                                <VersionedBotName
+                                  name={match.bot_one_name}
+                                  version={match.bot_one_version}
+                                />
                               </Link>
                             </span>
                             <PlayerRating
@@ -340,7 +550,10 @@ export default function BotPage() {
                                 to={`/bots/${match.bot_two_id}`}
                                 onClick={stopLinkPropagation}
                               >
-                                {match.bot_two_name}
+                                <VersionedBotName
+                                  name={match.bot_two_name}
+                                  version={match.bot_two_version}
+                                />
                               </Link>
                             </span>
                             <PlayerRating

@@ -49,6 +49,15 @@ function getRecord(bot) {
   ];
 }
 
+function VersionedBotName({ bot }) {
+  return (
+    <>
+      {bot.name}
+      {bot.version && <span className="bot-version-suffix">v{bot.version}</span>}
+    </>
+  );
+}
+
 function getRangeText({ count, loading, offset, limit }) {
   if (loading) {
     return "Loading...";
@@ -247,7 +256,7 @@ export default function LeaderboardPage() {
                   const rank = offset + index + 1;
 
                   return (
-                    <tr key={bot.bot_id}>
+                    <tr key={bot.submission_id ?? bot.bot_id}>
                       <td>
                         <span className={rank === 1 ? "rank-cell top-rank" : "rank-cell"}>
                           <span className="rank-icon-slot">
@@ -259,9 +268,9 @@ export default function LeaderboardPage() {
                         </span>
                       </td>
                       <td className="player-name">
-                        <Link className="bot-name-link" to={`/bots/${bot.bot_id}`}>
-                          {bot.name}
-                        </Link>
+                          <Link className="bot-name-link" to={`/bots/${bot.bot_id}`}>
+                            <VersionedBotName bot={bot} />
+                          </Link>
                       </td>
                       <td>{bot.owner_name}</td>
                       <td>{Math.round(bot.rating)}</td>

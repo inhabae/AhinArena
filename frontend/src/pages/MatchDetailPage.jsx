@@ -82,6 +82,19 @@ function formatResult(match) {
   return match.result_reason === "draw" ? "Draw" : match.result_reason;
 }
 
+function formatBotVersion(name, version) {
+  return version ? `${name} v${version}` : name;
+}
+
+function VersionedBotName({ name, version }) {
+  return (
+    <>
+      {name}
+      {version && <span className="bot-version-suffix">v{version}</span>}
+    </>
+  );
+}
+
 function formatReason(reason) {
   return reason.replaceAll("_", " ");
 }
@@ -506,11 +519,11 @@ export default function MatchDetailPage() {
           <div className="section-heading">
             <h2>
               <Link className="bot-name-link" to={`/bots/${match.bot_one_id}`}>
-                {match.bot_one_name}
+                <VersionedBotName name={match.bot_one_name} version={match.bot_one_version} />
               </Link>{" "}
               vs{" "}
               <Link className="bot-name-link" to={`/bots/${match.bot_two_id}`}>
-                {match.bot_two_name}
+                <VersionedBotName name={match.bot_two_name} version={match.bot_two_version} />
               </Link>
             </h2>
             <span>{formatResult(match)}</span>
@@ -532,7 +545,9 @@ export default function MatchDetailPage() {
       <div className="page-header match-viewer-header">
         <h1>Match Viewer</h1>
         <p>
-          {match.bot_one_name} vs {match.bot_two_name} &middot; {formatGame(match.game)}
+          {formatBotVersion(match.bot_one_name, match.bot_one_version)} vs{" "}
+          {formatBotVersion(match.bot_two_name, match.bot_two_version)} &middot;{" "}
+          {formatGame(match.game)}
         </p>
       </div>
 
@@ -549,7 +564,7 @@ export default function MatchDetailPage() {
                 botId={match.bot_one_id}
                 game={match.game}
                 marker="X"
-                name={match.bot_one_name}
+                name={<VersionedBotName name={match.bot_one_name} version={match.bot_one_version} />}
                 before={match.bot_one_rating_before}
                 after={match.bot_one_rating_after}
                 delta={match.bot_one_rating_delta}
@@ -560,7 +575,7 @@ export default function MatchDetailPage() {
                 botId={match.bot_two_id}
                 game={match.game}
                 marker="O"
-                name={match.bot_two_name}
+                name={<VersionedBotName name={match.bot_two_name} version={match.bot_two_version} />}
                 before={match.bot_two_rating_before}
                 after={match.bot_two_rating_after}
                 delta={match.bot_two_rating_delta}
