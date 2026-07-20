@@ -59,7 +59,7 @@ See `docs/roadmap.md` for more details.
 
 ## Local Matches
 
-The website accepts prebuilt static Linux x86-64 executables. It does not compile
+The website accepts prebuilt static Linux ARM64 executables. It does not compile
 or package player source code; users build their bots with their own toolchain
 and upload the resulting executable.
 
@@ -89,7 +89,7 @@ The React/Vite frontend lives in `frontend/`. It provides:
 
 - a Home page for selecting a game, choosing two registered bots, starting a match, and viewing recent matches;
 - Login and Register pages for account creation and cookie-backed sessions;
-- a Bot Registration page for authenticated users to upload static Linux x86-64 player executables;
+- a Bot Registration page for authenticated users to upload static Linux ARM64 player executables;
 - a Match History page with game filtering and pagination;
 - a Leaderboard page with per-game rankings, configurable row count, and pagination;
 - a Match Detail page with rating summaries, ordered move history, and replay controls.
@@ -138,7 +138,7 @@ User accounts use server-side sessions persisted in PostgreSQL and identified by
 an `ahin_arena_session` HTTP-only cookie. Login, logout, current-user, bot
 creation, and match creation requests rely on that cookie.
 
-Authenticated users can submit a static Linux x86-64 ELF executable for bots they own with
+Authenticated users can submit a static Linux ARM64 ELF executable for bots they own with
 `POST /bots/{bot_id}/submission`. Each accepted submission is versioned and the
 latest version becomes the bot's active match code. See
 `docs/bot-submission.md` for the milestone 8 details and current security

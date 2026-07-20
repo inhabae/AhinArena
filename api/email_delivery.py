@@ -4,6 +4,8 @@ import httpx
 
 
 RESEND_EMAILS_URL = "https://api.resend.com/emails"
+EMAIL_DELIVERY_MODE_ENV_VAR = "EMAIL_DELIVERY_MODE"
+EMAIL_DELIVERY_MODE_DISABLED = "disabled"
 
 
 class EmailDeliveryError(RuntimeError):
@@ -15,6 +17,9 @@ class EmailDeliveryConfigurationError(EmailDeliveryError):
 
 
 def is_email_delivery_configured() -> bool:
+    if os.environ.get(EMAIL_DELIVERY_MODE_ENV_VAR, "").strip().lower() == EMAIL_DELIVERY_MODE_DISABLED:
+        return False
+
     return bool(os.environ.get("RESEND_API_KEY") and os.environ.get("EMAIL_FROM"))
 
 

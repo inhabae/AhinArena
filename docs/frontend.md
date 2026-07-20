@@ -67,7 +67,7 @@ credential verification.
 
 `frontend/src/pages/BotRegistrationPage.jsx` requires an authenticated session.
 It submits multipart `POST /bots` through `createBot`, assigning the new bot to
-the current user and selected supported game with one static Linux x86-64
+the current user and selected supported game with one static Linux ARM64
 executable. Users without a
 valid session are sent to `/login`.
 
