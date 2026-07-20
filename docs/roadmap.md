@@ -131,15 +131,22 @@ Allow users to create accounts and manage their bots.
 **Deliverables**
 
 - User registration through `POST /auth/register`
+- Email verification through `POST /auth/verify-email` and
+  `POST /auth/verify-email/resend`
+- Password reset through request, validate, and confirm endpoints
 - Login through `POST /auth/login` with server-side session storage
 - Logout through `POST /auth/logout` with session deletion and cookie clearing
 - Current-user lookup through `GET /auth/me`
+- Current-user description updates through `PATCH /auth/me`
+- Public player profiles through `GET /users/{username}`
 - HTTP-only `ahin_arena_session` cookie support with credentialed CORS
-- PostgreSQL-backed users and sessions schema with Alembic migrations
+- PostgreSQL-backed users, sessions, auth tokens, and auth rate-limit event
+  schemas with Alembic migrations
 - Authenticated match creation for `POST /matches`
 - Authenticated bot creation through `POST /bots`
 - Bot ownership stored on bot records
-- Frontend Login and Register pages at `/login` and `/register`
+- Frontend Login, Register, Verify Email, Forgot Password, Reset Password, and
+  Player Profile pages
 - Auth-aware Home and Bot Registration flows
 - Auth flow documentation in `README.md`, `docs/architecture.md`, and `docs/frontend.md`
 
@@ -154,16 +161,16 @@ Allow developers to upload custom AI agents.
 **Deliverables**
 
 - Persistent `bot_submissions` table with per-bot versioning
-- `bots.active_submission_id` pointer for the source used in new matches
+- `bots.active_submission_id` pointer for the executable used in new matches
 - Authenticated `POST /bots/{bot_id}/submission` endpoint
-- Bot ownership enforcement for source uploads
-- Text submission validation for Python, Node.js, and Bash, including non-empty
-  source, 100 KB maximum size, and Python syntax parsing
-- Submitted source execution through Docker sandbox commands under the existing
-  referee subprocess protocol
+- Bot ownership enforcement for executable uploads
+- Static Linux x86-64 ELF validation, including upload size, architecture, and
+  dynamic-linking rejection
+- Submitted executable execution through Docker sandbox commands under the
+  existing referee subprocess protocol
 - Match creation rejection for bots without an active submission
 - Deployment-provided executable artifacts seeded for supported games
-- Frontend source-code submission flow on `/bots/new`
+- Frontend executable submission flow on `/bots/new`
 - Bot submission documentation in `docs/bot-submission.md`
 
 ---
@@ -176,16 +183,16 @@ Execute uploaded AI agents securely inside isolated Docker containers.
 
 **Deliverables**
 
-- Dedicated multi-runtime bot runner image in `docker/bot_runner/Dockerfile`
+- Dedicated bot runner image in `docker/bot_runner/Dockerfile`
 - Non-root sandbox user inside the runner image
-- Submitted source mounted read-only under `/bot`
-- Per-bot temporary source files created from active submissions
+- Submitted executable mounted read-only at `/bot/player`
+- Per-bot temporary executable files created from active submissions
 - Per-bot named containers for match execution
 - Container networking disabled with `--network none`
 - Linux capabilities dropped and `no-new-privileges` enabled
 - Read-only container root filesystem with constrained `/tmp` tmpfs
 - Memory, CPU, and PID limits configurable through environment variables
-- Sandbox cleanup that force-removes containers and deletes temporary source
+- Sandbox cleanup that force-removes containers and deletes temporary executable
   directories after match execution
 - Docker sandboxing documentation in `docs/docker-sandboxing.md`
 

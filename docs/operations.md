@@ -15,8 +15,8 @@ API enqueue event. Important event names are `worker_started`,
 `match_job_completed`, and `match_job_failed`. Completion and failure events
 include `match_duration_ms`; heartbeats include queued and running job counts.
 
-Do not treat logs as a source of game moves, request bodies, bot source or
-executables, sandbox commands, session IDs, email addresses, credentials, or
+Do not treat logs as a source of game moves, request bodies, bot executables,
+sandbox commands, session IDs, email addresses, credentials, or
 database URLs. The application logs method and path only (not query strings),
 and worker failures log an exception type plus job context rather than an
 exception message or traceback. Configure the log collector to redact
