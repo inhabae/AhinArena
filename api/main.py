@@ -372,6 +372,30 @@ def client_rate_limit_key(request: Request) -> str:
     return request.client.host
 
 
+def is_postgresql_session(db: Session) -> bool:
+    bind = db.get_bind()
+    return bind is not None and bind.dialect.name == "postgresql"
+
+
+def lock_postgresql_advisory_xact(db: Session, *lock_keys: str) -> None:
+    if not is_postgresql_session(db):
+        return
+
+    for lock_key in sorted(set(lock_keys)):
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+            {"lock_key": lock_key},
+        )
+
+
+def lock_user_limit_scope(db: Session, *, user_id: int, scope: str) -> None:
+    if not is_postgresql_session(db):
+        return
+
+    lock_postgresql_advisory_xact(db, f"user_limit:{scope}:{user_id}")
+    db.query(User.id).filter(User.id == user_id).with_for_update().one()
+
+
 def require_auth_rate_limit(
     db: Session,
     *,
@@ -385,7 +409,15 @@ def require_auth_rate_limit(
         AuthRateLimitEvent.created_at < now - longest_window
     ).delete(synchronize_session=False)
 
-    for scope, key in (("account", account_key.strip().lower()), ("ip", ip_key.strip())):
+    account_key = account_key.strip().lower()
+    ip_key = ip_key.strip()
+    lock_postgresql_advisory_xact(
+        db,
+        f"auth_rate_limit:{action}:account:{account_key}",
+        f"auth_rate_limit:{action}:ip:{ip_key}",
+    )
+
+    for scope, key in (("account", account_key), ("ip", ip_key)):
         limit, window = AUTH_RATE_LIMITS[action][scope]
         bucket = f"{action}:{scope}"
         window_start = now - window
@@ -407,7 +439,7 @@ def require_auth_rate_limit(
                 "Too many requests. Please try again later.",
             )
 
-    for scope, key in (("account", account_key.strip().lower()), ("ip", ip_key.strip())):
+    for scope, key in (("account", account_key), ("ip", ip_key)):
         db.add(AuthRateLimitEvent(bucket=f"{action}:{scope}", key=key))
 
     db.commit()
@@ -1111,6 +1143,7 @@ def bot_name_taken():
 
 
 def enforce_user_bot_limit(db: Session, *, user_id: int) -> None:
+    lock_user_limit_scope(db, user_id=user_id, scope="bots")
     max_bots = get_max_bots_per_user()
     bot_count = db.query(func.count(Bot.id)).filter(Bot.owner_id == user_id).scalar()
     if bot_count >= max_bots:
@@ -1122,6 +1155,7 @@ def enforce_user_bot_limit(db: Session, *, user_id: int) -> None:
 
 
 def enforce_user_active_match_job_limit(db: Session, *, user_id: int) -> None:
+    lock_user_limit_scope(db, user_id=user_id, scope="active_match_jobs")
     max_jobs = get_max_active_match_jobs_per_user()
     active_job_count = (
         db.query(func.count(MatchJob.id))

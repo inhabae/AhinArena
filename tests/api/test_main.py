@@ -54,6 +54,64 @@ class DummySession:
         self.refreshed.append(record)
 
 
+class FakeDialect:
+    name = "postgresql"
+
+
+class FakeBind:
+    dialect = FakeDialect()
+
+
+class RecordingQuery:
+    def __init__(self, session):
+        self.session = session
+
+    def filter(self, *args):
+        self.session.operations.append(("filter", args))
+        return self
+
+    def delete(self, **kwargs):
+        self.session.operations.append(("delete", kwargs))
+        return 0
+
+    def with_for_update(self):
+        self.session.operations.append(("with_for_update", None))
+        return self
+
+    def one(self):
+        self.session.operations.append(("one", None))
+        return (1,)
+
+    def scalar(self):
+        self.session.operations.append(("scalar", None))
+        return 0
+
+
+class RecordingPostgresSession:
+    def __init__(self):
+        self.operations = []
+        self.added = []
+        self.commits = 0
+
+    def get_bind(self):
+        return FakeBind()
+
+    def execute(self, statement, params=None):
+        self.operations.append(("execute", str(statement), params))
+
+    def query(self, *entities):
+        self.operations.append(("query", entities))
+        return RecordingQuery(self)
+
+    def add(self, record):
+        self.operations.append(("add", record.bucket, record.key))
+        self.added.append(record)
+
+    def commit(self):
+        self.operations.append(("commit", None))
+        self.commits += 1
+
+
 @pytest.fixture(autouse=True)
 def override_database_dependency(monkeypatch):
     client.cookies.clear()
@@ -1283,6 +1341,33 @@ def test_login_rate_limit_counts_failed_attempts_by_account(sqlite_database_depe
     )
 
 
+def test_auth_rate_limit_locks_account_and_ip_buckets_before_counting():
+    session = RecordingPostgresSession()
+
+    api_main.require_auth_rate_limit(
+        session,
+        action="login",
+        account_key=" PLAYER@example.com ",
+        ip_key="203.0.113.10",
+    )
+
+    execute_operations = [operation for operation in session.operations if operation[0] == "execute"]
+    assert [operation[2]["lock_key"] for operation in execute_operations] == [
+        "auth_rate_limit:login:account:player@example.com",
+        "auth_rate_limit:login:ip:203.0.113.10",
+    ]
+    first_scalar_index = next(
+        index for index, operation in enumerate(session.operations) if operation[0] == "scalar"
+    )
+    last_execute_index = max(
+        index for index, operation in enumerate(session.operations) if operation[0] == "execute"
+    )
+    assert last_execute_index < first_scalar_index
+    assert ("add", "login:account", "player@example.com") in session.operations
+    assert ("add", "login:ip", "203.0.113.10") in session.operations
+    assert session.commits == 1
+
+
 def test_login_rate_limit_counts_failed_attempts_by_ip(sqlite_database_dependency):
     for index in range(api_main.AUTH_RATE_LIMITS["login"]["ip"][0]):
         response = client.post(
@@ -2179,6 +2264,21 @@ def test_create_bot_checks_user_limit_before_reading_the_executable(
     assert response.status_code == 429
 
 
+def test_user_bot_limit_locks_user_scope_before_counting(monkeypatch):
+    session = RecordingPostgresSession()
+    monkeypatch.setenv(api_main.MAX_BOTS_PER_USER_ENV_VAR, "25")
+
+    api_main.enforce_user_bot_limit(session, user_id=123)
+
+    assert session.operations[0][0] == "execute"
+    assert session.operations[0][2]["lock_key"] == "user_limit:bots:123"
+    assert session.operations[1][0] == "query"
+    assert session.operations[2][0] == "filter"
+    assert session.operations[3][0] == "with_for_update"
+    assert session.operations[4][0] == "one"
+    assert session.operations[-1][0] == "scalar"
+
+
 def test_seed_default_bots_reports_invalid_artifacts_as_startup_errors(
     sqlite_database_dependency,
     tmp_path,
@@ -2708,6 +2808,21 @@ def test_create_match_rejects_user_over_active_job_limit(
         }
     }
     assert sqlite_database_dependency.query(MatchJob).count() == 4
+
+
+def test_user_active_match_job_limit_locks_user_scope_before_counting(monkeypatch):
+    session = RecordingPostgresSession()
+    monkeypatch.setenv(api_main.MAX_ACTIVE_MATCH_JOBS_PER_USER_ENV_VAR, "10")
+
+    api_main.enforce_user_active_match_job_limit(session, user_id=123)
+
+    assert session.operations[0][0] == "execute"
+    assert session.operations[0][2]["lock_key"] == "user_limit:active_match_jobs:123"
+    assert session.operations[1][0] == "query"
+    assert session.operations[2][0] == "filter"
+    assert session.operations[3][0] == "with_for_update"
+    assert session.operations[4][0] == "one"
+    assert session.operations[-1][0] == "scalar"
 
 
 def test_get_match_job_returns_queued_job(sqlite_database_dependency):
