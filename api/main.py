@@ -1173,6 +1173,15 @@ def enforce_user_active_match_job_limit(db: Session, *, user_id: int) -> None:
         )
 
 
+def require_bot_active_submission(bot: Bot) -> None:
+    if bot.active_submission_id is None:
+        api_error(
+            400,
+            "bot_has_no_active_submission",
+            f"Bot has no active submission: {bot.name}",
+        )
+
+
 def get_max_bot_executable_bytes() -> int:
     return get_positive_int_env(
         MAX_BOT_EXECUTABLE_BYTES_ENV_VAR,
@@ -1439,6 +1448,9 @@ def create_match(
 
     if bot_one.id == bot_two.id:
         api_error(400, "duplicate_bot_match", "A bot cannot play against itself")
+
+    require_bot_active_submission(bot_one)
+    require_bot_active_submission(bot_two)
 
     job = MatchJob(
         game_id=request.game,
