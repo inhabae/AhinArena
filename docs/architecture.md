@@ -170,7 +170,7 @@ role-based access are not implemented yet.
 
 Users create bot records through multipart `POST /bots`, then upload executables through
 `POST /bots/{bot_id}/submission`. The submission endpoint requires the current
-session user to own the bot, accepts a validated static Linux ARM64 ELF,
+session user to own the bot, accepts a validated static Linux x86-64 ELF,
 stores a new versioned `bot_submissions` row, and points
 `bots.active_submission_id` at the newest accepted version.
 

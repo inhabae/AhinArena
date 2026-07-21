@@ -53,7 +53,7 @@ Use this checklist when an automated run is unavailable:
 1. Start a new, empty PostgreSQL volume and run `migrate` to successful exit.
 2. Start API and worker, then verify `GET /health/ready` returns 200.
 3. Register and verify a new test user, then log in with the issued session.
-4. Upload two valid static Linux ARM64 bots, enqueue a match, and verify the
+4. Upload two valid static Linux x86-64 bots, enqueue a match, and verify the
    job reaches `completed` with a `match_id`.
 5. Restart API and worker; verify readiness, logged-in data/job lookup, and
    the match record still exist.

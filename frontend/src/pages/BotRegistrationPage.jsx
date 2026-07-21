@@ -17,7 +17,7 @@ function errorMessageFor(error) {
     bot_name_taken: "A bot with this name already exists for the selected game.",
     submission_too_large: "The executable must be 10 MiB or smaller.",
     invalid_executable: "Choose a valid Linux ELF executable.",
-    unsupported_architecture: "The executable must be 64-bit Linux ARM64.",
+    unsupported_architecture: "The executable must be 64-bit Linux x86-64.",
     dynamic_executable: "The executable must be statically linked.",
   };
   return messages[error.code] || error.message || "The bot could not be registered.";
@@ -115,7 +115,7 @@ export default function BotRegistrationPage() {
     <main className="form-page">
       <div className="page-header">
         <h1>Register a bot</h1>
-        <p>Upload a statically linked, 64-bit Linux ARM64 executable.</p>
+        <p>Upload a statically linked, 64-bit Linux x86-64 executable.</p>
       </div>
       {loading && <p className="empty-state">Checking session...</p>}
       {!loading && !isAuthenticated && (
@@ -146,7 +146,7 @@ export default function BotRegistrationPage() {
               <span className="executable-picker-icon"><IconUpload size={18} /></span>
               <span className="executable-picker-copy">
                 <strong>{file ? "Replace executable" : "Choose executable"}</strong>
-                <small>Static Linux ARM64 ELF · max 10 MiB</small>
+                <small>Static Linux x86-64 ELF · max 10 MiB</small>
               </span>
               <span className="executable-picker-action">Browse</span>
             </button>

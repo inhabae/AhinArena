@@ -1258,11 +1258,11 @@ def sanitize_executable_filename(filename: str | None) -> str | None:
 
 
 def validate_bot_executable(executable: bytes) -> None:
-    """Validate a static, little-endian, ARM64 ELF without executing it."""
+    """Validate a static, little-endian, x86-64 ELF without executing it."""
     if len(executable) < 64 or executable[:4] != b"\x7fELF":
         api_error(422, "invalid_executable", "Upload must be a valid ELF executable.")
     if executable[4] != 2 or executable[5] != 1:
-        api_error(422, "unsupported_architecture", "Executable must be 64-bit little-endian ARM64 ELF.")
+        api_error(422, "unsupported_architecture", "Executable must be 64-bit little-endian x86-64 ELF.")
 
     try:
         elf_type, machine = struct.unpack_from("<HH", executable, 16)
@@ -1271,8 +1271,8 @@ def validate_bot_executable(executable: bytes) -> None:
     except struct.error:
         api_error(422, "invalid_executable", "ELF header is truncated.")
 
-    if machine != 183:
-        api_error(422, "unsupported_architecture", "Executable must target Linux ARM64.")
+    if machine != 62:
+        api_error(422, "unsupported_architecture", "Executable must target Linux x86-64.")
     if elf_type not in (2, 3) or program_entry_size < 56:
         api_error(422, "invalid_executable", "ELF file is not an executable.")
     if program_count == 0 or program_offset > len(executable):

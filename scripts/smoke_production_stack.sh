@@ -61,7 +61,7 @@ EOF
 docker build -t ahinarena-api:smoke -f docker/api.Dockerfile .
 docker build -t ahinarena-worker:smoke -f docker/worker.Dockerfile .
 docker build -t ahinarena-bot-runner:smoke -f docker/bot_runner/Dockerfile .
-docker run --rm -i --platform linux/arm64 -v "$bot_dir:/output" alpine:3.20 sh -c \
+docker run --rm -i --platform linux/amd64 -v "$bot_dir:/output" alpine:3.20 sh -c \
   'apk add --no-cache build-base >/dev/null && cc -O2 -static -s -DBOARD_SIZE=3 -x c - -o /output/one && cp /output/one /output/two' \
   < players/builtin_player.c
 
