@@ -1,4 +1,4 @@
-.PHONY: api worker frontend migrate test production-migrate production-up builtin-players sleepy-players
+.PHONY: api worker frontend migrate test production-migrate production-up production-proxy-up builtin-players sleepy-players
 
 -include .env
 export
@@ -11,6 +11,7 @@ DOCKER ?= docker
 COMPOSE ?= $(DOCKER) compose
 PRODUCTION_ENV_FILE ?= /secure/path/ahinarena.production.env
 PRODUCTION_COMPOSE_FILE ?= deploy/compose.production.yaml
+PRODUCTION_PROXY_COMPOSE_FILE ?= deploy/compose.caddy.yaml
 
 api:
 	PYTHONPATH=. $(UVICORN) api.main:app --reload
@@ -36,6 +37,9 @@ production-migrate:
 # Run the one-shot migration before starting or replacing API/worker containers.
 production-up: production-migrate
 	$(COMPOSE) --env-file $(PRODUCTION_ENV_FILE) -f $(PRODUCTION_COMPOSE_FILE) up -d --no-deps --wait api worker
+
+production-proxy-up:
+	$(COMPOSE) --env-file $(PRODUCTION_ENV_FILE) -f $(PRODUCTION_COMPOSE_FILE) -f $(PRODUCTION_PROXY_COMPOSE_FILE) up -d --wait caddy
 
 # Local developer utility only; the website never invokes this target.
 builtin-players:
