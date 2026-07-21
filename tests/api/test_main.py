@@ -159,7 +159,7 @@ def valid_bot_executable(payload=b"\x90"):
     import struct
     data = bytearray(120 + len(payload))
     data[:16] = b"\x7fELF\x02\x01\x01" + b"\x00" * 9
-    struct.pack_into("<HHIQQQIHHHHHH", data, 16, 2, 183, 1, 0, 64, 0, 0, 64, 56, 1, 0, 0, 0)
+    struct.pack_into("<HHIQQQIHHHHHH", data, 16, 2, 62, 1, 0, 64, 0, 0, 64, 56, 1, 0, 0, 0)
     struct.pack_into("<IIQQQQQQ", data, 64, 1, 5, 0, 0, 0, len(data), len(data), 4096)
     data[120:] = payload
     return bytes(data)
@@ -3643,7 +3643,7 @@ def test_create_bot_rejects_non_elf(sqlite_database_dependency):
 def test_create_bot_rejects_wrong_architecture(sqlite_database_dependency):
     login_user(sqlite_database_dependency)
     artifact = bytearray(valid_bot_executable())
-    struct.pack_into("<H", artifact, 18, 62)
+    struct.pack_into("<H", artifact, 18, 183)
     response = client.post("/bots", **bot_multipart(executable=bytes(artifact)))
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "unsupported_architecture"

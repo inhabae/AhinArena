@@ -9,7 +9,7 @@ import api.match_execution as match_execution
 from api.database import Base
 from api.models import Bot, BotSubmission, Match, MatchJob, Move
 from worker import main as worker_main
-from tests.elf_fixture import static_arm64_elf
+from tests.elf_fixture import static_x86_64_elf
 
 
 def make_sessionmaker():
@@ -29,8 +29,8 @@ def seed_bot(db, *, name, game_id="tictactoe"):
     submission = BotSubmission(
         bot_id=bot.id,
         version=1,
-        executable=static_arm64_elf(),
-        executable_size=len(static_arm64_elf()),
+        executable=static_x86_64_elf(),
+        executable_size=len(static_x86_64_elf()),
         executable_digest="0" * 64,
     )
     db.add(submission)
