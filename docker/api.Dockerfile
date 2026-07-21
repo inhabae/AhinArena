@@ -39,6 +39,7 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY api ./api
 COPY engine ./engine
+COPY build/default-bots ./default-bots
 
 USER 10001:10001
 EXPOSE 8000

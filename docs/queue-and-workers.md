@@ -249,7 +249,7 @@ and `status` can be any job state.
 | `WORKER_POLL_INTERVAL_SECONDS` | `5.0` in code, `1` through `make worker` | Worker | Sleep interval for polling, notification wait timeout, and reaper cadence. |
 | `MATCH_JOB_STALL_TIMEOUT_SECONDS` | `30.0` | Worker | Age after which a `running` job is considered stalled. |
 | `MATCH_JOB_MAX_ATTEMPTS` | `3` | Worker | Maximum claim attempts before a stalled job is failed instead of requeued. |
-| `BOT_MOVE_TIMEOUT_SECONDS` | `2.0` | Worker match execution | Per-move timeout after bot startup. |
+| `BOT_MOVE_TIMEOUT_SECONDS` | `10.0` in production Compose, `2.0` in code | Worker match execution | Per-move timeout after bot startup. |
 | `BOT_STARTUP_TIMEOUT_SECONDS` | `10.0` | Worker match execution | First-response timeout, including container startup and Python imports. |
 | `DOCKER_BINARY` | `docker` | Worker match execution | Container CLI used by the bot sandbox. |
 | `BOT_SANDBOX_TEMP_DIR` | Unset | Worker match execution | Host-visible directory used for each temporary player file. In Compose it is set from `BOT_SANDBOX_HOST_DIR` and bind-mounted at the same path so the Docker daemon can mount it. |

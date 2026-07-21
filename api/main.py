@@ -95,14 +95,16 @@ from api.schemas import (
 )
 
 
-DEFAULT_BOT_SPECS = (
-    {"name": "randombot1", "artifact_suffix": ""},
-    {"name": "randombot2", "artifact_suffix": ""},
-    {"name": "random", "artifact_suffix": ""},
-    {"name": "sleepy", "artifact_suffix": "-sleepy"},
+SUPPORTED_GAMES = ("tictactoe", "connect-four")
+DEFAULT_BOT_SPECS = tuple(
+    {
+        "name": f"random-{game_id}",
+        "game_id": game_id,
+        "artifact_name": game_id,
+    }
+    for game_id in SUPPORTED_GAMES
 )
 DEFAULT_BOT_NAMES = tuple(spec["name"] for spec in DEFAULT_BOT_SPECS)
-SUPPORTED_GAMES = ("tictactoe", "connect-four")
 DEFAULT_CORS_ALLOWED_ORIGINS = (
     "http://localhost:5173,"
     "http://127.0.0.1:5173,"
@@ -480,55 +482,55 @@ def seed_default_bots(db: Session) -> None:
     artifact_dir = Path(artifact_dir_value) if artifact_dir_value else None
 
     try:
-        for game_id in SUPPORTED_GAMES:
-            existing_bots = {
-                bot.name: bot
-                for bot in (
-                    db.query(Bot)
-                    .filter(Bot.game_id == game_id, Bot.name.in_(DEFAULT_BOT_NAMES))
-                    .all()
-                )
-            }
+        existing_bots = {
+            (bot.game_id, bot.name): bot
+            for bot in (
+                db.query(Bot)
+                .filter(Bot.name.in_(DEFAULT_BOT_NAMES))
+                .all()
+            )
+        }
 
-            for spec in DEFAULT_BOT_SPECS:
-                bot_name = spec["name"]
-                bot = existing_bots.get(bot_name)
-                if bot is None:
-                    bot = Bot(name=bot_name, game_id=game_id, owner_id=None)
-                    db.add(bot)
-                    db.flush()
+        for spec in DEFAULT_BOT_SPECS:
+            game_id = spec["game_id"]
+            bot_name = spec["name"]
+            bot = existing_bots.get((game_id, bot_name))
+            if bot is None:
+                bot = Bot(name=bot_name, game_id=game_id, owner_id=None)
+                db.add(bot)
+                db.flush()
 
-                if bot.active_submission_id is None:
-                    artifact_name = f"{game_id}{spec['artifact_suffix']}"
-                    artifact_path = artifact_dir / artifact_name if artifact_dir is not None else None
-                    if artifact_path is None or not artifact_path.is_file():
-                        logger.warning(
-                            "Built-in bot executable is unavailable for %s %s; system bot remains inactive",
-                            game_id,
-                            bot_name,
-                        )
-                        continue
-                    artifact = artifact_path.read_bytes()
-                    try:
-                        validate_bot_executable(artifact)
-                    except HTTPException as exc:
-                        detail = exc.detail
-                        message = detail.get("message", str(detail)) if isinstance(detail, dict) else str(detail)
-                        raise RuntimeError(
-                            f"Built-in bot executable for {game_id} is invalid: {message}"
-                        ) from exc
-                    submission = BotSubmission(
-                        bot_id=bot.id,
-                        version=bot.latest_submission_version + 1,
-                        executable=artifact,
-                        executable_size=len(artifact),
-                        executable_digest=hashlib.sha256(artifact).hexdigest(),
-                        original_filename=artifact_name,
+            if bot.active_submission_id is None:
+                artifact_name = spec["artifact_name"]
+                artifact_path = artifact_dir / artifact_name if artifact_dir is not None else None
+                if artifact_path is None or not artifact_path.is_file():
+                    logger.warning(
+                        "Built-in bot executable is unavailable for %s %s; system bot remains inactive",
+                        game_id,
+                        bot_name,
                     )
-                    db.add(submission)
-                    db.flush()
-                    bot.active_submission_id = submission.id
-                    bot.latest_submission_version = submission.version
+                    continue
+                artifact = artifact_path.read_bytes()
+                try:
+                    validate_bot_executable(artifact)
+                except HTTPException as exc:
+                    detail = exc.detail
+                    message = detail.get("message", str(detail)) if isinstance(detail, dict) else str(detail)
+                    raise RuntimeError(
+                        f"Built-in bot executable for {game_id} is invalid: {message}"
+                    ) from exc
+                submission = BotSubmission(
+                    bot_id=bot.id,
+                    version=bot.latest_submission_version + 1,
+                    executable=artifact,
+                    executable_size=len(artifact),
+                    executable_digest=hashlib.sha256(artifact).hexdigest(),
+                    original_filename=artifact_name,
+                )
+                db.add(submission)
+                db.flush()
+                bot.active_submission_id = submission.id
+                bot.latest_submission_version = submission.version
 
         db.commit()
     except Exception:
