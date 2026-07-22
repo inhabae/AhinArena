@@ -5,10 +5,9 @@
 __pycache__
 **/__pycache__
 *.py[cod]
-build/*
-!build/default-bots
-!build/default-bots/**
+build
 frontend
 tests
 docs
-players
+players/*
+!players/builtin_player.c
