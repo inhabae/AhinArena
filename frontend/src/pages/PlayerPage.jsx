@@ -81,7 +81,7 @@ function summarizeBots(bots) {
 
 export default function PlayerPage() {
   const { username: usernameParam } = useParams();
-  const { isAuthenticated, loading: authLoading, user } = useAuth();
+  const { loading: authLoading, user } = useAuth();
   const username = usernameParam ? decodeURIComponent(usernameParam) : "";
   const [playerState, setPlayerState] = useState({
     loading: true,
