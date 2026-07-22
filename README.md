@@ -274,8 +274,8 @@ Tic-Tac-Toe:
 {
   "game": "tictactoe",
   "players": [
-    {"bot": "randombot1"},
-    {"bot": "randombot2"}
+    {"bot": "random-tictactoe"},
+    {"bot": "custom-tictactoe"}
   ]
 }
 ```
@@ -286,8 +286,8 @@ Connect Four:
 {
   "game": "connect-four",
   "players": [
-    {"bot": "randombot1"},
-    {"bot": "randombot2"}
+    {"bot": "random-connect-four"},
+    {"bot": "custom-connect-four"}
   ]
 }
 ```
@@ -369,7 +369,7 @@ GET /leaderboard?game_id=tictactoe&limit=50&offset=0
 [
   {
     "bot_id": 1,
-    "name": "random",
+    "name": "random-tictactoe",
     "rating": 1216,
     "games_played": 4,
     "wins": 2,

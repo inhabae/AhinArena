@@ -57,7 +57,7 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:?set FRONTEND_URL}
       RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM:?set EMAIL_FROM}
-      DEFAULT_BOT_EXECUTABLE_DIR: ""
+      DEFAULT_BOT_EXECUTABLE_DIR: ${DEFAULT_BOT_EXECUTABLE_DIR:-/app/default-bots}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -98,6 +98,8 @@ services:
       BOT_SANDBOX_PIDS_LIMIT: ${BOT_SANDBOX_PIDS_LIMIT:-64}
       BOT_SANDBOX_TMPFS_SIZE: ${BOT_SANDBOX_TMPFS_SIZE:-16m}
       WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:-5}
+      BOT_MOVE_TIMEOUT_SECONDS: ${BOT_MOVE_TIMEOUT_SECONDS:-10.0}
+      BOT_STARTUP_TIMEOUT_SECONDS: ${BOT_STARTUP_TIMEOUT_SECONDS:-10.0}
     depends_on:
       migrate:
         condition: service_completed_successfully

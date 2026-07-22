@@ -47,6 +47,6 @@ remain. Those bots cannot enter new matches until an executable is uploaded.
 ## Built-in players
 
 Deployment can supply prebuilt static artifacts in a directory selected by
-`DEFAULT_BOT_EXECUTABLE_DIR`, named `tictactoe`, `tictactoe-sleepy`,
-`connect-four`, and `connect-four-sleepy`. Seeding leaves system bots inactive
-and logs a warning if a required artifact is absent.
+`DEFAULT_BOT_EXECUTABLE_DIR`, named `tictactoe` and `connect-four`. They are
+seeded as `random-tictactoe` and `random-connect-four`. Seeding leaves system
+bots inactive and logs a warning if a required artifact is absent.

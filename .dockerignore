@@ -9,4 +9,5 @@ build
 frontend
 tests
 docs
-players
+players/*
+!players/builtin_player.c

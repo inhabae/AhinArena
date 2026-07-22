@@ -12,6 +12,15 @@ RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip==25.0.1 \
     && /opt/venv/bin/pip install --requirement requirements-prod.txt
 
+FROM alpine:3.20 AS default-bots
+
+WORKDIR /build
+COPY players/builtin_player.c ./builtin_player.c
+RUN apk add --no-cache build-base \
+    && mkdir -p /out \
+    && cc -O2 -static -s -DBOARD_SIZE=3 -o /out/tictactoe builtin_player.c \
+    && cc -O2 -static -s -DBOARD_SIZE=7 -DCONNECT_FOUR=1 -o /out/connect-four builtin_player.c
+
 FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS runtime
 
 ARG VERSION=dev
@@ -39,6 +48,7 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY api ./api
 COPY engine ./engine
+COPY --from=default-bots /out ./default-bots
 
 USER 10001:10001
 EXPOSE 8000

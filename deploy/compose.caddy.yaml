@@ -1,6 +1,6 @@
 services:
   caddy:
-    image: caddy:2.8.4-alpine@sha256:519c65bdd0140641cc7d8d0d5c4c8fb35d6c4d43b8fb21a4f96c4be927f18793
+    image: caddy:2.8.4-alpine
     environment:
       AHINARENA_DOMAIN: ${AHINARENA_DOMAIN:?set AHINARENA_DOMAIN}
     depends_on:
@@ -10,8 +10,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./frontend/dist:/srv/ahinarena/frontend:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../frontend/dist:/srv/ahinarena/frontend:ro
       - caddy-data:/data
       - caddy-config:/config
     networks:

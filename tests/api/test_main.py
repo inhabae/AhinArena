@@ -135,8 +135,8 @@ def valid_match_request():
     return {
         "game": "tictactoe",
         "players": [
-            {"bot": "randombot1"},
-            {"bot": "randombot2"},
+            {"bot": "random-tictactoe"},
+            {"bot": "custom-tictactoe"},
         ],
     }
 
@@ -145,8 +145,8 @@ def valid_connectfour_match_request():
     return {
         "game": "connect-four",
         "players": [
-            {"bot": "randombot1"},
-            {"bot": "randombot2"},
+            {"bot": "random-connect-four"},
+            {"bot": "custom-connect-four"},
         ],
     }
 
@@ -349,13 +349,18 @@ def seed_submission(
 
 
 def seed_default_bot_submissions(session, *, game_id="tictactoe"):
-    for bot_name in ("randombot1", "randombot2"):
-        bot = (
-            session.query(Bot)
-            .filter(Bot.game_id == game_id, Bot.name == bot_name)
-            .one()
-        )
-        seed_submission(session, bot)
+    bot = (
+        session.query(Bot)
+        .filter(Bot.game_id == game_id, Bot.name == f"random-{game_id}")
+        .one()
+    )
+    seed_submission(session, bot)
+
+    custom_name = "custom-tictactoe" if game_id == "tictactoe" else "custom-connect-four"
+    custom_bot = Bot(name=custom_name, game_id=game_id, owner_id=1)
+    session.add(custom_bot)
+    session.flush()
+    seed_submission(session, custom_bot)
 
 
 def mounted_source_path(command):
@@ -2627,15 +2632,13 @@ def test_submit_bot_source_rejects_oversized_source_before_insert(
     assert bot.active_submission_id is None
 
 
-def test_seed_default_bots_creates_random_and_sleepy_bots_for_each_game(
+def test_seed_default_bots_creates_named_random_bot_for_each_game(
     sqlite_database_dependency,
     tmp_path,
     monkeypatch,
 ):
     (tmp_path / "tictactoe").write_bytes(valid_bot_executable())
-    (tmp_path / "tictactoe-sleepy").write_bytes(valid_bot_executable(b"sleepy-ttt"))
     (tmp_path / "connect-four").write_bytes(valid_bot_executable())
-    (tmp_path / "connect-four-sleepy").write_bytes(valid_bot_executable(b"sleepy-c4"))
     monkeypatch.setenv(api_main.DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR, str(tmp_path))
     api_main.seed_default_bots(sqlite_database_dependency)
 
@@ -2643,34 +2646,28 @@ def test_seed_default_bots_creates_random_and_sleepy_bots_for_each_game(
 
     assert response.status_code == 200
     assert response.json() == [
-        {"bot_id": 3, "name": "random", "owner_name": None, "has_active_submission": True},
-        {"bot_id": 1, "name": "randombot1", "owner_name": None, "has_active_submission": True},
-        {"bot_id": 2, "name": "randombot2", "owner_name": None, "has_active_submission": True},
-        {"bot_id": 4, "name": "sleepy", "owner_name": None, "has_active_submission": True},
+        {"bot_id": 1, "name": "random-tictactoe", "owner_name": None, "has_active_submission": True},
     ]
 
     connectfour_response = client.get("/bots?game_id=connect-four")
 
     assert connectfour_response.status_code == 200
     assert connectfour_response.json() == [
-        {"bot_id": 7, "name": "random", "owner_name": None, "has_active_submission": True},
-        {"bot_id": 5, "name": "randombot1", "owner_name": None, "has_active_submission": True},
-        {"bot_id": 6, "name": "randombot2", "owner_name": None, "has_active_submission": True},
-        {"bot_id": 8, "name": "sleepy", "owner_name": None, "has_active_submission": True},
+        {"bot_id": 2, "name": "random-connect-four", "owner_name": None, "has_active_submission": True},
     ]
     assert {
         bot.owner_id
         for bot in sqlite_database_dependency.query(Bot)
-        .filter(Bot.name.in_(("randombot1", "randombot2", "random", "sleepy")))
+        .filter(Bot.name.in_(("random-tictactoe", "random-connect-four")))
         .all()
     } == {None}
     seeded_bots = sqlite_database_dependency.query(Bot).all()
     assert all(bot.active_submission_id is not None for bot in seeded_bots)
-    assert sqlite_database_dependency.query(BotSubmission).count() == 8
+    assert sqlite_database_dependency.query(BotSubmission).count() == 2
     assert {
         submission.original_filename
         for submission in sqlite_database_dependency.query(BotSubmission).all()
-    } == {"tictactoe", "tictactoe-sleepy", "connect-four", "connect-four-sleepy"}
+    } == {"tictactoe", "connect-four"}
     assert {
         submission.version
         for submission in sqlite_database_dependency.query(BotSubmission).all()
@@ -2679,15 +2676,13 @@ def test_seed_default_bots_creates_random_and_sleepy_bots_for_each_game(
 
 def test_seed_default_bots_is_idempotent(sqlite_database_dependency, tmp_path, monkeypatch):
     (tmp_path / "tictactoe").write_bytes(valid_bot_executable())
-    (tmp_path / "tictactoe-sleepy").write_bytes(valid_bot_executable(b"sleepy-ttt"))
     (tmp_path / "connect-four").write_bytes(valid_bot_executable())
-    (tmp_path / "connect-four-sleepy").write_bytes(valid_bot_executable(b"sleepy-c4"))
     monkeypatch.setenv(api_main.DEFAULT_BOT_EXECUTABLE_DIR_ENV_VAR, str(tmp_path))
     api_main.seed_default_bots(sqlite_database_dependency)
     api_main.seed_default_bots(sqlite_database_dependency)
 
-    assert sqlite_database_dependency.query(Bot).count() == 8
-    assert sqlite_database_dependency.query(BotSubmission).count() == 8
+    assert sqlite_database_dependency.query(Bot).count() == 2
+    assert sqlite_database_dependency.query(BotSubmission).count() == 2
 
 
 def test_list_bots_paginates_results(sqlite_database_dependency):
@@ -2776,7 +2771,13 @@ def test_get_match_returns_404_for_unknown_match_id(sqlite_database_dependency):
 def test_create_match_requires_authentication(sqlite_database_dependency):
     api_main.seed_default_bots(sqlite_database_dependency)
 
-    response = client.post("/matches", json=valid_match_request())
+    response = client.post(
+        "/matches",
+        json={
+            "game": "tictactoe",
+            "players": [{"bot": "randombot1"}, {"bot": "randombot2"}],
+        },
+    )
 
     assert response.status_code == 401
     assert response.json() == {
@@ -2831,8 +2832,8 @@ def test_create_match_enqueues_match_job(
         "status": "queued",
     }
     assert job.game_id == "tictactoe"
-    assert job.bot_one.name == "randombot1"
-    assert job.bot_two.name == "randombot2"
+    assert job.bot_one.name == "random-tictactoe"
+    assert job.bot_two.name == "custom-tictactoe"
     assert job.requester_user_id == 1
     assert job.status == "queued"
     assert job.match_id is None
@@ -2878,7 +2879,13 @@ def test_create_match_rejects_user_over_active_job_limit(
     sqlite_database_dependency.add_all([queued, running, completed, other_user])
     sqlite_database_dependency.commit()
 
-    response = client.post("/matches", json=valid_match_request())
+    response = client.post(
+        "/matches",
+        json={
+            "game": "tictactoe",
+            "players": [{"bot": "randombot1"}, {"bot": "randombot2"}],
+        },
+    )
 
     assert response.status_code == 429
     assert response.json() == {
@@ -3501,8 +3508,7 @@ def test_create_match_enqueues_connectfour_match_job(
 
     monkeypatch.setattr(api_main, "run_connectfour_match", fake_run_connectfour_match)
 
-    payload = valid_match_request()
-    payload["game"] = "connect-four"
+    payload = valid_connectfour_match_request()
 
     response = client.post("/matches", json=payload)
 
