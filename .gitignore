@@ -3,5 +3,12 @@ __pycache__/
 .pytest_cache/
 .venv/
 .env
-build/default-bots/
-build/example-bots/
+.DS_Store
+**/.DS_Store
+Thumbs.db
+desktop.ini
+__MACOSX/
+
+build/
+frontend/dist/
+frontend/node_modules/

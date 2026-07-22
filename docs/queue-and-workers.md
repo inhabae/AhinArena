@@ -1,8 +1,8 @@
 # Queue and Workers
 
-Milestone 10 moved match execution out of the `POST /matches` request cycle.
-The API now validates a match request, stores a PostgreSQL-backed job, and
-returns a status URL. One or more worker processes claim those jobs and run the
+Match execution runs asynchronously outside the `POST /matches` request cycle.
+The API validates a match request, stores a PostgreSQL-backed job, and returns a
+status URL. One or more worker processes claim those jobs and run the
 Docker-sandboxed match execution path in the background.
 
 ## Data Model

@@ -2,7 +2,8 @@
 
 ## Overview
 
-AhinArena is a cloud-native platform where developers upload AI agents to compete in automated board game matches.
+AhinArena is a deployed platform where developers upload AI agents to compete
+in automated board game matches.
 
 The system consists of a web frontend, backend services, persistent storage, and isolated game execution through Docker.
 
@@ -102,10 +103,9 @@ only.
 Production should also set `REQUIRE_SECURE_COOKIES=true`, which refuses startup
 if the cookie would be issued without `Secure`.
 
-This repository does not contain a production deployment manifest or platform
-configuration for the API, so verify the real production host or dashboard where
-`DATABASE_URL` is configured and confirm `DEPLOY_ENVIRONMENT=production` is set
-there explicitly.
+Production deployment assets live under `deploy/`. Verify the real production
+environment file or secret manager sets `DEPLOY_ENVIRONMENT=production` and
+`REQUIRE_SECURE_COOKIES=true` before starting the API.
 
 After deploy, inspect a real login response from the production URL and confirm
 the session cookie attributes:
